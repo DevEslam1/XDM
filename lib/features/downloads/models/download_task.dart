@@ -535,7 +535,7 @@ class DownloadTask {
       if (videoSize > 0) return videoSize + audioSize;
       // If video size unknown but we have downloaded bytes, use that
       if (downloadedBytes > 0) return downloadedBytes + audioSize;
-      return audioSize; // Only audio known
+      return 0;
     }
     if (hasMergedAudio && audioSize == 0 && fileSize > 0) {
       return fileSize; // Audio URL present but size unknown
@@ -1347,6 +1347,8 @@ class DownloadTask {
           listEquals(other.chunks, chunks) &&
           _torrentFilesEqual(other.torrentFiles, torrentFiles));
 
+  DownloadTaskBuilder toBuilder() => DownloadTaskBuilder.fromTask(this);
+
   @override
   int get hashCode => Object.hash(
         id,
@@ -1366,4 +1368,217 @@ class DownloadTask {
         completedPieces,
         downloadedFileBytes,
       );
+}
+
+/// Mutable builder for [DownloadTask] to enable batch updates without intermediate allocations (FIX-24).
+class DownloadTaskBuilder {
+  String id;
+  String fileName;
+  String url;
+  int fileSize;
+  int downloadedBytes;
+  double speed;
+  int? eta;
+  String category;
+  DownloadStatus status;
+  String savePath;
+  String localFilePath;
+  String tempFilePath;
+  String? errorMessage;
+  String? statusMessage;
+  FailureCategory? failureCategory;
+  String? recoveryHint;
+  int threadCount;
+  List<double> chunks;
+  DateTime createdAt;
+  DateTime updatedAt;
+  DateTime? completedAt;
+  DateTime? scheduledAt;
+  DateTime? wasScheduledAt;
+  bool supportsResume;
+  int speedLimitKbps;
+  bool seedingEnabled;
+  bool seedingLimited;
+  int seedingLimitKbps;
+  int uploadedBytes;
+  List<Map<String, dynamic>>? torrentFiles;
+  String? downloadPageUrl;
+  String? mergedAudioUrl;
+  int audioSize;
+  int audioDownloadedBytes;
+  int videoStreamSize;
+  double audioProgress;
+  int audioThreadCount;
+  bool isMergeInProgress;
+  bool pausedByUser;
+  bool isCancelled;
+  String? youtubeQualityPreset;
+  String? notes;
+  bool isAppUpdate;
+  int priority;
+  int queueOrder;
+  String? playlistId;
+  String? playlistTitle;
+  String? thumbnailUrl;
+  String? expectedSha256;
+  List<String>? mirrorUrls;
+  String? siteType;
+  String? siteDisplayName;
+  String? contentHint;
+  PauseReason? pauseReason;
+  int? totalPieces;
+  int? completedPieces;
+  int? ytCounterpartDownloadedBytes;
+  CycleState? cycleState;
+  CycleState? previousCycleState;
+  int? totalFiles;
+  int? completedFiles;
+  int? totalFileBytes;
+  int? downloadedFileBytes;
+  int? torrentId;
+  String? infoHash;
+  bool resumeDataSaved;
+
+  DownloadTaskBuilder.fromTask(DownloadTask task)
+      : id = task.id,
+        fileName = task.fileName,
+        url = task.url,
+        fileSize = task.fileSize,
+        downloadedBytes = task.downloadedBytes,
+        speed = task.speed,
+        eta = task.eta,
+        category = task.category,
+        status = task.status,
+        savePath = task.savePath,
+        localFilePath = task.localFilePath,
+        tempFilePath = task.tempFilePath,
+        errorMessage = task.errorMessage,
+        statusMessage = task.statusMessage,
+        failureCategory = task.failureCategory,
+        recoveryHint = task.recoveryHint,
+        threadCount = task.threadCount,
+        chunks = List.from(task.chunks),
+        createdAt = task.createdAt,
+        updatedAt = task.updatedAt,
+        completedAt = task.completedAt,
+        scheduledAt = task.scheduledAt,
+        wasScheduledAt = task.wasScheduledAt,
+        supportsResume = task.supportsResume,
+        speedLimitKbps = task.speedLimitKbps,
+        seedingEnabled = task.seedingEnabled,
+        seedingLimited = task.seedingLimited,
+        seedingLimitKbps = task.seedingLimitKbps,
+        uploadedBytes = task.uploadedBytes,
+        torrentFiles = task.torrentFiles != null
+            ? List.from(
+                task.torrentFiles!.map((m) => Map<String, dynamic>.from(m)))
+            : null,
+        downloadPageUrl = task.downloadPageUrl,
+        mergedAudioUrl = task.mergedAudioUrl,
+        audioSize = task.audioSize,
+        audioDownloadedBytes = task.audioDownloadedBytes,
+        videoStreamSize = task.videoStreamSize,
+        audioProgress = task.audioProgress,
+        audioThreadCount = task.audioThreadCount,
+        isMergeInProgress = task.isMergeInProgress,
+        pausedByUser = task.pausedByUser,
+        isCancelled = task.isCancelled,
+        youtubeQualityPreset = task.youtubeQualityPreset,
+        notes = task.notes,
+        isAppUpdate = task.isAppUpdate,
+        priority = task.priority,
+        queueOrder = task.queueOrder,
+        playlistId = task.playlistId,
+        playlistTitle = task.playlistTitle,
+        thumbnailUrl = task.thumbnailUrl,
+        expectedSha256 = task.expectedSha256,
+        mirrorUrls =
+            task.mirrorUrls != null ? List.from(task.mirrorUrls!) : null,
+        siteType = task.siteType,
+        siteDisplayName = task.siteDisplayName,
+        contentHint = task.contentHint,
+        pauseReason = task.pauseReason,
+        totalPieces = task.totalPieces,
+        completedPieces = task.completedPieces,
+        ytCounterpartDownloadedBytes = task.ytCounterpartDownloadedBytes,
+        cycleState = task.cycleState,
+        previousCycleState = task.previousCycleState,
+        totalFiles = task.totalFiles,
+        completedFiles = task.completedFiles,
+        totalFileBytes = task.totalFileBytes,
+        downloadedFileBytes = task.downloadedFileBytes,
+        torrentId = task.torrentId,
+        infoHash = task.infoHash,
+        resumeDataSaved = task.resumeDataSaved;
+
+  DownloadTask build() {
+    return DownloadTask(
+      id: id,
+      fileName: fileName,
+      url: url,
+      fileSize: fileSize,
+      downloadedBytes: downloadedBytes,
+      speed: speed,
+      eta: eta,
+      category: category,
+      status: status,
+      savePath: savePath,
+      localFilePath: localFilePath,
+      tempFilePath: tempFilePath,
+      errorMessage: errorMessage,
+      statusMessage: statusMessage,
+      failureCategory: failureCategory,
+      recoveryHint: recoveryHint,
+      threadCount: threadCount,
+      chunks: chunks,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+      completedAt: completedAt,
+      scheduledAt: scheduledAt,
+      wasScheduledAt: wasScheduledAt,
+      supportsResume: supportsResume,
+      speedLimitKbps: speedLimitKbps,
+      seedingEnabled: seedingEnabled,
+      seedingLimited: seedingLimited,
+      seedingLimitKbps: seedingLimitKbps,
+      uploadedBytes: uploadedBytes,
+      torrentFiles: torrentFiles,
+      downloadPageUrl: downloadPageUrl,
+      mergedAudioUrl: mergedAudioUrl,
+      audioSize: audioSize,
+      audioDownloadedBytes: audioDownloadedBytes,
+      videoStreamSize: videoStreamSize,
+      audioProgress: audioProgress,
+      audioThreadCount: audioThreadCount,
+      isMergeInProgress: isMergeInProgress,
+      pausedByUser: pausedByUser,
+      isCancelled: isCancelled,
+      youtubeQualityPreset: youtubeQualityPreset,
+      notes: notes,
+      isAppUpdate: isAppUpdate,
+      priority: priority,
+      queueOrder: queueOrder,
+      playlistId: playlistId,
+      playlistTitle: playlistTitle,
+      thumbnailUrl: thumbnailUrl,
+      expectedSha256: expectedSha256,
+      mirrorUrls: mirrorUrls,
+      siteType: siteType,
+      siteDisplayName: siteDisplayName,
+      contentHint: contentHint,
+      pauseReason: pauseReason,
+      totalPieces: totalPieces,
+      completedPieces: completedPieces,
+      ytCounterpartDownloadedBytes: ytCounterpartDownloadedBytes,
+      cycleState: cycleState,
+      previousCycleState: previousCycleState,
+      totalFiles: totalFiles,
+      completedFiles: completedFiles,
+      totalFileBytes: totalFileBytes,
+      downloadedFileBytes: downloadedFileBytes,
+      torrentId: torrentId,
+      infoHash: infoHash,
+      resumeDataSaved: resumeDataSaved,
+    );
+  }
 }

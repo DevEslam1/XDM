@@ -339,7 +339,8 @@ class HttpDownloadOrchestrator {
     try {
       await completer.future;
     } finally {
-      sub.cancel();
+      progressHandler.dispose();
+      await sub.cancel();
       job.dispose();
     }
   }

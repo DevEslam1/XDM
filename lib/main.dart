@@ -13,6 +13,7 @@ import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 
 import 'core/app_theme.dart';
 import 'core/di/injection.dart';
+import 'core/interfaces/i_download_engine.dart';
 import 'core/services/app_lifecycle_coordinator.dart';
 import 'core/services/background_service.dart';
 import 'core/services/crash_reporting_service.dart';
@@ -234,7 +235,7 @@ Future<void> main(List<String> args) async {
       // ── PHASE 4: Build providers (no blocking I/O) and show UI immediately ──
       final databaseService = DatabaseService();
       final notificationService = NotificationService();
-      final downloadEngine = getIt<DownloadEngine>();
+      final downloadEngine = getIt<IDownloadEngine>();
       final downloadProvider = DownloadProvider(
         databaseService: databaseService,
         settingsProvider: settingsProvider,
@@ -683,10 +684,8 @@ class _AppLifecycleObserver with WidgetsBindingObserver {
         (tid) {
           // FIX-T1: Persist per-file progress
           try {
-            final files = TorrentService.getFiles(tid);
-            // Do not persist a list with no usable lengths — it would overwrite
-            // the real lengths already stored for this torrent with zeros.
-            if (!files.any((f) => f.size > 0)) return null;
+            final List<TorrentFileItem> files = TorrentService.getFiles(tid);
+            if (files.isEmpty || !files.any((f) => f.size > 0)) return null;
             return files
                 .map((f) => {
                       'name': f.name,

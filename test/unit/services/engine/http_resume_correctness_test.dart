@@ -137,8 +137,14 @@ void main() {
         await journal.writeCheckpoint([partA, partB], fileSize);
         await journal.close();
 
-        // Write partial bytes to disk
-        await File(testTemp).writeAsBytes(testPayload.sublist(0, halfSize), flush: true);
+        // Write partial bytes to disk at their respective chunk offsets
+        final raf = await File(testTemp).open(mode: FileMode.write);
+        await raf.setPosition(0);
+        await raf.writeFrom(testPayload, 0, partA);
+        await raf.setPosition(mid);
+        await raf.writeFrom(testPayload, mid, mid + partB);
+        await raf.flush();
+        await raf.close();
 
         // Resume job (cold reboot)
         final cmd = DownloadCommand(

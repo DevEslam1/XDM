@@ -139,9 +139,8 @@ class DebugCertOverride {
   /// Strictly disabled in release mode (kReleaseMode) to guarantee TLS security.
   static BadCertificateCallback? getCallback(String? url,
       {bool? allowDebugCertOverride}) {
-    if (kReleaseMode && allowDebugCertOverride != true) {
-      return null;
-    }
+    // FIX-4.4: Hard guard for release mode as first line to guarantee TLS security
+    if (kReleaseMode) return null;
     final enabled = allowDebugCertOverride ?? allowDebugCert;
     bool isDebug = false;
     assert(() {
@@ -174,10 +173,10 @@ Future<int> actualDownloadedBytes(String tempFilePath,
     }
     return math.min<int>(stateBytes, fileLen);
   }
-  // When state file is missing, fall back to actual file length on disk
-  // as lower bound instead of dropping to 0.
+  // When state file is missing, multi-threaded downloads use preallocation
+  // so file length does not reflect downloaded bytes. Return 0 instead.
   if (threadCount > 1) {
-    return fileLen;
+    return 0;
   }
   return fileLen;
 }

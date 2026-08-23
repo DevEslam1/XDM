@@ -5,17 +5,16 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dmx/shared/mixins/pausable_loop_animation.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/app_theme.dart';
 import '../../../core/domain/download_data_status.dart';
+import '../../../core/domain/torrent_models.dart';
 import '../../../core/services/download_engine.dart';
 import '../../../core/services/performance_monitor.dart';
 import '../../../core/services/power_monitor.dart';
 import '../../../core/services/protocol_cache.dart';
-import '../../../core/services/torrent_service.dart';
 import '../../../core/services/undo_service.dart';
 import '../../../core/services/youtube_service.dart';
 import '../../../core/utils/file_opener.dart';
@@ -353,13 +352,13 @@ class StatusChipPulseDriver with WidgetsBindingObserver {
   }
 
   final ValueNotifier<double> value = ValueNotifier<double>(0.7);
-  Ticker? _ticker;
+  // FIX-3.7: Switch from Ticker to Timer.periodic(50ms) to reduce CPU overhead
+  Timer? _timer;
   int _refCount = 0;
   int _visibleChips = 0;
   int get visibleChips => _visibleChips;
   double _current = 0.4;
   bool _increasing = true;
-  DateTime? _lastTick;
 
   void incrementVisibleChips() {
     _visibleChips++;
@@ -374,7 +373,7 @@ class StatusChipPulseDriver with WidgetsBindingObserver {
 
   void addRef() {
     _refCount++;
-    if (_ticker == null) {
+    if (_timer == null || !_timer!.isActive) {
       _start();
     }
   }
@@ -405,19 +404,13 @@ class StatusChipPulseDriver with WidgetsBindingObserver {
       return;
     }
     _stop();
-    _lastTick = DateTime.now();
-    _ticker = Ticker((elapsed) {
+    _timer = Timer.periodic(const Duration(milliseconds: 50), (_) {
       if (PowerMonitor.screenOff ||
           DownloadEngine.isInBackground ||
           _refCount <= 0) {
         _stop();
         return;
       }
-      final now = DateTime.now();
-      if (_lastTick != null && now.difference(_lastTick!).inMilliseconds < 45) {
-        return;
-      }
-      _lastTick = now;
       if (_increasing) {
         _current += 0.03;
         if (_current >= 1.0) {
@@ -435,13 +428,11 @@ class StatusChipPulseDriver with WidgetsBindingObserver {
         value.value = _current;
       }
     });
-    _ticker?.start();
   }
 
   void _stop() {
-    _ticker?.stop();
-    _ticker?.dispose();
-    _ticker = null;
+    _timer?.cancel();
+    _timer = null;
   }
 
   @override
@@ -2068,7 +2059,8 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
     final settings = context.read<SettingsProvider>();
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
-    final provider = context.read<DownloadProvider>();
+    // FIX-1.4: Use context.watch to rebuild on task state updates
+    final provider = context.watch<DownloadProvider>();
     final currentTask = provider.findTaskById(widget.task.id) ?? widget.task;
     final statusColor = getEffectiveCardAccent(currentTask, provider, isDark);
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;

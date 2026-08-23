@@ -127,10 +127,7 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen>
 
   Future<void> _checkAllPermissions() async {
     if (!_isAndroidPlatform()) return;
-    final storageGranted = (await Permission.storage.isGranted) ||
-        (await Permission.photos.isGranted &&
-            await Permission.videos.isGranted &&
-            await Permission.audio.isGranted);
+    final storageGranted = await _permissionService.isStoragePermissionValid();
     final notificationsGranted = await Permission.notification.isGranted;
     final batteryGranted =
         await _permissionService.isBatteryOptimizationExempt();

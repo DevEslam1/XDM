@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 
 import 'power_monitor.dart';
+import 'tick_manager.dart';
 
 /// A token-bucket bandwidth governor.
 ///
@@ -21,11 +22,9 @@ class BandwidthGovernor {
   double _burstFactor;
   double _availableTokens = 0;
   DateTime _lastRefill = DateTime.now().subtract(const Duration(seconds: 1));
-  // FIX-P1-02: Refill throttle — skip token arithmetic when the previous
-  // refill happened less than 50ms ago so a burst of acquire() calls does not
-  // re-run DateTime.now() + float math on every single probe.
+  // FIX-08: Change from 50ms to 16ms for 60fps refill precision
   int _lastRefillMs = 0;
-  static const int _minRefillIntervalMs = 50;
+  static const int _minRefillIntervalMs = 16;
 
   /// Milliseconds since epoch of the most recent refill. Testing hook.
   @visibleForTesting
@@ -51,9 +50,20 @@ class BandwidthGovernor {
 
   void _startDomainCleanup() {
     _domainCleanupTimer?.cancel();
-    _domainCleanupTimer = Timer.periodic(const Duration(minutes: 5), (_) {
-      _cleanupStaleDomainStates();
-    });
+    _domainCleanupTimer = Timer.periodic(
+      const Duration(minutes: 5),
+      (_) => _cleanupStaleDomainStates(),
+    );
+    TickManager.instance.unregisterTick('bandwidth_governor_cleanup');
+    // FIX-02: Consolidate into TickManager
+    TickManager.instance.registerTick(
+      id: 'bandwidth_governor_cleanup',
+      interval: const Duration(minutes: 5),
+      priority: TickPriority.normal,
+      callback: (_) {
+        _cleanupStaleDomainStates();
+      },
+    );
   }
 
   void _cleanupStaleDomainStates() {
@@ -65,6 +75,7 @@ class BandwidthGovernor {
   /// Releases all per-task and per-domain tracking state and cancels timers.
   void dispose() {
     PowerMonitor.throttleFactorNotifier.removeListener(onPowerStateChanged);
+    TickManager.instance.unregisterTick('bandwidth_governor_cleanup');
     _domainCleanupTimer?.cancel();
     _domainCleanupTimer = null;
     _taskLimits.clear();

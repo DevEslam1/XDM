@@ -1,4 +1,4 @@
-import 'torrent_models.dart';
+import '../domain/torrent_models.dart';
 import 'tracker_manager.dart';
 
 /// Phase 3: Peer Discovery & Tracker Optimization

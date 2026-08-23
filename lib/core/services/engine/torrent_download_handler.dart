@@ -5,9 +5,11 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import '../../../features/downloads/provider/network_monitor.dart';
 import '../../di/injection.dart';
 import '../../domain/torrent_file_progress_estimator.dart';
 import '../../interfaces/i_connectivity.dart';
+import '../../interfaces/i_download_engine.dart';
 import '../../interfaces/i_torrent_service.dart';
 import '../download_engine.dart';
 import '../logging_service.dart';
@@ -332,6 +334,11 @@ class TorrentDownloadHandler {
       if (getIt.isRegistered<IConnectivity>()) {
         final connectivity = getIt<IConnectivity>();
         if (!connectivity.hasConnection) {
+          return PauseReason.networkLost;
+        }
+      } else if (getIt.isRegistered<NetworkMonitor>()) {
+        final net = getIt<NetworkMonitor>();
+        if (!net.hasConnection) {
           return PauseReason.networkLost;
         }
       }
@@ -1238,9 +1245,11 @@ class TorrentDownloadHandler {
           PauseReason? effectivePauseReason = pauseReason;
           if (effectivePauseReason == null) {
             try {
-              final engine = getIt.isRegistered<DownloadEngine>()
-                  ? getIt<DownloadEngine>()
-                  : DownloadEngine();
+              final engine = getIt.isRegistered<IDownloadEngine>()
+                  ? getIt<IDownloadEngine>()
+                  : (getIt.isRegistered<DownloadEngine>()
+                      ? getIt<DownloadEngine>()
+                      : DownloadEngine());
               final hasSpace =
                   await engine.hasEnoughDiskSpace(saveDir, 100 * 1024 * 1024);
               if (!hasSpace) {
@@ -1809,6 +1818,7 @@ class TorrentDownloadHandler {
     );
   }
 
+  // FIX-2.4: Filter torrent stream per-handler
   StreamSubscription _subscribeToUpdates({
     required int id,
     required String url,

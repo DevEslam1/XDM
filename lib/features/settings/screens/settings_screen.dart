@@ -201,6 +201,10 @@ class _SettingsScreenState extends State<SettingsScreen>
     _searchFocusNode.dispose();
     _pageController.dispose();
     _chipScrollController.dispose();
+    // FIX-3.6: Clean up cached tab instances and search cache on dispose
+    _cachedTabs.clear();
+    _loadedTabs.clear();
+    _cachedSearchIndex = null;
     super.dispose();
   }
 

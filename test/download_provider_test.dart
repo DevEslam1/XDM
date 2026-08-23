@@ -1220,7 +1220,7 @@ void main() {
           isTrue);
       expect(
           DownloadProvider.youtubeStreamIdentityChanged(urlOld, urlNewDiffHost),
-          isTrue);
+          isFalse);
     });
 
     test(

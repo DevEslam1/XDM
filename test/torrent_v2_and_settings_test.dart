@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:dmx/core/services/torrent_models.dart';
+import 'package:dmx/core/domain/torrent_models.dart';
 import 'package:dmx/core/services/torrent_session_config.dart';
 import 'package:dmx/core/utils/bencode_decoder.dart';
 import 'package:dmx/core/utils/url_utils.dart';

@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'torrent_models.dart';
+import '../domain/torrent_models.dart';
 
 class TrackerManager extends ChangeNotifier {
   static const List<String> defaultTrackers = [

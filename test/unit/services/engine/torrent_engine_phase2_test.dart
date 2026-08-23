@@ -3,10 +3,10 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:dmx/core/di/injection.dart';
+import 'package:dmx/core/domain/torrent_models.dart';
 import 'package:dmx/core/interfaces/i_torrent_service.dart';
 import 'package:dmx/core/services/engine/engine_models.dart';
 import 'package:dmx/core/services/engine/torrent_download_handler.dart';
-import 'package:dmx/core/services/torrent_models.dart';
 import 'package:dmx/core/services/torrent_service_stub.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -80,16 +80,58 @@ void main() {
 
   test('TorrentFileSnapshot computes deterministic hash and equality', () {
     final files1 = [
-      {'name': 'f1.txt', 'length': 100, 'downloadedBytes': 50, 'selected': true, 'priority': 4, 'isComplete': false},
-      {'name': 'f2.txt', 'length': 200, 'downloadedBytes': 200, 'selected': true, 'priority': 4, 'isComplete': true},
+      {
+        'name': 'f1.txt',
+        'length': 100,
+        'downloadedBytes': 50,
+        'selected': true,
+        'priority': 4,
+        'isComplete': false
+      },
+      {
+        'name': 'f2.txt',
+        'length': 200,
+        'downloadedBytes': 200,
+        'selected': true,
+        'priority': 4,
+        'isComplete': true
+      },
     ];
     final files2 = [
-      {'name': 'f1.txt', 'length': 100, 'downloadedBytes': 50, 'selected': true, 'priority': 4, 'isComplete': false},
-      {'name': 'f2.txt', 'length': 200, 'downloadedBytes': 200, 'selected': true, 'priority': 4, 'isComplete': true},
+      {
+        'name': 'f1.txt',
+        'length': 100,
+        'downloadedBytes': 50,
+        'selected': true,
+        'priority': 4,
+        'isComplete': false
+      },
+      {
+        'name': 'f2.txt',
+        'length': 200,
+        'downloadedBytes': 200,
+        'selected': true,
+        'priority': 4,
+        'isComplete': true
+      },
     ];
     final files3 = [
-      {'name': 'f1.txt', 'length': 100, 'downloadedBytes': 70, 'selected': true, 'priority': 4, 'isComplete': false},
-      {'name': 'f2.txt', 'length': 200, 'downloadedBytes': 200, 'selected': true, 'priority': 4, 'isComplete': true},
+      {
+        'name': 'f1.txt',
+        'length': 100,
+        'downloadedBytes': 70,
+        'selected': true,
+        'priority': 4,
+        'isComplete': false
+      },
+      {
+        'name': 'f2.txt',
+        'length': 200,
+        'downloadedBytes': 200,
+        'selected': true,
+        'priority': 4,
+        'isComplete': true
+      },
     ];
 
     final snap1 = TorrentFileSnapshot(files1);
@@ -162,7 +204,8 @@ void main() {
     });
     await Future<void>.delayed(const Duration(milliseconds: 10));
 
-    final downloadingEmissions = progressEmissions.where((p) => p.cycleState == CycleState.downloading);
+    final downloadingEmissions =
+        progressEmissions.where((p) => p.cycleState == CycleState.downloading);
     expect(downloadingEmissions, isNotEmpty);
 
     // Complete
@@ -230,7 +273,8 @@ void main() {
     );
   });
 
-  test('Pause under load handles 100 rapid concurrent updates gracefully', () async {
+  test('Pause under load handles 100 rapid concurrent updates gracefully',
+      () async {
     final cancel = CancelToken();
     final emissions = <DownloadProgress>[];
 

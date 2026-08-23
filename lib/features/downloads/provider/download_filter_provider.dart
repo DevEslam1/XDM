@@ -15,12 +15,16 @@ class DownloadFilterProvider extends ChangeNotifier {
   Set<String> _categoryFilters = {};
   SortMode _sortMode = SortMode.dateAdded;
   bool _ascending = false;
+  // FIX-3.4: Add _disposed guard
+  bool _disposed = false;
 
   DownloadFilterProvider(this._listProvider) {
     _listProvider.addListener(_onListChanged);
   }
 
-  void _onListChanged() => notifyListeners();
+  void _onListChanged() {
+    if (!_disposed) notifyListeners();
+  }
 
   String get searchQuery => _searchQuery;
   String get statusFilter => _statusFilter;
@@ -85,6 +89,7 @@ class DownloadFilterProvider extends ChangeNotifier {
   }
 
   void setSearch(String q) {
+    if (_disposed) return;
     _searchQuery = q;
     notifyListeners();
   }
@@ -92,6 +97,7 @@ class DownloadFilterProvider extends ChangeNotifier {
   void setSearchQuery(String q) => setSearch(q);
 
   void setStatus(String s) {
+    if (_disposed) return;
     _statusFilter = s;
     notifyListeners();
   }
@@ -99,11 +105,13 @@ class DownloadFilterProvider extends ChangeNotifier {
   void setStatusFilter(String s) => setStatus(s);
 
   void setCategories(Set<String> cats) {
+    if (_disposed) return;
     _categoryFilters = cats;
     notifyListeners();
   }
 
   void toggleCategoryFilter(String category) {
+    if (_disposed) return;
     final next = Set<String>.from(_categoryFilters);
     if (next.contains(category)) {
       next.remove(category);
@@ -114,6 +122,7 @@ class DownloadFilterProvider extends ChangeNotifier {
   }
 
   void setSort(SortMode mode, {bool? ascending}) {
+    if (_disposed) return;
     _sortMode = mode;
     if (ascending != null) _ascending = ascending;
     notifyListeners();
@@ -124,6 +133,8 @@ class DownloadFilterProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
     _listProvider.removeListener(_onListChanged);
     super.dispose();
   }

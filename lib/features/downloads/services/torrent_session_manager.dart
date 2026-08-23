@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:dmx/core/interfaces/i_torrent_service.dart';
 import 'package:flutter/foundation.dart';
 import '../../../core/di/injection.dart';
-import '../../../core/interfaces/i_torrent_service.dart';
 import '../../../core/services/torrent_resume_store.dart';
 import '../../../core/services/torrent_service.dart';
 import '../models/download_task.dart';
@@ -112,7 +112,8 @@ class TorrentSessionManager {
     if (task.url.startsWith('magnet:')) {
       newId = _torrentService.addMagnet(task.url, saveDir);
     } else {
-      newId = _torrentService.addTorrentFile(task.url, saveDir, sourceKey: task.url);
+      newId = _torrentService.addTorrentFile(task.url, saveDir,
+          sourceKey: task.url);
     }
 
     if (newId >= 0) {
@@ -124,7 +125,8 @@ class TorrentSessionManager {
           _torrentService.loadResumeData(newId, resumeBytes);
         }
       } catch (e) {
-        debugPrint('[TorrentSessionManager] Failed to load resume data on re-add: $e');
+        debugPrint(
+            '[TorrentSessionManager] Failed to load resume data on re-add: $e');
       }
       await _torrentService.resumeTorrent(newId);
       return newId;

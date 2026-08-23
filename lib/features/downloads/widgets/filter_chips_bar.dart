@@ -218,15 +218,21 @@ class _StatusFilterButtons extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isScrollable = filters.length > 3;
-
     if (isScrollable) {
       return SizedBox(
         height: 38,
-        child: ListView.separated(
+        child: SingleChildScrollView(
           scrollDirection: Axis.horizontal,
-          itemCount: filters.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 8),
-          itemBuilder: (context, i) => _buildButton(context, filters[i]),
+          physics: const BouncingScrollPhysics(),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (int i = 0; i < filters.length; i++) ...[
+                _buildButton(context, filters[i]),
+                if (i < filters.length - 1) const SizedBox(width: 8),
+              ],
+            ],
+          ),
         ),
       );
     }

@@ -5,6 +5,7 @@ import '../../features/downloads/provider/network_monitor.dart';
 import '../../features/settings/provider/settings_provider.dart';
 import '../di/injection.dart';
 import 'power_monitor.dart';
+import 'tick_manager.dart';
 import 'torrent_service.dart';
 
 final _log = Logger('TorrentSeedingManager');
@@ -21,15 +22,19 @@ class TorrentSeedingManager {
 
   /// Starts the periodic seeding policy enforcement loop.
   void startSeedingCheck() {
-    _seedingCheckTimer?.cancel();
-    _seedingCheckTimer = Timer.periodic(
-      const Duration(seconds: 30),
-      (_) => checkSeedingPolicies(),
+    stopSeedingCheck();
+    // FIX-02: Consolidate into TickManager
+    TickManager.instance.registerTick(
+      id: 'torrent_seeding_check',
+      interval: const Duration(seconds: 30),
+      priority: TickPriority.normal,
+      callback: (_) => checkSeedingPolicies(),
     );
   }
 
   /// Stops the periodic seeding check loop.
   void stopSeedingCheck() {
+    TickManager.instance.unregisterTick('torrent_seeding_check');
     _seedingCheckTimer?.cancel();
     _seedingCheckTimer = null;
   }

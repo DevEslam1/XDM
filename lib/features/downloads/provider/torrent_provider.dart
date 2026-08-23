@@ -16,6 +16,8 @@ class TorrentProvider extends ChangeNotifier {
   StreamSubscription<Map<int, TorrentUpdateInfo>>? _updatesSub;
   Timer? _staleDetector;
   Timer? _coalesceTimer;
+  // FIX-3.4: Add _disposed guard
+  bool _disposed = false;
 
   TorrentProvider({ITorrentService? torrentService})
       : _torrentService = torrentService ??
@@ -27,11 +29,13 @@ class TorrentProvider extends ChangeNotifier {
   Map<int, TorrentUpdateInfo> get latestStats => Map.unmodifiable(_latestStats);
 
   void registerTorrentId(String taskId, int torrentId) {
+    if (_disposed) return;
     _torrentIds[taskId] = torrentId;
     notifyListeners();
   }
 
   void unregisterTorrentId(String taskId) {
+    if (_disposed) return;
     final torrentId = _torrentIds.remove(taskId);
     if (torrentId != null) {
       _latestStats.remove(torrentId);
@@ -40,6 +44,7 @@ class TorrentProvider extends ChangeNotifier {
   }
 
   void updateStats(TorrentUpdateInfo info) {
+    if (_disposed) return;
     _latestStats[info.id] = info;
     notifyListeners();
   }
@@ -53,29 +58,35 @@ class TorrentProvider extends ChangeNotifier {
   Iterable<TorrentUpdateInfo> get activeTorrents => _latestStats.values;
 
   void registerTorrent(int id, TorrentUpdateInfo info) {
+    if (_disposed) return;
     _latestStats[id] = info;
     notifyListeners();
   }
 
   void updateTorrentProgress(int id, TorrentUpdateInfo info) {
+    if (_disposed) return;
     _latestStats[id] = info;
     notifyListeners();
   }
 
   void removeTorrent(int id) {
+    if (_disposed) return;
     _latestStats.remove(id);
     notifyListeners();
   }
 
   void startListening() {
-    if (_updatesSub != null) return;
+    if (_disposed || _updatesSub != null) return;
     _updatesSub = _torrentService.torrentUpdates.listen((torrents) {
+      if (_disposed) return;
+      // FIX-2.8: Prune entries no longer in updates to prevent leak
+      _latestStats.removeWhere((key, _) => !torrents.containsKey(key));
       for (final entry in torrents.entries) {
         _latestStats[entry.key] = entry.value;
       }
       _coalesceTimer?.cancel();
       _coalesceTimer = Timer(const Duration(seconds: 1), () {
-        notifyListeners();
+        if (!_disposed) notifyListeners();
       });
     }, onError: (Object e) {
       LoggingService.logger('TorrentProvider')
@@ -91,7 +102,7 @@ class TorrentProvider extends ChangeNotifier {
         DownloadEngine.isInBackground;
     final interval = isBg ? const Duration(seconds: 60) : const Duration(seconds: 30);
     _staleDetector = Timer.periodic(interval, (_) {
-      if (!_torrentService.isInitialized) return;
+      if (_disposed || !_torrentService.isInitialized) return;
       final active = _torrentService.activeTorrentIds;
       final registeredToTasks = _torrentIds.values.toSet();
       _latestStats.removeWhere(
@@ -101,6 +112,8 @@ class TorrentProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
     _updatesSub?.cancel();
     _updatesSub = null;
     _coalesceTimer?.cancel();

@@ -17,6 +17,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../power_monitor.dart';
 import '../service_registry.dart';
 import '../shared_prefs_batcher.dart';
+import '../tick_manager.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Mirror Health Store & Persistence
@@ -119,9 +120,14 @@ class MirrorHealthStore implements DisposableService {
   /// Loads persisted health data from Drift table with fallback legacy SharedPreferences migration.
   Future<void> init({SharedPreferences? prefsOverride}) async {
     _cleanupTimer?.cancel();
-    _cleanupTimer = Timer.periodic(const Duration(hours: 6), (_) {
-      cleanupStaleEntries();
-    });
+    TickManager.instance.unregisterTick('mirror_registry_cleanup');
+    // FIX-02: Consolidate into TickManager
+    TickManager.instance.registerTick(
+      id: 'mirror_registry_cleanup',
+      interval: const Duration(hours: 6),
+      priority: TickPriority.normal,
+      callback: (_) => cleanupStaleEntries(),
+    );
     _cache = LinkedHashMap();
 
     final repo = _repo ??
@@ -357,6 +363,10 @@ class MirrorHealthStore implements DisposableService {
     // LinkedHashMap preserves insertion (and touch) order; head = LRU.
     final evictedKey = _cache!.keys.first;
     _cache!.remove(evictedKey);
+    // FIX-2.10: Cap _removedUrls to 500 items
+    if (_removedUrls.length >= 500) {
+      _removedUrls.remove(_removedUrls.first);
+    }
     _removedUrls.add(evictedKey);
     _dirtyUrls.remove(evictedKey);
   }
@@ -365,6 +375,10 @@ class MirrorHealthStore implements DisposableService {
   void _markDirty([String? url]) {
     _dirty = true;
     if (url != null) {
+      // FIX-2.10: Cap _dirtyUrls to 500 items
+      if (_dirtyUrls.length >= 500) {
+        _dirtyUrls.remove(_dirtyUrls.first);
+      }
       _dirtyUrls.add(url);
       _removedUrls.remove(url);
     }
@@ -480,6 +494,7 @@ class MirrorHealthStore implements DisposableService {
   @override
   Future<void> dispose() async {
     ServiceRegistry.unregister(this);
+    TickManager.instance.unregisterTick('mirror_registry_cleanup');
     _cleanupTimer?.cancel();
     _cleanupTimer = null;
     _flushTimer?.cancel();

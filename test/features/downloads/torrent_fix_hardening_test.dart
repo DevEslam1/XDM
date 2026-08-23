@@ -1,11 +1,11 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:dmx/core/domain/torrent_models.dart';
 import 'package:dmx/core/interfaces/i_torrent_service.dart';
 import 'package:dmx/core/services/download_engine.dart';
 import 'package:dmx/core/services/engine/download_progress_handler.dart';
 import 'package:dmx/core/services/engine/torrent_download_handler.dart';
-import 'package:dmx/core/services/torrent_models.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';

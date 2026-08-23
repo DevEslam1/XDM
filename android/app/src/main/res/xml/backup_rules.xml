@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Exclude temporary transfer files, partial chunks, and active journals -->
+    <exclude domain="file" path="." />
+    <!-- Exclude volatile runtime SQLite databases and WAL files from cloud backup -->
+    <exclude domain="database" path="." />
+</full-backup-content>

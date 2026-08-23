@@ -433,19 +433,15 @@ class HttpTransferJob {
 
     if (_state!.downloadedBytes > 0) {
       _stalledEmitted = false;
+      _emitProgress(0,
+          statusMessage: 'Verifying resume data…',
+          cycleStateOverride: CycleState.verifying);
       if (cmd.supportsResume) {
-        _emitProgress(0,
-            statusMessage: 'Verifying resume data…',
-            cycleStateOverride: CycleState.verifying);
-        if (!DownloadEngine.isInBackground) {
-          await _verifyServerIdentity(dio);
-        }
-        _emitProgress(0,
-            statusMessage: 'Resuming…',
-            cycleStateOverride: CycleState.resuming);
-      } else {
-        _emitProgress(0, statusMessage: 'Resuming…');
+        await _verifyServerIdentity(dio);
       }
+      _emitProgress(0,
+          statusMessage: 'Resuming…',
+          cycleStateOverride: CycleState.resuming);
     } else {
       _emitProgress(0,
           statusMessage: 'Starting…', cycleStateOverride: CycleState.starting);
@@ -1102,6 +1098,12 @@ class HttpTransferJob {
         return;
       }
 
+      if (pass >= maxIntegrityPasses) {
+        throw DownloadIntegrityException(
+          'Integrity verification failed: ${corruptedChunks.length} chunk(s) remain corrupted after $maxIntegrityPasses passes.',
+        );
+      }
+
       // Re-download ONLY corrupted chunks
       for (final i in corruptedChunks) {
         st.chunks[i].downloaded = 0;
@@ -1293,6 +1295,27 @@ class HttpTransferJob {
           chunkDigest = results.single;
         });
         final digestSink = sha256.startChunkedConversion(innerDigestSink);
+
+        if (resumeFrom > 0) {
+          final tempFile = File(cmd.tempFilePath);
+          if (tempFile.existsSync()) {
+            final raf = tempFile.openSync(mode: FileMode.read);
+            try {
+              raf.setPositionSync(chunk.start);
+              var remainingToRead = resumeFrom;
+              const bufferSize = 64 * 1024;
+              while (remainingToRead > 0) {
+                final toRead = min(bufferSize, remainingToRead);
+                final bytes = raf.readSync(toRead);
+                if (bytes.isEmpty) break;
+                digestSink.add(bytes);
+                remainingToRead -= bytes.length;
+              }
+            } finally {
+              raf.closeSync();
+            }
+          }
+        }
 
         var sessionBytes = 0;
         await for (final piece in stream) {

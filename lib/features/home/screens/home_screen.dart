@@ -1770,6 +1770,14 @@ class _DownloadTaskList extends StatelessWidget {
               ),
             );
           } else {
+            // FIX-4.2: Precompute id-to-index map to eliminate O(N) scans in findChild/ItemIndexCallback
+            final idToIndex = <String, int>{
+              for (int i = 0; i < renderItems.length; i++)
+                (renderItems[i].isPlaylist
+                    ? 'playlist_${renderItems[i].playlistId}'
+                    : (renderItems[i].task?.id ?? '')): i,
+            };
+
             final isMultiColumnView =
                 MediaQuery.sizeOf(context).width >= 600 || isLandscape(context);
             if (isMultiColumnView) {
@@ -1795,11 +1803,7 @@ class _DownloadTaskList extends StatelessWidget {
                   ),
                   findChildIndexCallback: (Key key) {
                     if (key is ValueKey<String>) {
-                      final keyVal = key.value;
-                      final idx = renderItems.indexWhere((it) => it.isPlaylist
-                          ? 'playlist_${it.playlistId}' == keyVal
-                          : it.task?.id == keyVal);
-                      return idx != -1 ? idx : null;
+                      return idToIndex[key.value];
                     }
                     return null;
                   },
@@ -1865,11 +1869,7 @@ class _DownloadTaskList extends StatelessWidget {
                   ),
                   findItemIndexCallback: (Key key) {
                     if (key is ValueKey<String>) {
-                      final keyVal = key.value;
-                      final idx = renderItems.indexWhere((it) => it.isPlaylist
-                          ? 'playlist_${it.playlistId}' == keyVal
-                          : it.task?.id == keyVal);
-                      return idx != -1 ? idx : null;
+                      return idToIndex[key.value];
                     }
                     return null;
                   },

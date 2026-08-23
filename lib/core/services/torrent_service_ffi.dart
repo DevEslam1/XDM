@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart'
     show ValueNotifier, listEquals, visibleForTesting;
@@ -9,13 +10,14 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:synchronized/synchronized.dart';
 
+import '../domain/torrent_models.dart';
 import '../interfaces/i_torrent_native.dart';
 import '../interfaces/i_torrent_service.dart';
 import '../utils/url_utils.dart';
 import 'download_engine.dart';
 import 'power_monitor.dart';
+import 'tick_manager.dart';
 import 'torrent/libtorrent_native_impl.dart';
-import 'torrent_models.dart';
 import 'torrent_resume_store.dart';
 import 'tracker_manager.dart';
 
@@ -32,6 +34,8 @@ enum TorrentSessionLifecycleState {
 
 class TorrentService {
   static final Lock _libtorrentLock = Lock();
+  // FIX-1.3: Lock TorrentService state mutations
+  static final Lock _torrentLock = Lock();
   static TorrentSessionLifecycleState _state =
       TorrentSessionLifecycleState.uninitialized;
   static Completer<void>? _initCompleter;
@@ -57,7 +61,7 @@ class TorrentService {
   }
 
   static void _startPeriodicResumeSave() {
-    _periodicResumeTimer?.cancel();
+    _stopPeriodicResumeSave();
     // Nothing to save without the export — the timer would wake every 30s only
     // to have every call report unavailable.
     if (!resumeDataSupported) {
@@ -67,14 +71,21 @@ class TorrentService {
       );
       return;
     }
-    _periodicResumeTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (isInitialized && _activeTorrentIds.isNotEmpty) {
-        saveAllResumeData();
-      }
-    });
+    // FIX-02: Consolidate into TickManager
+    TickManager.instance.registerTick(
+      id: 'torrent_periodic_resume_save',
+      interval: const Duration(seconds: 30),
+      priority: TickPriority.normal,
+      callback: (_) {
+        if (isInitialized && _activeTorrentIds.isNotEmpty) {
+          saveAllResumeData();
+        }
+      },
+    );
   }
 
   static void _stopPeriodicResumeSave() {
+    TickManager.instance.unregisterTick('torrent_periodic_resume_save');
     _periodicResumeTimer?.cancel();
     _periodicResumeTimer = null;
   }
@@ -372,133 +383,151 @@ class TorrentService {
     try {
       controller = StreamController<Map<int, TorrentUpdateInfo>>.broadcast();
       sub = _native.statusStream.listen(
-        (torrents) {
-          try {
-            final nativeIds = Set<int>.from(torrents.keys);
-            _activeTorrentIds = _activeTorrentIds.union(nativeIds);
-            final previousIds = Set<int>.from(_latestProgress.keys);
-            // FIX: Do NOT evict an ID just because it was absent from one
-            // status batch. The native stream omits quiet/idle torrents from
-            // some ticks, which caused isTorrentAlive() to return false and
-            // triggered a spurious restart loop (downloads stopped after 2-4 MB,
-            // magnet re-added, metadata cleared, repeat).
-            // Only evict IDs that have disappeared AND have no cached stats —
-            // meaning they were never properly tracked. Active IDs are kept until
-            // the aliveness watchdog (with its two-miss guard) declares them gone.
-            _activeTorrentIds.retainWhere(
-              (id) =>
-                  nativeIds.contains(id) ||
-                  _latestStats.containsKey(id), // keep while we have any state
-            );
-            final removedIds = previousIds.difference(_activeTorrentIds);
-            for (final removedId in removedIds) {
-              _latestProgress.remove(removedId);
-              _latestStats.remove(removedId);
-              _metadataProbeAt.remove(removedId);
-              _torrentSources.remove(removedId);
-              _cachedPrioritiesSnapshot.remove(removedId);
-            }
-            final mapped = torrents.map((key, value) {
-              // Some older prebuilt Android bridges reported metadata_received
-              // before updating torrent_status.has_metadata. The native file
-              // table is authoritative, so use it as a compatibility fallback
-              // until the matching rebuilt bridge is installed.
-              var hasMetadata = value.hasMetadata;
-              var name = value.name;
-              var totalWanted = value.totalWanted;
-              final lastMetadataProbe = _metadataProbeAt[value.id];
-              final shouldProbeMetadata = lastMetadataProbe == null ||
-                  DateTime.now().difference(lastMetadataProbe) >=
-                      const Duration(seconds: 2);
-              if (!hasMetadata && shouldProbeMetadata) {
-                _metadataProbeAt[value.id] = DateTime.now();
-                try {
-                  final nativeFiles = _native.getFiles(value.id);
-                  if (nativeFiles.isNotEmpty) {
-                    hasMetadata = true;
-                    if (name.isEmpty) name = nativeFiles.first.name;
-                    if (totalWanted <= 0) {
-                      totalWanted = nativeFiles.fold<int>(
-                        0,
-                        (sum, file) => sum + file.size,
-                      );
-                    }
-                  }
-                } catch (_) {}
-              }
-
-              _latestProgress[value.id] = value.progress;
-
-              // FIX: [Audit] Populate all FFI fields and map numeric state to enum
-              final info = TorrentUpdateInfo(
-                id: value.id,
-                name: name,
-                progress: value.progress,
-                downloadRate: value.downloadRate,
-                uploadRate: value.uploadRate,
-                totalDone: value.totalDone,
-                totalWanted: totalWanted,
-                totalWantedDone: value.totalWantedDone,
-                hasMetadata: hasMetadata,
-                state: stateFromInt(value.state),
-                isPaused: value.isPaused,
-                stateLabel: value.stateLabel,
-                numSeeds: value.numSeeds < 0 ? 0 : value.numSeeds,
-                numPeers: value.numPeers < 0 ? 0 : value.numPeers,
-                numComplete: value.numComplete,
-                numIncomplete: value.numIncomplete,
-                piecesHave: value.piecesDone,
-                piecesTotal: value.numPieces,
-                downloadPayloadRate: value.downloadRate,
-                uploadPayloadRate: value.uploadRate,
-                totalPayloadDownload: value.totalDone,
-                totalPayloadUpload: value.totalUploaded,
-                currentTracker: '',
-                nextAnnounceSeconds: 0,
-                infoHashV1: value.infoHashV1,
-                infoHashV2: value.infoHashV2,
-                distributedCopies: value.distributedCopies,
-                activeTime: value.activeTime,
-                seedingTime: value.seedingTime,
-                fileProgress: value.fileProgress,
-                filePriorities: value.filePriorities,
-              );
-              _latestStats[value.id] = info;
-              return MapEntry(key, info);
-            });
-
-            _pendingUpdate = mapped;
-            final now = DateTime.now();
-            Duration interval;
+        (torrents) async {
+          await _torrentLock.synchronized(() async {
             try {
-              interval = (PowerMonitor.screenOff || !DownloadEngine.appInForeground)
-                  ? const Duration(seconds: 2)
-                  : const Duration(milliseconds: 500);
-            } catch (_) {
-              interval = const Duration(milliseconds: 500);
-            }
-            if (_lastEmitTime == null ||
-                now.difference(_lastEmitTime!) >= interval) {
-              _lastEmitTime = now;
-              _throttleTimer?.cancel();
-              _throttleTimer = null;
-              if (controller != null && !controller.isClosed) {
-                controller.add(Map.unmodifiable(mapped));
-              }
-            } else {
-              _throttleTimer ??= Timer(interval, () {
-                _lastEmitTime = DateTime.now();
-                _throttleTimer = null;
-                if (_pendingUpdate != null &&
-                    controller != null &&
-                    !controller.isClosed) {
-                  controller.add(Map.unmodifiable(_pendingUpdate!));
+              // FIX-2.3: Throttle torrent stream listener - skip if unchanged
+              bool anyChanged = false;
+              for (final entry in torrents.entries) {
+                final prev = _latestStats[entry.key];
+                if (prev == null ||
+                    prev.progress != entry.value.progress ||
+                    prev.stateLabel != entry.value.stateLabel ||
+                    prev.downloadRate != entry.value.downloadRate) {
+                  anyChanged = true;
+                  break;
                 }
+              }
+              if (!anyChanged && torrents.length == _latestStats.length) return;
+
+              final nativeIds = Set<int>.from(torrents.keys);
+              _activeTorrentIds = _activeTorrentIds.union(nativeIds);
+              final previousIds = Set<int>.from(_latestProgress.keys);
+              // FIX: Do NOT evict an ID just because it was absent from one
+              // status batch. The native stream omits quiet/idle torrents from
+              // some ticks, which caused isTorrentAlive() to return false and
+              // triggered a spurious restart loop (downloads stopped after 2-4 MB,
+              // magnet re-added, metadata cleared, repeat).
+              // Only evict IDs that have disappeared AND have no cached stats —
+              // meaning they were never properly tracked. Active IDs are kept until
+              // the aliveness watchdog (with its two-miss guard) declares them gone.
+              _activeTorrentIds.retainWhere(
+                (id) =>
+                    nativeIds.contains(id) ||
+                    _latestStats
+                        .containsKey(id), // keep while we have any state
+              );
+              final removedIds = previousIds.difference(_activeTorrentIds);
+              for (final removedId in removedIds) {
+                _latestProgress.remove(removedId);
+                _latestStats.remove(removedId);
+                _metadataProbeAt.remove(removedId);
+                _torrentSources.remove(removedId);
+                _cachedPrioritiesSnapshot.remove(removedId);
+              }
+              final mapped = torrents.map((key, value) {
+                // Some older prebuilt Android bridges reported metadata_received
+                // before updating torrent_status.has_metadata. The native file
+                // table is authoritative, so use it as a compatibility fallback
+                // until the matching rebuilt bridge is installed.
+                var hasMetadata = value.hasMetadata;
+                var name = value.name;
+                var totalWanted = value.totalWanted;
+                final lastMetadataProbe = _metadataProbeAt[value.id];
+                final shouldProbeMetadata = lastMetadataProbe == null ||
+                    DateTime.now().difference(lastMetadataProbe) >=
+                        const Duration(seconds: 2);
+                if (!hasMetadata && shouldProbeMetadata) {
+                  _metadataProbeAt[value.id] = DateTime.now();
+                  try {
+                    final nativeFiles = _native.getFiles(value.id);
+                    if (nativeFiles.isNotEmpty) {
+                      hasMetadata = true;
+                      if (name.isEmpty) name = nativeFiles.first.name;
+                      if (totalWanted <= 0) {
+                        totalWanted = nativeFiles.fold<int>(
+                          0,
+                          (sum, file) => sum + file.size,
+                        );
+                      }
+                    }
+                  } catch (_) {}
+                }
+
+                _latestProgress[value.id] = value.progress;
+
+                // FIX: [Audit] Populate all FFI fields and map numeric state to enum
+                final info = TorrentUpdateInfo(
+                  id: value.id,
+                  name: name,
+                  progress: value.progress,
+                  downloadRate: value.downloadRate,
+                  uploadRate: value.uploadRate,
+                  totalDone: value.totalDone,
+                  totalWanted: totalWanted,
+                  totalWantedDone: value.totalWantedDone,
+                  hasMetadata: hasMetadata,
+                  state: stateFromInt(value.state),
+                  isPaused: value.isPaused,
+                  stateLabel: value.stateLabel,
+                  numSeeds: value.numSeeds < 0 ? 0 : value.numSeeds,
+                  numPeers: value.numPeers < 0 ? 0 : value.numPeers,
+                  numComplete: value.numComplete,
+                  numIncomplete: value.numIncomplete,
+                  piecesHave: value.piecesDone,
+                  piecesTotal: value.numPieces,
+                  downloadPayloadRate: value.downloadRate,
+                  uploadPayloadRate: value.uploadRate,
+                  totalPayloadDownload: value.totalDone,
+                  totalPayloadUpload: value.totalUploaded,
+                  currentTracker: '',
+                  nextAnnounceSeconds: 0,
+                  infoHashV1: value.infoHashV1,
+                  infoHashV2: value.infoHashV2,
+                  distributedCopies: value.distributedCopies,
+                  activeTime: value.activeTime,
+                  seedingTime: value.seedingTime,
+                  fileProgress: value.fileProgress,
+                  filePriorities: value.filePriorities,
+                );
+                _latestStats[value.id] = info;
+                return MapEntry(key, info);
               });
+
+              _pendingUpdate = mapped;
+              final now = DateTime.now();
+              Duration interval;
+              try {
+                interval =
+                    (PowerMonitor.screenOff || !DownloadEngine.appInForeground)
+                        ? const Duration(seconds: 2)
+                        : const Duration(milliseconds: 500);
+              } catch (_) {
+                interval = const Duration(milliseconds: 500);
+              }
+              if (_lastEmitTime == null ||
+                  now.difference(_lastEmitTime!) >= interval) {
+                _lastEmitTime = now;
+                _throttleTimer?.cancel();
+                _throttleTimer = null;
+                if (controller != null && !controller.isClosed) {
+                  controller.add(Map.unmodifiable(mapped));
+                }
+              } else {
+                _throttleTimer ??= Timer(interval, () {
+                  _lastEmitTime = DateTime.now();
+                  _throttleTimer = null;
+                  if (_pendingUpdate != null &&
+                      controller != null &&
+                      !controller.isClosed) {
+                    controller.add(Map.unmodifiable(_pendingUpdate!));
+                  }
+                });
+              }
+            } catch (e, st) {
+              _log.warning('Error in torrent updates processing: $e', e, st);
             }
-          } catch (e, st) {
-            _log.warning('Error in torrent updates processing: $e', e, st);
-          }
+          });
         },
         onError: (Object e, StackTrace st) {
           _log.warning('Native torrent updates stream error: $e', e, st);
@@ -635,6 +664,7 @@ class TorrentService {
     _disposeCompleter = null;
   }
 
+  // FIX-1.3: Lock TorrentService state mutations
   static int addMagnet(String magnetUri, String savePath,
       {List<int>? resumeData}) {
     if (!isInitialized) return -1;
@@ -642,13 +672,15 @@ class TorrentService {
     try {
       final id = _native.addMagnet(magnetUri, savePath, resumeData: resumeData);
       if (id >= 0) {
-        _activeTorrentIds.add(id);
-        _torrentSources[id] = magnetUri;
-        if (resumeData != null && resumeData.isNotEmpty) {
-          _latestResumeBlobs[id] = Uint8List.fromList(resumeData);
-        } else {
-          unawaited(_tryLoadFastResumeForSource(id, magnetUri));
-        }
+        _torrentLock.synchronized(() {
+          _activeTorrentIds.add(id);
+          _torrentSources[id] = magnetUri;
+          if (resumeData != null && resumeData.isNotEmpty) {
+            _latestResumeBlobs[id] = Uint8List.fromList(resumeData);
+          } else {
+            unawaited(_tryLoadFastResumeForSource(id, magnetUri));
+          }
+        });
       }
       return id;
     } catch (e) {
@@ -765,6 +797,7 @@ class TorrentService {
     return -1;
   }
 
+  // FIX-1.3: Lock TorrentService state mutations
   static int addTorrentFile(
     String filePath,
     String savePath, {
@@ -775,15 +808,18 @@ class TorrentService {
     _startTrackingUpdates();
     try {
       final source = sourceKey ?? filePath;
-      final id = _native.addTorrentFile(filePath, savePath, resumeData: resumeData);
+      final id =
+          _native.addTorrentFile(filePath, savePath, resumeData: resumeData);
       if (id >= 0) {
-        _activeTorrentIds.add(id);
-        _torrentSources[id] = source;
-        if (resumeData != null && resumeData.isNotEmpty) {
-          _latestResumeBlobs[id] = Uint8List.fromList(resumeData);
-        } else {
-          unawaited(_tryLoadFastResumeForSource(id, source));
-        }
+        _torrentLock.synchronized(() {
+          _activeTorrentIds.add(id);
+          _torrentSources[id] = source;
+          if (resumeData != null && resumeData.isNotEmpty) {
+            _latestResumeBlobs[id] = Uint8List.fromList(resumeData);
+          } else {
+            unawaited(_tryLoadFastResumeForSource(id, source));
+          }
+        });
       }
       return id;
     } catch (e) {
@@ -815,6 +851,7 @@ class TorrentService {
     }
   }
 
+  // FIX-1.3: Lock TorrentService state mutations
   static void removeTorrent(
     int id, {
     bool deleteFiles = false,
@@ -822,28 +859,30 @@ class TorrentService {
   }) {
     if (!isInitialized) return;
     if (id >= 0) {
-      try {
-        if (isTorrentAlive(id)) {
-          _native.removeTorrent(id, deleteFiles: deleteFiles);
-        }
-        if (deleteResumeData) {
-          unawaited(TorrentResumeStore.delete(id));
-          final source = _torrentSources.remove(id);
-          if (source != null) {
-            unawaited(TorrentResumeStore.deleteResumeDataForSource(source));
+      _torrentLock.synchronized(() {
+        try {
+          if (isTorrentAlive(id)) {
+            _native.removeTorrent(id, deleteFiles: deleteFiles);
           }
-        } else {
-          _torrentSources.remove(id);
+          if (deleteResumeData) {
+            unawaited(TorrentResumeStore.delete(id));
+            final source = _torrentSources.remove(id);
+            if (source != null) {
+              unawaited(TorrentResumeStore.deleteResumeDataForSource(source));
+            }
+          } else {
+            _torrentSources.remove(id);
+          }
+          _latestProgress.remove(id);
+          _latestStats.remove(id);
+          _metadataProbeAt.remove(id);
+          _latestResumeBlobs.remove(id);
+          _activeTorrentIds.remove(id);
+          _cachedPrioritiesSnapshot.remove(id);
+        } catch (e) {
+          _log.warning('removeTorrent failed for id $id: $e');
         }
-        _latestProgress.remove(id);
-        _latestStats.remove(id);
-        _metadataProbeAt.remove(id);
-        _latestResumeBlobs.remove(id);
-        _activeTorrentIds.remove(id);
-        _cachedPrioritiesSnapshot.remove(id);
-      } catch (e) {
-        _log.warning('removeTorrent failed for id $id: $e');
-      }
+      });
     }
   }
 
@@ -969,14 +1008,17 @@ class TorrentService {
     }
   }
 
+  // FIX-1.3: Lock TorrentService state mutations
   static Future<void> resumeTorrent(int id) async {
     if (!isInitialized || !isTorrentAlive(id)) return;
     if (id >= 0) {
-      try {
-        await _native.resumeTorrent(id);
-      } catch (e) {
-        _log.warning('resumeTorrent failed for id $id: $e');
-      }
+      await _torrentLock.synchronized(() async {
+        try {
+          await _native.resumeTorrent(id);
+        } catch (e) {
+          _log.warning('resumeTorrent failed for id $id: $e');
+        }
+      });
     }
   }
 
@@ -1325,7 +1367,8 @@ class TorrentService {
           exists: exists,
           // Completeness must come from a real byte count; an unknown file is
           // never complete.
-          isComplete: !estimated && resolvedSize > 0 && resolved >= resolvedSize,
+          isComplete:
+              !estimated && resolvedSize > 0 && resolved >= resolvedSize,
           isEstimated: estimated,
         ));
       }
@@ -1501,7 +1544,8 @@ class TorrentService {
   static void prioritizeFile(int torrentId, int fileIndex, {int priority = 7}) {
     if (!isInitialized || torrentId < 0) return;
     try {
-      final current = List<int>.from(_cachedPrioritiesSnapshot[torrentId] ?? const []);
+      final current =
+          List<int>.from(_cachedPrioritiesSnapshot[torrentId] ?? const []);
       if (fileIndex >= 0 && fileIndex < current.length) {
         current[fileIndex] = priority;
         setFilePriorities(torrentId, current);

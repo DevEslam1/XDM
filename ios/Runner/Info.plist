@@ -215,5 +215,13 @@
 		<string>GetDownloadStatusIntent</string>
 		<string>DownloadFileIntent</string>
 	</array>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>XDM needs access to your photo library to save downloaded images and videos.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>XDM needs permission to save downloaded images and videos to your photo library.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>XDM uses the local network for peer discovery and BitTorrent transfers.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>XDM requires microphone access for audio functionality if requested.</string>
 </dict>
 </plist>

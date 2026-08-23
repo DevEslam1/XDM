@@ -17,6 +17,7 @@ import '../utils/localization.dart';
 import 'background_gate.dart';
 import 'download_engine.dart';
 import 'power_monitor.dart';
+import 'tick_manager.dart';
 
 const String _nonceKey = 'dmx_notification_nonce';
 const String _pendingActionsKey = 'dmx_pending_notification_actions';
@@ -157,7 +158,21 @@ class NotificationService {
     });
   }
 
+  final Map<String, DateTime> _lastActionTimes = {};
+
   void _addAction(Map<String, String> event) {
+    // FIX-32: Debounce duplicate rapid notification taps within 500ms
+    final key = '${event['action']}_${event['taskId']}';
+    final now = DateTime.now();
+    final lastTime = _lastActionTimes[key];
+    if (lastTime != null && now.difference(lastTime) < const Duration(milliseconds: 500)) {
+      return;
+    }
+    _lastActionTimes[key] = now;
+    if (_lastActionTimes.length > 100) {
+      _lastActionTimes.removeWhere((_, time) => now.difference(time) > const Duration(minutes: 5));
+    }
+
     unawaited(_actionQueueLock.synchronized(() {
       final item = _BufferedNotificationAction(
         event: Map<String, String>.unmodifiable(event),
@@ -286,17 +301,21 @@ class NotificationService {
 
   void startPollingPendingActions() {
     if (Platform.environment.containsKey('FLUTTER_TEST')) return;
-    if (_pollTimer != null && _pollTimer!.isActive) return;
-    // FIX: Guard against multiple timer creations
-    _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(
-        BackgroundGate.adaptInterval(const Duration(seconds: 30)), (_) {
-      unawaited(processPendingBackgroundActions().catchError((e) => debugPrint(
-          '[Notifications] Failed to process pending background actions: $e')));
-    });
+    stopPollingPendingActions();
+    // FIX-02: Consolidate into TickManager
+    TickManager.instance.registerTick(
+      id: 'notification_service_poll',
+      interval: BackgroundGate.adaptInterval(const Duration(seconds: 30)),
+      priority: TickPriority.normal,
+      callback: (_) {
+        unawaited(processPendingBackgroundActions().catchError((e) => debugPrint(
+            '[Notifications] Failed to process pending background actions: $e')));
+      },
+    );
   }
 
   void stopPollingPendingActions() {
+    TickManager.instance.unregisterTick('notification_service_poll');
     _pollTimer?.cancel();
     _pollTimer = null;
   }

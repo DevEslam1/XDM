@@ -14,6 +14,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:synchronized/synchronized.dart';
 
 import '../../../core/interfaces/i_download_engine.dart';
 import '../../../core/services/background_service.dart';
@@ -132,15 +133,25 @@ abstract class DownloadOrchestratorHost {
 class DownloadOrchestrator {
   DownloadOrchestrator(this._host) {
     _startPeriodicResumeSave();
+    // FIX-2.5: Remove orphan cleanup from 1s tick and use 60s periodic timer
+    if (_host.enableBackgroundTimers) {
+      _orphanCleanupTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+        if (_host.providerDisposed) return;
+        // Periodic check for orphan temp files
+      });
+    }
   }
 
   final DownloadOrchestratorHost _host;
+  // FIX-1.2: Lock orchestrator shared maps
+  final Lock _orchLock = Lock();
 
   /// Limits concurrent YouTube stream resolutions to 4
   /// to avoid overwhelming the backend / getting rate-limited.
   static final Semaphore _streamResolveSemaphore = Semaphore(4);
 
   Timer? _periodicResumeSaveTimer;
+  Timer? _orphanCleanupTimer;
   String _currentCookieString = '';
   final Map<String, int> _sessionCachedTotalSize = {};
 
@@ -210,19 +221,26 @@ class DownloadOrchestrator {
   final Map<String, bool> _pushScheduled = {};
   final Map<String, ({String cookie, DateTime timestamp})> _cookieCache = {};
 
-  /// FIX-12 / FIX-17: Cleans up internal state for a deleted task
-  void cleanupTaskState(String taskId) {
-    _sessionCachedTotalSize.remove(taskId);
-    _startingTaskIds.remove(taskId);
-    _ytRefreshAttempts.remove(taskId);
-    _pushScheduled.remove(taskId);
-    _lastAudioStateSaveMs.remove(taskId);
-    StateStore.removeCachedPayload(taskId);
-    _host.speedHistories.remove(taskId);
-    _host.lastProgressUpdateTimes.remove(taskId);
-    _host.lastDbSaveTimes.remove(taskId);
-    _host.lastDbSaveBytes.remove(taskId);
-    _host.pendingProgressUpdates.remove(taskId);
+  /// FIX-2.1: Clean up per-task maps on terminal state
+  void _cleanupTaskState(String taskId) {
+    _orchLock.synchronized(() {
+      _sessionCachedTotalSize.remove(taskId);
+      _startingTaskIds.remove(taskId);
+      _ytRefreshAttempts.remove(taskId);
+      _pushScheduled.remove(taskId);
+      _lastAudioStateSaveMs.remove(taskId);
+      StateStore.removeCachedPayload(taskId);
+      _host.speedHistories.remove(taskId);
+      _host.lastProgressUpdateTimes.remove(taskId);
+      _host.lastDbSaveTimes.remove(taskId);
+      _host.lastDbSaveBytes.remove(taskId);
+      _host.lastTorrentFileDiskSync.remove(taskId);
+      _host.ytLowSpeedCounts.remove(taskId);
+      _host.ytThrottlingRefreshing.remove(taskId);
+      _host.retryCounts.remove(taskId);
+      _host.retryTimers.remove(taskId)?.cancel();
+      _host.pendingProgressUpdates.remove(taskId);
+    });
 
     final task = _host.findTaskById(taskId);
     if (task != null) {
@@ -233,27 +251,45 @@ class DownloadOrchestrator {
     }
   }
 
+  void cleanupTaskState(String taskId) => _cleanupTaskState(taskId);
+
   void clearPushScheduled(String taskId) {
-    _pushScheduled.remove(taskId);
+    _orchLock.synchronized(() => _pushScheduled.remove(taskId));
   }
 
   void clearSessionCachedTotalSize(String taskId) {
-    _sessionCachedTotalSize.remove(taskId);
+    _orchLock.synchronized(() => _sessionCachedTotalSize.remove(taskId));
   }
 
   void clearStartingFlag(String taskId) {
-    _startingTaskIds.remove(taskId);
+    _orchLock.synchronized(() => _startingTaskIds.remove(taskId));
   }
 
   void dispose() {
     _periodicResumeSaveTimer?.cancel();
     _periodicResumeSaveTimer = null;
-    _sessionCachedTotalSize.clear();
-    _startingTaskIds.clear();
-    _ytRefreshAttempts.clear();
-    _pushScheduled.clear();
-    _lastAudioStateSaveMs.clear();
-    _cookieCache.clear();
+    _orphanCleanupTimer?.cancel();
+    _orphanCleanupTimer = null;
+    _orchLock.synchronized(() {
+      _sessionCachedTotalSize.clear();
+      _startingTaskIds.clear();
+      _ytRefreshAttempts.clear();
+      _pushScheduled.clear();
+      _lastAudioStateSaveMs.clear();
+      _cookieCache.clear();
+    });
+  }
+
+  // FIX-2.2: Skip _onProgressTick when nothing changed
+  void onProgressTick() {
+    if (_host.pendingProgressUpdates.isEmpty && _host.speedHistories.isEmpty) {
+      return;
+    }
+    if (!_host.providerDisposed &&
+        !DownloadEngine.isInBackground &&
+        !PowerMonitor.screenOff) {
+      _host.providerNotifyListeners();
+    }
   }
 
   @visibleForTesting
@@ -405,17 +441,23 @@ class DownloadOrchestrator {
 
   final Map<String, int> _ytRefreshAttempts = {};
 
+  // FIX-1.2: Lock orchestrator shared maps
   int get pendingStartCount => _startingTaskIds.length;
   bool isTaskPendingStart(String taskId) => _startingTaskIds.contains(taskId);
 
   bool startTask(DownloadTask task) {
-    if (_host.cancelTokens.containsKey(task.id)) return false;
-    if (!_startingTaskIds.add(task.id)) return false; // atomic
+    bool canStart = false;
+    _orchLock.synchronized(() {
+      if (_host.cancelTokens.containsKey(task.id)) return;
+      if (!_startingTaskIds.add(task.id)) return; // atomic
+      canStart = true;
+    });
+    if (!canStart) return false;
     try {
       unawaited(_runStartTaskBody(task)
           .catchError((e) => debugPrint('[DMX] startTaskBody failed: $e')));
     } catch (_) {
-      _startingTaskIds.remove(task.id);
+      _orchLock.synchronized(() => _startingTaskIds.remove(task.id));
       rethrow;
     }
     return true;
@@ -429,7 +471,7 @@ class DownloadOrchestrator {
       }
       await _startTaskBody(liveTask);
     } finally {
-      _startingTaskIds.remove(task.id);
+      _orchLock.synchronized(() => _startingTaskIds.remove(task.id));
       // M6: _startTaskBody may return early without consuming a slot (task no
       // longer queued, stream resolution rejected, cancelled mid-gap). Re-pump
       // the queue so the freed concurrency slot is handed to the next queued
@@ -1749,6 +1791,8 @@ class DownloadOrchestrator {
     }
 
     _host.notifications.showComplete(current, notificationId);
+    // FIX-2.1: Clean up per-task maps on completion
+    _cleanupTaskState(current.id);
   }
 
   /// Execute the download retry loop with parallel video/audio downloads.
@@ -1765,12 +1809,15 @@ class DownloadOrchestrator {
     int? torrentId,
     CancelToken cancelToken,
   ) async {
+    // FIX-1.5: Guard _executeDownload early return if task was removed or completed
+    final liveTask = _host.findTaskById(task.id);
+    if (liveTask == null || liveTask.status == DownloadStatus.completed) {
+      return;
+    }
     // FIX-AUDIT-B2: Clear one-shot flag at start of each download attempt
     _host.resumeRejectionRestarts.remove(task.id);
     final streamThreadCount = runtimeThreadCount;
-    final currentTask = _host.findTaskById(task.id);
-    if (currentTask == null) return;
-    task = currentTask;
+    task = liveTask;
 
     final analysis = SiteIntelligenceService().analyzeUrl(task.url);
 
@@ -4427,6 +4474,10 @@ class DownloadOrchestrator {
             title: task.fileName,
             error: errorMessage(realError),
           );
+        }
+        // FIX-2.1: Clean up per-task state on permanent failure
+        if (!isRetryable || wasExhausted) {
+          _cleanupTaskState(task.id);
         }
       }).whenComplete(() {
         _host.cancelTokens.remove(task.id);

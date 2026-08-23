@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/app_theme.dart';
-import '../../../core/services/torrent_models.dart';
+import '../../../core/domain/torrent_models.dart';
 import '../../downloads/models/download_task.dart';
 
 class TorrentStatsDashboard extends StatelessWidget {

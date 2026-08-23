@@ -3,10 +3,10 @@ import 'dart:collection';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:dmx/core/domain/torrent_models.dart';
 import 'package:dmx/core/services/database_service.dart';
 import 'package:dmx/core/services/download_engine.dart';
 import 'package:dmx/core/services/download_metrics.dart';
-import 'package:dmx/core/services/torrent_models.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/features/downloads/provider/download_orchestrator.dart';
 import 'package:dmx/features/downloads/provider/network_monitor.dart';

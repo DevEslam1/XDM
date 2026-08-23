@@ -30,7 +30,7 @@ dependencies:
   path_provider: ^2.1.5
   path: ^1.9.1
   drift: ^2.34.3
-  # sqlite3: removed — transitive dep of drift, do not pin separately
+  sqlite3_flutter_libs: ^0.5.24
 
   # Permissions / platform
   permission_handler: ^13.0.0

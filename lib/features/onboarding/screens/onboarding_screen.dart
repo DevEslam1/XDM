@@ -24,7 +24,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   final PageController _pageController = PageController(viewportFraction: 1.0);
   int _currentPage = 0;
   static const int _pageCount = 5;
-  double _pageOffset = 0.0;
 
   late AnimationController _particleController;
   late AnimationController _pulseController;
@@ -33,11 +32,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _pageController.addListener(() {
-      setState(() {
-        _pageOffset = _pageController.page ?? 0.0;
-      });
-    });
 
     _particleController = AnimationController(
       vsync: this,
@@ -356,12 +350,15 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           AnimatedBuilder(
             animation: _pageController,
             builder: (context, _) {
+              final page = _pageController.hasClients
+                  ? (_pageController.page ?? _currentPage.toDouble())
+                  : _currentPage.toDouble();
               return ClipRRect(
                 borderRadius: BorderRadius.circular(2),
                 child: SizedBox(
                   height: 3,
                   child: LinearProgressIndicator(
-                    value: (_pageOffset + 1) / _pageCount,
+                    value: (page + 1) / _pageCount,
                     backgroundColor:
                         (isDark ? AppTheme.border : AppTheme.lightBorder)
                             .withValues(alpha: 0.3),
@@ -488,155 +485,165 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     final secClr =
         isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
 
-    // Parallax offset based on page scroll
-    final parallaxOffset = (_pageOffset - pageIndex) * 60;
+    return AnimatedBuilder(
+      animation: _pageController,
+      builder: (context, _) {
+        final page = _pageController.hasClients
+            ? (_pageController.page ?? _currentPage.toDouble())
+            : _currentPage.toDouble();
+        final parallaxOffset = (page - pageIndex) * 60;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 28.0),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          // ─── Tagline Badge ───
-          Transform.translate(
-            offset: Offset(0, parallaxOffset * 0.3),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: accentColor.withValues(alpha: 0.4),
-                  width: 1,
-                ),
-                color: accentColor.withValues(alpha: 0.06),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      color: accentColor,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: accentColor.withValues(alpha: 0.6),
-                          blurRadius: 4,
-                        ),
-                      ],
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 28.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // ─── Tagline Badge ───
+              Transform.translate(
+                offset: Offset(0, parallaxOffset * 0.3),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: accentColor.withValues(alpha: 0.4),
+                      width: 1,
                     ),
+                    color: accentColor.withValues(alpha: 0.06),
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    tagline,
-                    style: TextStyle(
-                      fontFamily: 'Space Grotesk',
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.5,
-                      color: accentColor,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          // ─── Graphic Card with Parallax ───
-          Expanded(
-            child: Center(
-              child: Transform.translate(
-                offset: Offset(0, parallaxOffset * 0.5),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(24),
-                  child: DmxBackdropFilter(
-                    sigmaX: 12,
-                    sigmaY: 12,
-                    child: Container(
-                      width: double.infinity,
-                      constraints: const BoxConstraints(maxHeight: 260),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(
-                          color: accentColor.withValues(alpha: 0.15),
-                          width: 1,
-                        ),
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            (isDark ? Colors.white : Colors.black).withValues(
-                              alpha: isDark ? 0.04 : 0.02,
-                            ),
-                            accentColor.withValues(alpha: 0.03),
-                            (isDark ? Colors.white : Colors.black).withValues(
-                              alpha: isDark ? 0.02 : 0.01,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: accentColor,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: accentColor.withValues(alpha: 0.6),
+                              blurRadius: 4,
                             ),
                           ],
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: accentColor.withValues(alpha: 0.08),
-                            blurRadius: 30,
-                            spreadRadius: -5,
-                          ),
-                        ],
                       ),
-                      child: Center(child: graphic),
+                      const SizedBox(width: 8),
+                      Text(
+                        tagline,
+                        style: TextStyle(
+                          fontFamily: 'Space Grotesk',
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.5,
+                          color: accentColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              // ─── Graphic Card with Parallax ───
+              Expanded(
+                child: Center(
+                  child: Transform.translate(
+                    offset: Offset(0, parallaxOffset * 0.5),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(24),
+                      child: DmxBackdropFilter(
+                        sigmaX: 12,
+                        sigmaY: 12,
+                        child: Container(
+                          width: double.infinity,
+                          constraints: const BoxConstraints(maxHeight: 260),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(
+                              color: accentColor.withValues(alpha: 0.15),
+                              width: 1,
+                            ),
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                (isDark ? Colors.white : Colors.black)
+                                    .withValues(
+                                  alpha: isDark ? 0.04 : 0.02,
+                                ),
+                                accentColor.withValues(alpha: 0.03),
+                                (isDark ? Colors.white : Colors.black)
+                                    .withValues(
+                                  alpha: isDark ? 0.02 : 0.01,
+                                ),
+                              ],
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: accentColor.withValues(alpha: 0.08),
+                                blurRadius: 30,
+                                spreadRadius: -5,
+                              ),
+                            ],
+                          ),
+                          child: Center(child: graphic),
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ),
 
-          const SizedBox(height: 32),
+              const SizedBox(height: 32),
 
-          // ─── Title with Gradient ───
-          Transform.translate(
-            offset: Offset(0, parallaxOffset * 0.7),
-            child: ShaderMask(
-              shaderCallback: (bounds) => LinearGradient(
-                colors: [textClr, textClr.withValues(alpha: 0.8)],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ).createShader(bounds),
-              child: Text(
-                title,
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.5,
-                      fontSize: 22,
-                      height: 1.3,
-                    ),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 14),
-
-          // ─── Subtitle ───
-          Transform.translate(
-            offset: Offset(0, parallaxOffset * 0.8),
-            child: Text(
-              subtitle,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: secClr,
-                    fontSize: 13.5,
-                    height: 1.6,
-                    letterSpacing: 0.2,
+              // ─── Title with Gradient ───
+              Transform.translate(
+                offset: Offset(0, parallaxOffset * 0.7),
+                child: ShaderMask(
+                  shaderCallback: (bounds) => LinearGradient(
+                    colors: [textClr, textClr.withValues(alpha: 0.8)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ).createShader(bounds),
+                  child: Text(
+                    title,
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                          fontSize: 22,
+                          height: 1.3,
+                        ),
+                    textAlign: TextAlign.center,
                   ),
-              textAlign: TextAlign.center,
-            ),
-          ),
+                ),
+              ),
 
-          const SizedBox(height: 20),
-        ],
-      ),
+              const SizedBox(height: 14),
+
+              // ─── Subtitle ───
+              Transform.translate(
+                offset: Offset(0, parallaxOffset * 0.8),
+                child: Text(
+                  subtitle,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: secClr,
+                        fontSize: 13.5,
+                        height: 1.6,
+                        letterSpacing: 0.2,
+                      ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+
+              const SizedBox(height: 20),
+            ],
+          ),
+        );
+      },
     );
   }
 }

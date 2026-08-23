@@ -30,7 +30,10 @@ class TorrentFileNormalizer {
   static bool isLengthKnown(Map<String, dynamic> f) {
     final len = (f['length'] as num?)?.toInt() ?? 0;
     if (len > 0) return true;
-    return (f['lengthKnown'] as bool?) == true;
+    if (f.containsKey('lengthKnown')) {
+      return (f['lengthKnown'] as bool?) == true;
+    }
+    return false;
   }
 
   /// Normalizes a single torrent file entry, ensuring all fields are present

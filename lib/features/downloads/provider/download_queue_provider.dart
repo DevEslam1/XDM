@@ -13,6 +13,8 @@ class DownloadQueueProvider extends ChangeNotifier {
 
   final List<String> _queuedIds = [];
   Timer? _debounceTimer;
+  // FIX-3.4: Add _disposed guard
+  bool _disposed = false;
 
   DownloadQueueProvider({
     DownloadListProvider? listProvider,
@@ -27,6 +29,7 @@ class DownloadQueueProvider extends ChangeNotifier {
   List<String> get queueTaskIds => List.unmodifiable(_queuedIds);
 
   void addToQueue(String taskId) {
+    if (_disposed) return;
     if (!_queuedIds.contains(taskId)) {
       _queuedIds.add(taskId);
       notifyListeners();
@@ -34,8 +37,10 @@ class DownloadQueueProvider extends ChangeNotifier {
   }
 
   void pumpQueue() {
+    if (_disposed) return;
     _debounceTimer?.cancel();
     _debounceTimer = Timer(const Duration(milliseconds: 50), () async {
+      if (_disposed) return;
       final list = _listProvider;
       if (list == null) return;
       final activeCount = list.tasks
@@ -50,7 +55,7 @@ class DownloadQueueProvider extends ChangeNotifier {
 
       var currentActive = activeCount;
       for (final task in queued) {
-        if (currentActive >= maxConcurrent) break;
+        if (_disposed || currentActive >= maxConcurrent) break;
         if (DownloadStateMachine.canTransitionStatus(
             task.status, DownloadStatus.downloading)) {
           final sm = DownloadStateMachine(
@@ -66,6 +71,7 @@ class DownloadQueueProvider extends ChangeNotifier {
 
   Future<void> pauseTask(String id,
       {PauseReason reason = PauseReason.userRequested}) async {
+    if (_disposed) return;
     final list = _listProvider;
     if (list == null) return;
     final task = list.findTask(id);
@@ -82,6 +88,7 @@ class DownloadQueueProvider extends ChangeNotifier {
   }
 
   Future<void> resumeTask(String id) async {
+    if (_disposed) return;
     final list = _listProvider;
     if (list == null) return;
     final task = list.findTask(id);
@@ -98,6 +105,7 @@ class DownloadQueueProvider extends ChangeNotifier {
   }
 
   void reorderQueue(int oldIndex, int newIndex) {
+    if (_disposed) return;
     if (oldIndex < 0 || oldIndex >= _queuedIds.length) return;
     if (newIndex < 0 || newIndex > _queuedIds.length) return;
     final item = _queuedIds.removeAt(oldIndex);
@@ -107,6 +115,8 @@ class DownloadQueueProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
     _debounceTimer?.cancel();
     _debounceTimer = null;
     super.dispose();

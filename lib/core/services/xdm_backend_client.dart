@@ -21,8 +21,6 @@ class XdmBackendClient {
   static final XdmBackendClient _instance = XdmBackendClient._internal();
   factory XdmBackendClient() => _instance;
 
-  static const String _apiKeyFallback =
-      'KxPgwFT0VvqoJUgVfcWuvE3-QSrc7qM-1YDS1dzNJv0';
   static String? _apiKey;
 
   late Dio _dio;
@@ -84,7 +82,7 @@ class XdmBackendClient {
   static const _secureStorage = FlutterSecureStorage();
   static const _apiKeyStorageKey = 'xdm_backend_api_key';
 
-  /// Reads the API key from secure storage, compile-time env var, or built-in fallback.
+  /// Reads the API key from secure storage or compile-time env var.
   static Future<void> loadApiKey() async {
     try {
       final stored = await _secureStorage.read(key: _apiKeyStorageKey);
@@ -103,11 +101,10 @@ class XdmBackendClient {
         return;
       }
 
-      _apiKey = _apiKeyFallback;
-      _log.info('API key initialized from built-in fallback key');
+      _apiKey = null;
     } catch (e) {
-      _log.severe('Failed to load API key, using built-in fallback', e);
-      _apiKey = _apiKeyFallback;
+      _log.warning('Failed to load API key', e);
+      _apiKey = null;
     }
   }
 
@@ -126,15 +123,14 @@ class XdmBackendClient {
       }
     } catch (_) {}
 
-    return _apiKeyFallback;
+    return '';
   }
 
   /// Persists a new API key to secure storage and refreshes the Dio client.
-  /// Pass an empty string to reset to the built-in fallback key.
   static Future<void> setApiKey(String key) async {
     if (key.isEmpty) {
       await _secureStorage.delete(key: _apiKeyStorageKey);
-      _apiKey = _apiKeyFallback;
+      _apiKey = null;
     } else {
       await _secureStorage.write(key: _apiKeyStorageKey, value: key);
       _apiKey = key;
@@ -148,6 +144,12 @@ class XdmBackendClient {
 
   /// Updates the backend configuration from SettingsProvider
   void _updateDioFromSettings() {
+    for (final client in _allPoolInstances) {
+      client.close(force: true);
+    }
+    _allPoolInstances.clear();
+    _availablePool.clear();
+
     String baseUrl;
     try {
       final settings = SettingsProvider.instance;
@@ -246,6 +248,22 @@ class XdmBackendClient {
     };
   }
 
+  List<String> _resolveCandidateBackendUrls() {
+    final settings = SettingsProvider.instance;
+    final List<String> backendUrls = [];
+    if (settings.backendUrl.isNotEmpty) {
+      backendUrls.add(settings.backendUrl);
+    }
+    final parsed = Uri.tryParse(settings.backendUrl);
+    final isLocal = parsed != null &&
+        (parsed.host == '127.0.0.1' || parsed.host == 'localhost');
+    if (!isLocal) {
+      backendUrls.addAll(
+          BackendHealthService.instance.activeBackends.map((b) => b.baseUrl));
+    }
+    return backendUrls.toSet().toList();
+  }
+
   /// Fetches downloadable streams for a YouTube video URL.
   ///
   /// [cookies] — Netscape-format or key=value cookie string forwarded as
@@ -287,15 +305,7 @@ class XdmBackendClient {
           'X-YouTube-OAuth': oauthToken,
       });
 
-      // FIX-1: Try each healthy backend in priority order, prioritizing user setting
-      final settings = SettingsProvider.instance;
-      final List<String> backendUrls = [];
-      if (settings.backendUrl.isNotEmpty) {
-        backendUrls.add(settings.backendUrl);
-      }
-      backendUrls.addAll(
-          BackendHealthService.instance.activeBackends.map((b) => b.baseUrl));
-      final uniqueBackends = backendUrls.toSet().toList();
+      final uniqueBackends = _resolveCandidateBackendUrls();
 
       Object? lastError;
       var sawNetworkFailure = false;
@@ -419,15 +429,7 @@ class XdmBackendClient {
         },
       });
 
-      // Try each healthy backend in priority order, prioritizing user setting
-      final settings = SettingsProvider.instance;
-      final List<String> backendUrls = [];
-      if (settings.backendUrl.isNotEmpty) {
-        backendUrls.add(settings.backendUrl);
-      }
-      backendUrls.addAll(
-          BackendHealthService.instance.activeBackends.map((b) => b.baseUrl));
-      final uniqueBackends = backendUrls.toSet().toList();
+      final uniqueBackends = _resolveCandidateBackendUrls();
 
       Object? lastError;
 
@@ -502,15 +504,7 @@ class XdmBackendClient {
     return _rateLimiter.call('search', () async {
       final headers = _buildHeaders();
 
-      // Try each healthy backend in priority order, prioritizing user setting
-      final settings = SettingsProvider.instance;
-      final List<String> backendUrls = [];
-      if (settings.backendUrl.isNotEmpty) {
-        backendUrls.add(settings.backendUrl);
-      }
-      backendUrls.addAll(
-          BackendHealthService.instance.activeBackends.map((b) => b.baseUrl));
-      final uniqueBackends = backendUrls.toSet().toList();
+      final uniqueBackends = _resolveCandidateBackendUrls();
 
       Object? lastError;
 
@@ -648,6 +642,7 @@ class XdmBackendClient {
           error.type == DioExceptionType.receiveTimeout ||
           error.type == DioExceptionType.sendTimeout ||
           error.type == DioExceptionType.connectionError ||
+          error.type == DioExceptionType.badCertificate ||
           (statusCode != null && statusCode >= 500)) {
         BackendHealthService.instance.markUnhealthy(targetUrl);
         if (failingUrl == null || failingUrl == _dio.options.baseUrl) {
@@ -688,16 +683,20 @@ class XdmBackendClient {
       if (client.httpClientAdapter is IOHttpClientAdapter) {
         final adapter = client.httpClientAdapter as IOHttpClientAdapter;
         adapter.validateCertificate = (cert, host, port) {
-          if (cert == null) return false;
           final normalizedHost = host.toLowerCase();
+          if (normalizedHost == 'localhost' ||
+              normalizedHost == '127.0.0.1' ||
+              normalizedHost.startsWith('127.') ||
+              normalizedHost == '::1') {
+            return true;
+          }
+          if (cert == null) return false;
           if (normalizedHost == pinnedBackendHost ||
               normalizedHost.endsWith('.run.app')) {
             final sha256Fingerprint =
                 sha256.convert(cert.der).toString().toLowerCase();
             if (_pinnedSpkiFingerprints.isNotEmpty) {
-              if (_pinnedSpkiFingerprints.contains(sha256Fingerprint)) {
-                return true;
-              }
+              return _pinnedSpkiFingerprints.contains(sha256Fingerprint);
             }
           }
           return true;
@@ -705,25 +704,13 @@ class XdmBackendClient {
         adapter.createHttpClient = () {
           final httpClient = HttpClient();
           httpClient.badCertificateCallback = (cert, host, port) {
-            // PRODUCTION: reject ALL self-signed certificates unconditionally.
+            final h = host.toLowerCase();
+            if (h == 'localhost' || h == '127.0.0.1') {
+              return true;
+            }
+            // PRODUCTION: reject ALL external self-signed certificates unconditionally.
             return false;
           };
-          assert(() {
-            // DEBUG ONLY: allow self-signed for local dev backend.
-            httpClient.badCertificateCallback = (cert, host, port) {
-              final targetHost =
-                  Uri.tryParse(client.options.baseUrl)?.host.toLowerCase();
-              if (targetHost != null && targetHost.isNotEmpty) {
-                final h = host.toLowerCase();
-                return h == targetHost ||
-                    h.endsWith('.$targetHost') ||
-                    h == 'localhost' ||
-                    h == '127.0.0.1';
-              }
-              return false;
-            };
-            return true;
-          }());
           return httpClient;
         };
       }

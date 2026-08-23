@@ -1,8 +1,8 @@
+import 'package:dmx/core/domain/torrent_models.dart';
 import 'package:dmx/core/interfaces/i_torrent_native.dart';
 import 'package:dmx/core/services/engine/torrent_session_events.dart';
 import 'package:dmx/core/services/engine/torrent_session_state.dart';
 import 'package:dmx/core/services/torrent/fake_torrent_native.dart';
-import 'package:dmx/core/services/torrent_models.dart';
 import 'package:dmx/core/services/torrent_service_ffi.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -15,7 +15,9 @@ void main() {
       TorrentService.setNativeForTesting(fakeNative);
     });
 
-    test('1. Full alert -> event mapping table covered (including fastresumeRejected & torrentError)', () async {
+    test(
+        '1. Full alert -> event mapping table covered (including fastresumeRejected & torrentError)',
+        () async {
       var state = const TorrentSessionState(torrentId: 1, name: 'TestTorrent');
 
       // 1a. metadataReceived
@@ -25,8 +27,18 @@ void main() {
         name: 'Resolved Torrent Name',
         totalWanted: 1000000,
         files: [
-          {'name': 'file1.bin', 'length': 500000, 'selected': true, 'priority': 4},
-          {'name': 'file2.bin', 'length': 500000, 'selected': true, 'priority': 4},
+          {
+            'name': 'file1.bin',
+            'length': 500000,
+            'selected': true,
+            'priority': 4
+          },
+          {
+            'name': 'file2.bin',
+            'length': 500000,
+            'selected': true,
+            'priority': 4
+          },
         ],
       );
       state = TorrentSessionState.reduce(state, metadataEvent);
@@ -111,12 +123,24 @@ void main() {
       expect(state.stateLabel, 'Error');
     });
 
-    test('2. Selective-priority torrent: deselecting half the files DROPS displayed bytes immediately (no monotonic floor)', () async {
+    test(
+        '2. Selective-priority torrent: deselecting half the files DROPS displayed bytes immediately (no monotonic floor)',
+        () async {
       await TorrentService.init();
 
       final files = [
-        const NativeFileInfo(index: 0, name: 'video1.mp4', path: 'video1.mp4', size: 100 * 1024 * 1024, isStreamable: true),
-        const NativeFileInfo(index: 1, name: 'video2.mp4', path: 'video2.mp4', size: 100 * 1024 * 1024, isStreamable: true),
+        const NativeFileInfo(
+            index: 0,
+            name: 'video1.mp4',
+            path: 'video1.mp4',
+            size: 100 * 1024 * 1024,
+            isStreamable: true),
+        const NativeFileInfo(
+            index: 1,
+            name: 'video2.mp4',
+            path: 'video2.mp4',
+            size: 100 * 1024 * 1024,
+            isStreamable: true),
       ];
 
       fakeNative.seedTorrent(
@@ -145,11 +169,17 @@ void main() {
       expect(status.progress, 0.5);
     });
 
-    test('3. Pause completes with torrentPaused event and sets isPaused', () async {
+    test('3. Pause completes with torrentPaused event and sets isPaused',
+        () async {
       await TorrentService.init();
 
       final files = [
-        const NativeFileInfo(index: 0, name: 'file.bin', path: 'file.bin', size: 10 * 1024 * 1024, isStreamable: false),
+        const NativeFileInfo(
+            index: 0,
+            name: 'file.bin',
+            path: 'file.bin',
+            size: 10 * 1024 * 1024,
+            isStreamable: false),
       ];
       fakeNative.seedTorrent(id: 2, name: 'GracefulPauseTorrent', files: files);
       await Future.delayed(const Duration(milliseconds: 50));
@@ -174,7 +204,12 @@ void main() {
       await TorrentService.init();
 
       final files = [
-        const NativeFileInfo(index: 0, name: 'stuck.bin', path: 'stuck.bin', size: 10 * 1024 * 1024, isStreamable: false),
+        const NativeFileInfo(
+            index: 0,
+            name: 'stuck.bin',
+            path: 'stuck.bin',
+            size: 10 * 1024 * 1024,
+            isStreamable: false),
       ];
       fakeNative.seedTorrent(id: 3, name: 'StuckPauseTorrent', files: files);
       fakeNative.simulateGracefulPauseTimeout = true;

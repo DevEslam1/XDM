@@ -1,7 +1,20 @@
-import 'package:libtorrent_flutter/libtorrent_flutter.dart' show TorrentState;
 import 'engine_types.dart';
 
-export 'package:libtorrent_flutter/libtorrent_flutter.dart' show TorrentState;
+// FIX-3.2: Domain-level torrent state enum decoupled from libtorrent_flutter
+enum DmxTorrentState {
+  error,
+  checkingFiles,
+  downloadingMetadata,
+  downloading,
+  finished,
+  seeding,
+  allocating,
+  checkingResume,
+  unknown,
+}
+
+// Backward-compatible alias
+typedef TorrentState = DmxTorrentState;
 
 class TorrentFileItem {
   final int index;
@@ -27,18 +40,18 @@ class TorrentFileItem {
   int get safeDownloadedBytes => downloadedBytes >= 0 ? downloadedBytes : 0;
 }
 
-/// Convert native integer state code to [TorrentState].
-TorrentState stateFromInt(int v) {
+/// Convert native integer state code to [DmxTorrentState].
+DmxTorrentState stateFromInt(int v) {
   switch (v) {
-    case -2: return TorrentState.error;
-    case  0: return TorrentState.checkingFiles;
-    case  1: return TorrentState.downloadingMetadata;
-    case  2: return TorrentState.downloading;
-    case  3: return TorrentState.finished;
-    case  4: return TorrentState.seeding;
-    case  5: return TorrentState.allocating;
-    case  6: return TorrentState.checkingResume;
-    default: return TorrentState.unknown;
+    case -2: return DmxTorrentState.error;
+    case  0: return DmxTorrentState.checkingFiles;
+    case  1: return DmxTorrentState.downloadingMetadata;
+    case  2: return DmxTorrentState.downloading;
+    case  3: return DmxTorrentState.finished;
+    case  4: return DmxTorrentState.seeding;
+    case  5: return DmxTorrentState.allocating;
+    case  6: return DmxTorrentState.checkingResume;
+    default: return DmxTorrentState.unknown;
   }
 }
 

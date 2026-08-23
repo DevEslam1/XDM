@@ -1,8 +1,6 @@
-# ProGuard configuration rules for XDM
-
-# libtorrent
--keep class com.frostwire.jlibtorrent.** { *; }
--dontwarn com.frostwire.jlibtorrent.**
+# Flutter Local Notifications
+-keep class com.dexterous.flutterlocalnotifications.** { *; }
+-dontwarn com.dexterous.flutterlocalnotifications.**
 
 # FFmpegKit
 -keep class com.arthenica.ffmpegkit.** { *; }

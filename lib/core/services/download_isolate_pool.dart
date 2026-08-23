@@ -168,8 +168,7 @@ class DownloadIsolatePool implements MemoryPressureListener {
 
   void _onForegroundChanged() {
     if (DownloadEngine.appInForeground) {
-      _bgIdleReaper?.cancel();
-      _bgIdleReaper = null;
+      _stopBgIdleReaper();
       // On foreground return, respawn workers up to effectiveMaxSize
       _maybeExpandWorkers();
     } else {
@@ -177,11 +176,23 @@ class DownloadIsolatePool implements MemoryPressureListener {
     }
   }
 
-  void _startBgIdleReaper() {
+  void _stopBgIdleReaper() {
+    TickManager.instance.unregisterTick('isolate_pool_idle_check');
     _bgIdleReaper?.cancel();
-    _bgIdleReaper = Timer.periodic(const Duration(seconds: 60), (_) {
-      _reapBackgroundIdleWorkers();
-    });
+    _bgIdleReaper = null;
+  }
+
+  void _startBgIdleReaper() {
+    _stopBgIdleReaper();
+    // FIX-02: Consolidate into TickManager
+    TickManager.instance.registerTick(
+      id: 'isolate_pool_idle_check',
+      interval: const Duration(seconds: 60),
+      priority: TickPriority.normal,
+      callback: (_) {
+        _reapBackgroundIdleWorkers();
+      },
+    );
   }
 
   void _reapBackgroundIdleWorkers() {

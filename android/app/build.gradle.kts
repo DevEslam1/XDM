@@ -30,7 +30,7 @@ android {
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = 24
-        targetSdk = 35
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
@@ -45,6 +45,18 @@ android {
         val storePath = keystoreProperties.getProperty("storeFile")
         if (storePath != null && (file(storePath).exists() || rootProject.file(storePath).exists())) {
             hasValidKeystore = true
+        }
+    } else {
+        val envStoreFile = System.getenv("KEYSTORE_PATH")
+        val envStorePassword = System.getenv("STORE_PASSWORD")
+        val envKeyAlias = System.getenv("KEY_ALIAS")
+        val envKeyPassword = System.getenv("KEY_PASSWORD")
+        if (envStoreFile != null && (file(envStoreFile).exists() || rootProject.file(envStoreFile).exists()) && envStorePassword != null && envKeyAlias != null && envKeyPassword != null) {
+            hasValidKeystore = true
+            keystoreProperties.setProperty("storeFile", envStoreFile)
+            keystoreProperties.setProperty("storePassword", envStorePassword)
+            keystoreProperties.setProperty("keyAlias", envKeyAlias)
+            keystoreProperties.setProperty("keyPassword", envKeyPassword)
         }
     }
 
@@ -69,6 +81,14 @@ android {
             if (hasValidKeystore && signingConfigs.findByName("release") != null) {
                 signingConfig = signingConfigs.getByName("release")
             } else {
+                val isStrictCi = System.getenv("CI") != null || System.getenv("STRICT_RELEASE_SIGNING") == "true"
+                if (isStrictCi) {
+                    throw org.gradle.api.GradleException(
+                        "Release build attempted without a valid keystore configuration. " +
+                        "Provide a valid keystore.properties, key.properties, or CI environment variables (KEYSTORE_PATH, STORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD) to sign release artifacts."
+                    )
+                }
+                println("WARNING: Building release build with debug signing key because no keystore was found.")
                 signingConfig = signingConfigs.getByName("debug")
             }
         }

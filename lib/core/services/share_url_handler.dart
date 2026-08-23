@@ -32,6 +32,16 @@ class ShareUrlHandler {
       _log.warning(
           '[ShareUrlHandler] Rejected URL with unsupported scheme "$scheme": ${LoggingService.redactUrl(trimmedUrl)}');
       debugPrint('[ShareUrlHandler] Rejected URL with scheme: ${uri?.scheme}');
+      if (context.mounted) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        ThemedSnackbar.show(
+          context,
+          message: 'Unsupported link: ${scheme.isEmpty ? "invalid URL" : scheme}',
+          color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+          icon: Icons.error_outline,
+          isDarkMode: isDark,
+        );
+      }
       return;
     }
     // Reject file:// URLs unless they point to a valid .torrent file
@@ -41,6 +51,16 @@ class ShareUrlHandler {
         _log.warning(
             '[ShareUrlHandler] Rejected non-torrent file:// URL: ${LoggingService.redactUrl(trimmedUrl)}');
         debugPrint('[ShareUrlHandler] Rejected non-torrent file:// URL');
+        if (context.mounted) {
+          final isDark = Theme.of(context).brightness == Brightness.dark;
+          ThemedSnackbar.show(
+            context,
+            message: 'Local file must be a .torrent file',
+            color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+            icon: Icons.error_outline,
+            isDarkMode: isDark,
+          );
+        }
         return;
       }
     }

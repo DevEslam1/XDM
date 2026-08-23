@@ -2,9 +2,13 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:synchronized/synchronized.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../core/interfaces/i_download_engine.dart';
 import '../../../core/services/database_service.dart';
@@ -19,6 +23,7 @@ import '../../../core/services/power_monitor.dart';
 import '../../../core/services/torrent_service.dart';
 import '../../../core/services/update_service.dart';
 import '../../../core/services/youtube_service.dart';
+import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/torrent_id_resolver.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../data/drift_task_snapshot_store.dart';
@@ -154,7 +159,12 @@ class DownloadProvider extends ChangeNotifier
 
   final List<DownloadTask> _tasks = [];
   final Map<String, DownloadTask> _taskIndex = {};
+  // FIX-1.1: Lock all mutations in DownloadProvider
+  final Lock _tasksLock = Lock();
   bool _disposed = false;
+  bool _isLoadingTasks = false;
+  final bool _isReconciling = false;
+  final Set<String> _pendingTaskOperations = {};
   String? lastError;
   Timer? _widgetUpdateTimer;
   Timer? _torrentPollingTimer;
@@ -256,99 +266,124 @@ class DownloadProvider extends ChangeNotifier
     notifyListeners();
   }
 
+  // FIX-1.1: Lock all mutations in DownloadProvider
   Future<void> load({
     bool pauseOrphanDownloads = true,
     bool autoResume = true,
   }) async {
-    final loaded = await _databaseService.loadTasks();
-    final List<DownloadTask> reconciledTasks = [];
-
-    // Phase 5 Startup Pipeline:
-    // Step 1: Journal replay -> Step 2: Disk reconciliation
-    for (final task in loaded) {
-      var reconciled = task;
-      final localPath =
-          task.savePath.isNotEmpty ? task.savePath : task.localFilePath;
-      final shouldReconcile = !task.isTorrent &&
-          task.status != DownloadStatus.completed &&
-          !task.isCancelled;
-
-      if (shouldReconcile) {
-        final tempPath = task.tempFilePath.isNotEmpty
-            ? task.tempFilePath
-            : (localPath.isNotEmpty ? '$localPath.dmxpart' : '');
-        final localFile = localPath.isNotEmpty ? File(localPath) : null;
-
-        // Check if final destination file exists and matches full size
-        if (task.fileSize > 0 &&
-            localFile != null &&
-            await localFile.exists() &&
-            (await localFile.length()) >= task.fileSize) {
-          reconciled = reconciled.copyWith(
-            status: DownloadStatus.completed,
-            downloadedBytes: task.fileSize,
-            errorMessage: null,
-          );
-        } else if (tempPath.isNotEmpty) {
+    if (_disposed) return;
+    _isLoadingTasks = true;
+    notifyListeners();
+    try {
+      await _tasksLock.synchronized(() async {
+        if (_disposed) return;
+        List<DownloadTask> loaded = [];
+        int loadRetries = 0;
+        while (true) {
           try {
-            final stateResult = await StateStore.loadOrCreate(
-              tempPath,
-              url: task.url,
-              threadCount: task.threadCount,
-              knownFileSize: task.fileSize,
-              taskId: task.id,
-            );
-            final state = stateResult.state;
-            if (state.downloadedBytes > 0) {
-              reconciled = reconciled.copyWith(
-                downloadedBytes: state.downloadedBytes,
-              );
-              DiagnosticService.instance.recordTelemetryAlert(
-                'journal_reconciled',
-                taskId: task.id,
-                details: 'bytes=${state.downloadedBytes}',
-              );
-            }
+            loaded = await _databaseService.loadTasks();
+            break;
           } catch (e) {
-            debugPrint(
-                '[DownloadProvider] Startup reconciliation error for ${task.id}: $e');
+            loadRetries++;
+            if (loadRetries >= 3) rethrow;
+            await Future.delayed(Duration(milliseconds: 200 * loadRetries));
           }
         }
+        final List<DownloadTask> reconciledTasks = [];
+
+        // Phase 5 Startup Pipeline:
+        // Step 1: Journal replay -> Step 2: Disk reconciliation
+        for (final task in loaded) {
+          var reconciled = task;
+          final localPath =
+              task.savePath.isNotEmpty ? task.savePath : task.localFilePath;
+          final shouldReconcile = !task.isTorrent &&
+              task.status != DownloadStatus.completed &&
+              !task.isCancelled;
+
+          if (shouldReconcile) {
+            final tempPath = task.tempFilePath.isNotEmpty
+                ? task.tempFilePath
+                : (localPath.isNotEmpty ? '$localPath.dmxpart' : '');
+            final localFile = localPath.isNotEmpty ? File(localPath) : null;
+
+            // Check if final destination file exists and matches full size
+            if (task.fileSize > 0 &&
+                localFile != null &&
+                await localFile.exists() &&
+                (await localFile.length()) >= task.fileSize) {
+              reconciled = reconciled.copyWith(
+                status: DownloadStatus.completed,
+                downloadedBytes: task.fileSize,
+                errorMessage: null,
+              );
+            } else if (tempPath.isNotEmpty) {
+              try {
+                final stateResult = await StateStore.loadOrCreate(
+                  tempPath,
+                  url: task.url,
+                  threadCount: task.threadCount,
+                  knownFileSize: task.fileSize,
+                  taskId: task.id,
+                );
+                final state = stateResult.state;
+                if (state.downloadedBytes > 0) {
+                  reconciled = reconciled.copyWith(
+                    downloadedBytes: state.downloadedBytes,
+                  );
+                  DiagnosticService.instance.recordTelemetryAlert(
+                    'journal_reconciled',
+                    taskId: task.id,
+                    details: 'bytes=${state.downloadedBytes}',
+                  );
+                }
+              } catch (e) {
+                debugPrint(
+                    '[DownloadProvider] Startup reconciliation error for ${task.id}: $e');
+              }
+            }
+          }
+
+          if (pauseOrphanDownloads &&
+              reconciled.status == DownloadStatus.downloading) {
+            reconciled = reconciled.copyWith(
+              status: DownloadStatus.paused,
+              pauseReason: PauseReason.appRestarted,
+              pausedByUser: false,
+            );
+          }
+
+          // Step 3: DB update (Order matters; DB is updated last after journal & disk reconciliation)
+          if (reconciled != task) {
+            await _databaseService.saveTask(reconciled);
+          }
+
+          reconciledTasks.add(reconciled);
+        }
+
+        // Step 4: UI update (DB write complete, now expose to in-memory state & notify UI)
+        if (_disposed) return;
+        _tasks.clear();
+        _taskIndex.clear();
+        _tasks.addAll(reconciledTasks);
+        for (final task in reconciledTasks) {
+          _taskIndex[task.id] = task;
+        }
+        filteredTasksDirty = true;
+      });
+
+      _scheduleManager.setReady(true);
+      await _networkMonitor.ensureInitialConnectivity();
+      if (autoResume) {
+        _autoResumeIncomplete();
       }
-
-      if (pauseOrphanDownloads &&
-          reconciled.status == DownloadStatus.downloading) {
-        reconciled = reconciled.copyWith(
-          status: DownloadStatus.paused,
-          pauseReason: PauseReason.appRestarted,
-          pausedByUser: false,
-        );
+      _startTorrentPollingTimer();
+    } finally {
+      _isLoadingTasks = false;
+      if (!_disposed) {
+        notifyListeners();
       }
-
-      // Step 3: DB update (Order matters; DB is updated last after journal & disk reconciliation)
-      if (reconciled != task) {
-        await _databaseService.saveTask(reconciled);
-      }
-
-      reconciledTasks.add(reconciled);
     }
-
-    // Step 4: UI update (DB write complete, now expose to in-memory state & notify UI)
-    _tasks.clear();
-    _taskIndex.clear();
-    _tasks.addAll(reconciledTasks);
-    for (final task in reconciledTasks) {
-      _taskIndex[task.id] = task;
-    }
-    filteredTasksDirty = true;
-    notifyListeners();
-
-    _scheduleManager.setReady(true);
-    await _networkMonitor.ensureInitialConnectivity();
-    if (autoResume) {
-      _autoResumeIncomplete();
-    }
-    _startTorrentPollingTimer();
   }
 
   void _autoResumeIncomplete() {
@@ -379,9 +414,9 @@ class DownloadProvider extends ChangeNotifier
   @override
   DownloadTask? findTaskById(String id) => _taskIndex[id];
   DownloadTask? taskById(String id) => _taskIndex[id];
-  bool isTaskOperationPending(String taskId) => false;
-  bool get isLoadingTasks => false;
-  bool get isReconciling => false;
+  bool isTaskOperationPending(String taskId) => _pendingTaskOperations.contains(taskId);
+  bool get isLoadingTasks => _isLoadingTasks;
+  bool get isReconciling => _isReconciling;
   void setActiveTabIndex(int index) => setMixinActiveTabIndex(index);
   DownloadMetrics? getMetrics(String taskId) => _downloadMetrics[taskId];
   List<double> getSpeedHistory(String taskId) =>
@@ -409,7 +444,6 @@ class DownloadProvider extends ChangeNotifier
         newUri.host.isEmpty) {
       return false;
     }
-    if (oldUri.host != newUri.host) return true;
     final oldId =
         oldUri.queryParameters['id'] ?? oldUri.queryParameters['docid'];
     final newId =
@@ -473,6 +507,7 @@ class DownloadProvider extends ChangeNotifier
   }
 
   void _startTorrentPollingTimer() {
+    if (!enableBackgroundTimers) return;
     if (_torrentPollingTimer != null && _torrentPollingTimer!.isActive) return;
     _torrentPollingTimer?.cancel();
     _torrentPollingTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -641,9 +676,9 @@ class DownloadProvider extends ChangeNotifier
 
     if (tasksModified) {
       filteredTasksDirty = true;
-      notifyListeners();
-    } else {
-      notifyListeners();
+      if (!DownloadEngine.isInBackground && !PowerMonitor.screenOff) {
+        notifyListeners();
+      }
     }
 
     if (!hasActiveTorrents && !hasActiveDownloads) {
@@ -651,71 +686,145 @@ class DownloadProvider extends ChangeNotifier
     }
   }
 
+  // FIX-1.1: Lock all mutations in DownloadProvider
+  Future<void> addTask(DownloadTask task) async {
+    if (_disposed) return;
+    await _setTask(task);
+  }
+
   Future<void> _setTask(DownloadTask task) async {
-    await _databaseService.saveTask(task);
-    final idx = _tasks.indexWhere((t) => t.id == task.id);
-    if (idx != -1) {
-      _tasks[idx] = task;
-    } else {
-      _tasks.add(task);
-    }
-    _taskIndex[task.id] = task;
-    filteredTasksDirty = true;
-    if (task.status == DownloadStatus.downloading ||
-        (task.isTorrent && task.seedingEnabled)) {
-      _startTorrentPollingTimer();
-    }
-    if (!DownloadEngine.isInBackground || !PowerMonitor.screenOff) {
-      notifyListeners();
-    }
+    return _tasksLock.synchronized(() async {
+      if (_disposed) return;
+      await _databaseService.saveTask(task);
+      final idx = _tasks.indexWhere((t) => t.id == task.id);
+      if (idx != -1) {
+        _tasks[idx] = task;
+      } else {
+        _tasks.add(task);
+      }
+      _taskIndex[task.id] = task;
+      filteredTasksDirty = true;
+      if (task.status == DownloadStatus.downloading ||
+          (task.isTorrent && task.seedingEnabled)) {
+        _startTorrentPollingTimer();
+      }
+      if (!DownloadEngine.isInBackground && !PowerMonitor.screenOff) {
+        notifyListeners();
+      }
+    });
   }
 
   @override
   Future<void> setTaskState(DownloadTask task) async {
-    final existing = _findTask(task.id);
-    if (existing != null) {
-      if (existing.pausedByUser && task.status == DownloadStatus.downloading) {
-        task = task.copyWith(
-          status: DownloadStatus.paused,
-          pausedByUser: true,
-        );
-      } else if (existing.status == DownloadStatus.failed &&
-          task.status == DownloadStatus.downloading) {
-        return;
-      } else if (existing.status == DownloadStatus.completed &&
-          task.status != DownloadStatus.completed) {
-        return;
+    return _tasksLock.synchronized(() async {
+      if (_disposed) return;
+      final existing = _findTask(task.id);
+      if (existing != null) {
+        if (existing.pausedByUser && task.status == DownloadStatus.downloading) {
+          task = task.copyWith(
+            status: DownloadStatus.paused,
+            pausedByUser: true,
+          );
+        } else if (existing.status == DownloadStatus.failed &&
+            task.status == DownloadStatus.downloading) {
+          return;
+        } else if (existing.status == DownloadStatus.completed &&
+            task.status != DownloadStatus.completed) {
+          return;
+        }
       }
-    }
-    final isProgressOnly = existing != null &&
-        existing.status == task.status &&
-        existing.status == DownloadStatus.downloading &&
-        existing.downloadedBytes != task.downloadedBytes;
-    final idx = _tasks.indexWhere((t) => t.id == task.id);
-    if (idx != -1) {
-      _tasks[idx] = task;
-    } else {
-      _tasks.add(task);
-    }
-    _taskIndex[task.id] = task;
-    filteredTasksDirty = true;
-    if (task.status == DownloadStatus.downloading ||
-        (task.isTorrent && task.seedingEnabled)) {
-      _startTorrentPollingTimer();
-    }
-    if (isProgressOnly) {
-      _pendingProgressUpdates.add(task.id);
-    } else {
-      _pendingProgressUpdates.remove(task.id);
-      await _databaseService.saveTask(task);
-    }
-    if (!DownloadEngine.isInBackground || !PowerMonitor.screenOff) {
-      notifyListeners();
-    }
+      final isProgressOnly = existing != null &&
+          existing.status == task.status &&
+          existing.status == DownloadStatus.downloading &&
+          existing.downloadedBytes != task.downloadedBytes;
+      final idx = _tasks.indexWhere((t) => t.id == task.id);
+      if (idx != -1) {
+        _tasks[idx] = task;
+      } else {
+        _tasks.add(task);
+      }
+      _taskIndex[task.id] = task;
+      filteredTasksDirty = true;
+      if (task.status == DownloadStatus.downloading ||
+          (task.isTorrent && task.seedingEnabled)) {
+        _startTorrentPollingTimer();
+      }
+      if (isProgressOnly) {
+        _pendingProgressUpdates.add(task.id);
+      } else {
+        _pendingProgressUpdates.remove(task.id);
+        await _databaseService.saveTask(task);
+      }
+      if (!DownloadEngine.isInBackground && !PowerMonitor.screenOff) {
+        notifyListeners();
+      }
+    });
   }
 
-  Future<void> updateTask(DownloadTask task) => setTaskState(task);
-  Future<void> restoreTask(DownloadTask task) => _setTask(task);
+  Future<void> updateTask(DownloadTask task) async {
+    if (_disposed) return;
+    await setTaskState(task);
+  }
+
+  Future<void> restoreTask(DownloadTask task) async {
+    if (_disposed) return;
+    await _setTask(task);
+  }
+
+  // FIX-1.1: Lock all mutations in DownloadProvider
+  @override
+  Future<void> updateTasksBulk(
+    List<DownloadTask> updates, {
+    DatabaseService? providerDatabaseService,
+    bool Function()? getFilteredTasksDirty,
+    void Function(bool)? setFilteredTasksDirty,
+  }) =>
+      _tasksLock.synchronized(() async {
+        if (_disposed || updates.isEmpty) return;
+        for (final t in updates) {
+          final idx = _tasks.indexWhere((x) => x.id == t.id);
+          if (idx != -1) _tasks[idx] = t;
+          _taskIndex[t.id] = t;
+        }
+        filteredTasksDirty = true;
+        setFilteredTasksDirty?.call(true);
+        final db = providerDatabaseService ?? _databaseService;
+        await db.saveTasks(updates);
+        if (!DownloadEngine.isInBackground && !PowerMonitor.screenOff) {
+          notifyListeners();
+        }
+      });
+
+  // FIX-1.1: Lock all mutations in DownloadProvider
+  @override
+  Future<void> updateTaskSeeding(
+    String taskId, {
+    bool? enabled,
+    bool? limited,
+    int? limitKbps,
+  }) =>
+      _tasksLock.synchronized(() async {
+        if (_disposed) return;
+        final index = _tasks.indexWhere((t) => t.id == taskId);
+        if (index == -1) return;
+
+        final oldTask = _tasks[index];
+        final newEnabled = enabled ?? oldTask.seedingEnabled;
+
+        final updatedTask = oldTask.copyWith(
+          seedingEnabled: newEnabled,
+          seedingLimited: limited,
+          seedingLimitKbps: limitKbps,
+          speed: newEnabled ? oldTask.speed : 0,
+        );
+        _tasks[index] = updatedTask;
+        _taskIndex[taskId] = updatedTask;
+        filteredTasksDirty = true;
+        await _databaseService.saveTask(updatedTask);
+        if (!DownloadEngine.isInBackground && !PowerMonitor.screenOff) {
+          notifyListeners();
+        }
+      });
 
   Future<void> _deleteFileSafely(String? path) async {
     if (path == null || path.isEmpty) return;
@@ -735,29 +844,33 @@ class DownloadProvider extends ChangeNotifier
     bool? isCancelled,
     String? pauseReason,
   }) async {
-    final task = _findTask(id);
-    if (task == null) return;
-    DownloadStateMachine(
-            taskId: id, initialState: DownloadStateMachine.fromStatus(task.status))
-        .transition(toState, reason: reason ?? errorMessage);
-    await _snapshotStore.onTaskStateChanged(
-      id,
-      DownloadStateMachine.fromStatus(task.status),
-      toState,
-      cmd,
-      errorMessage: errorMessage,
-      pausedByUser: pausedByUser,
-      isCancelled: isCancelled,
-      pauseReason: pauseReason,
-    );
-    final updated = _findTask(id);
-    if (updated != null) {
-      _tasks[_tasks.indexOf(updated)] = updated;
-      _taskIndex[updated.id] = updated;
-      filteredTasksDirty = true;
-      notifyListeners();
-    }
-    pumpQueue();
+    return _tasksLock.synchronized(() async {
+      if (_disposed) return;
+      final task = _findTask(id);
+      if (task == null) return;
+      DownloadStateMachine(
+              taskId: id,
+              initialState: DownloadStateMachine.fromStatus(task.status))
+          .transition(toState, reason: reason ?? errorMessage);
+      await _snapshotStore.onTaskStateChanged(
+        id,
+        DownloadStateMachine.fromStatus(task.status),
+        toState,
+        cmd,
+        errorMessage: errorMessage,
+        pausedByUser: pausedByUser,
+        isCancelled: isCancelled,
+        pauseReason: pauseReason,
+      );
+      final updated = _findTask(id);
+      if (updated != null) {
+        _tasks[_tasks.indexOf(updated)] = updated;
+        _taskIndex[updated.id] = updated;
+        filteredTasksDirty = true;
+        notifyListeners();
+      }
+      pumpQueue();
+    });
   }
 
   Future<void> markCompletedFileMissing(String taskId) => _applyStateChange(
@@ -768,6 +881,7 @@ class DownloadProvider extends ChangeNotifier
       );
 
   Future<void> updateTaskThreadCount(String id, int threadCount) async {
+    if (_disposed) return;
     final task = _findTask(id);
     if (task == null) return;
     final isZeroProgress = task.downloadedBytes == 0;
@@ -783,24 +897,30 @@ class DownloadProvider extends ChangeNotifier
   }
 
   Future<void> updateTaskSpeedLimit(String id, int limitKbps) async {
+    if (_disposed) return;
     final task = _findTask(id);
-    if (task != null) await _setTask(task.copyWith(speedLimitKbps: limitKbps));
+    if (task != null) {
+      await _setTask(task.copyWith(speedLimitKbps: limitKbps));
+    }
   }
 
   Future<void> deleteMultipleTasks(List<String> ids,
       {bool deleteFiles = false}) async {
+    if (_disposed) return;
     for (final id in ids) {
       await deleteTask(id, deleteFiles: deleteFiles);
     }
   }
 
   Future<void> resumeMultipleTasks(List<String> ids) async {
+    if (_disposed) return;
     for (final id in ids) {
       await resumeTask(id);
     }
   }
 
   Future<void> pauseMultipleTasks(List<String> ids) async {
+    if (_disposed) return;
     for (final id in ids) {
       await pauseTask(id);
     }
@@ -808,6 +928,7 @@ class DownloadProvider extends ChangeNotifier
 
   Future<void> changeCategoryForMultipleTasks(
       List<String> ids, String category) async {
+    if (_disposed) return;
     for (final id in ids) {
       final t = _findTask(id);
       if (t != null) await _setTask(t.copyWith(category: category));
@@ -837,6 +958,7 @@ class DownloadProvider extends ChangeNotifier
     String? siteType,
     String? siteDisplayName,
     String? contentHint,
+    String? customId,
   }) async {
     var effectiveSavePath = (savePath != null && savePath.isNotEmpty)
         ? savePath
@@ -847,11 +969,21 @@ class DownloadProvider extends ChangeNotifier
     if (effectiveSavePath.isEmpty) {
       effectiveSavePath = await _permissionService.defaultDownloadDirectory();
     }
-    final taskName = name ?? (url.split('/').lastOrNull ?? 'download');
+    final rawName = name ?? (url.split('?').first.split('/').lastOrNull ?? 'download');
+    final sanitizedName = sanitizeFileName(rawName);
+    var uniqueName = sanitizedName;
+    int counter = 1;
+    final ext = p.extension(sanitizedName);
+    final base = p.basenameWithoutExtension(sanitizedName);
+    while (_tasks.any((t) => t.localFilePath == '$effectiveSavePath/$uniqueName')) {
+      uniqueName = '$base ($counter)$ext';
+      counter++;
+    }
+
     final threads = threadCount ?? _settingsProvider.defaultThreadCount;
     final task = DownloadTask(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      fileName: taskName,
+      id: customId ?? const Uuid().v4(),
+      fileName: uniqueName,
       url: url,
       fileSize: size ?? 0,
       downloadedBytes: 0,
@@ -860,8 +992,8 @@ class DownloadProvider extends ChangeNotifier
           ? DownloadStatus.paused
           : DownloadStatus.queued,
       savePath: effectiveSavePath,
-      localFilePath: '$effectiveSavePath/$taskName',
-      tempFilePath: '$effectiveSavePath/$taskName.dmxpart',
+      localFilePath: '$effectiveSavePath/$uniqueName',
+      tempFilePath: '$effectiveSavePath/$uniqueName.dmxpart',
       threadCount: threads,
       chunks: List<double>.filled(threads, 0.0),
       createdAt: DateTime.now(),
@@ -963,6 +1095,7 @@ class DownloadProvider extends ChangeNotifier
     String id, {
     PauseReason reason = PauseReason.userRequested,
   }) async {
+    if (_disposed) return;
     final taskBeforePause = _findTask(id);
     final wasActive = taskBeforePause != null &&
         (taskBeforePause.status == DownloadStatus.downloading ||
@@ -1014,6 +1147,7 @@ class DownloadProvider extends ChangeNotifier
 
   @override
   Future<void> resumeTask(String id) async {
+    if (_disposed) return;
     final task = _findTask(id);
     if (task == null) return;
     final isTorrent = task.url.startsWith('magnet:') ||
@@ -1035,6 +1169,7 @@ class DownloadProvider extends ChangeNotifier
   }
 
   Future<void> cancelTask(String id) async {
+    if (_disposed) return;
     _cancelTokens.remove(id)?.cancel('cancelled');
     _notifications.cancelForTask(id);
     await _applyStateChange(
@@ -1053,50 +1188,54 @@ class DownloadProvider extends ChangeNotifier
   final Set<String> _deletingTaskIds = {};
 
   Future<bool> deleteTask(String id, {bool deleteFiles = false}) async {
-    if (_deletingTaskIds.contains(id)) return false;
-    _deletingTaskIds.add(id);
-    try {
-      final task = _findTask(id);
-      if (task != null) {
-        final torrentId = _torrentIds.remove(id);
-        if (torrentId != null) {
-          TorrentService.removeTorrent(
-            torrentId,
-            deleteFiles: deleteFiles,
-            deleteResumeData: true,
-          );
-          _latestTorrentStats.remove(torrentId);
+    return _tasksLock.synchronized(() async {
+      if (_disposed) return false;
+      if (_deletingTaskIds.contains(id)) return false;
+      _deletingTaskIds.add(id);
+      try {
+        final task = _findTask(id);
+        if (task != null) {
+          final torrentId = _torrentIds.remove(id);
+          if (torrentId != null) {
+            TorrentService.removeTorrent(
+              torrentId,
+              deleteFiles: deleteFiles,
+              deleteResumeData: true,
+            );
+            _latestTorrentStats.remove(torrentId);
+          }
+          forgetTorrentSwarm(id);
+          _cancelTokens.remove(id)?.cancel('deleted');
+          _notifications.cancelForTask(id);
+          if (deleteFiles) {
+            await _deleteFileSafely(task.localFilePath);
+            await _deleteFileSafely(task.tempFilePath);
+          }
+          await _databaseService.deleteTask(id);
+          _tasks.removeWhere((t) => t.id == id);
+          _taskIndex.remove(id);
+          _speedHistories.remove(id);
+          _uploadSpeedHistories.remove(id);
+          _lastProgressUpdateTimes.remove(id);
+          _ytLowSpeedCounts.remove(id);
+          _ytThrottlingRefreshing.remove(id);
+          filteredTasksDirty = true;
+          notifyListeners();
+          return true;
         }
-        forgetTorrentSwarm(id);
-        _cancelTokens.remove(id)?.cancel('deleted');
-        _notifications.cancelForTask(id);
-        if (deleteFiles) {
-          await _deleteFileSafely(task.localFilePath);
-          await _deleteFileSafely(task.tempFilePath);
-        }
-        await _databaseService.deleteTask(id);
-        _tasks.removeWhere((t) => t.id == id);
-        _taskIndex.remove(id);
-        _speedHistories.remove(id);
-        _uploadSpeedHistories.remove(id);
-        _lastProgressUpdateTimes.remove(id);
-        _ytLowSpeedCounts.remove(id);
-        _ytThrottlingRefreshing.remove(id);
-        filteredTasksDirty = true;
-        notifyListeners();
-        return true;
+        return false;
+      } catch (e, st) {
+        LoggingService.logger('DownloadProvider')
+            .warning('Failed to delete task $id', e, st);
+        return false;
+      } finally {
+        _deletingTaskIds.remove(id);
       }
-      return false;
-    } catch (e, st) {
-      LoggingService.logger('DownloadProvider')
-          .warning('Failed to delete task $id', e, st);
-      return false;
-    } finally {
-      _deletingTaskIds.remove(id);
-    }
+    });
   }
 
   Future<void> retryTask(String id) async {
+    if (_disposed) return;
     final task = _findTask(id);
     if (task == null) return;
     var newUrl = task.url,
@@ -1173,6 +1312,7 @@ class DownloadProvider extends ChangeNotifier
   }
 
   Future<void> clearHistoryTasks(List<String> ids) async {
+    if (_disposed) return;
     for (final id in ids) {
       await deleteTask(id);
     }
@@ -1190,6 +1330,7 @@ class DownloadProvider extends ChangeNotifier
   }
 
   void markTorrentTasksFailed(String message) {
+    if (_disposed) return;
     for (final t in _tasks) {
       final isT = t.url.startsWith('magnet:') ||
           t.url.endsWith('.torrent') ||
@@ -1198,15 +1339,25 @@ class DownloadProvider extends ChangeNotifier
       if (isT &&
           (t.status == DownloadStatus.downloading ||
               t.status == DownloadStatus.queued)) {
-        _applyStateChange(t.id, DomainDownloadState.failed, CancelTask(t.id),
+        _applyStateChange(
+            t.id, DomainDownloadState.failed, CancelTask(t.id),
             errorMessage: message);
       }
     }
   }
 
-  Future<void> pauseAllTasks() => mixinPauseAllTasks(notifyListeners);
-  Future<void> resumeAllTasks() => mixinResumeAllTasks(notifyListeners);
-  Future<void> toggleStartStopAll() => mixinToggleStartStopAll(notifyListeners);
+  Future<void> pauseAllTasks() async {
+    if (_disposed) return;
+    await mixinPauseAllTasks(notifyListeners);
+  }
+  Future<void> resumeAllTasks() async {
+    if (_disposed) return;
+    await mixinResumeAllTasks(notifyListeners);
+  }
+  Future<void> toggleStartStopAll() async {
+    if (_disposed) return;
+    await mixinToggleStartStopAll(notifyListeners);
+  }
 
   @override
   bool startTaskFromQueue(DownloadTask task) => _orchestrator.startTask(task);
@@ -1238,6 +1389,7 @@ class DownloadProvider extends ChangeNotifier
   @override
   Future<void> updateTaskUrlAndResume(String id, String url,
       {String? newAudioUrl}) async {
+    if (_disposed) return;
     final task = _findTask(id);
     if (task == null) return;
     final updated = task.copyWith(
@@ -1293,6 +1445,7 @@ class DownloadProvider extends ChangeNotifier
     int? newAudioSize,
     bool deleteTempFiles = false,
   }) async {
+    if (_disposed) return;
     final t = _findTask(id);
     if (t == null) return;
     if (deleteTempFiles) {
@@ -1322,6 +1475,7 @@ class DownloadProvider extends ChangeNotifier
 
   @override
   void dispose() {
+    if (_disposed) return;
     _disposed = true;
     _eventSubscription?.cancel();
     _widgetUpdateTimer?.cancel();
@@ -1336,6 +1490,8 @@ class DownloadProvider extends ChangeNotifier
     _taskIndex.clear();
     _ytLowSpeedCounts.clear();
     _ytThrottlingRefreshing.clear();
+    _speedHistories.clear();
+    _uploadSpeedHistories.clear();
     for (final n in _progressNotifiers.values) {
       n.dispose();
     }

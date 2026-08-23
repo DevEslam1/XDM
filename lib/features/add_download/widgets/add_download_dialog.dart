@@ -12,6 +12,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/app_theme.dart';
 import '../../../core/di/injection.dart';
+import '../../../core/interfaces/i_download_engine.dart';
 import '../../../core/services/download_engine.dart';
 import '../../../core/services/permission_service.dart';
 import '../../../core/services/site_intelligence/site_intelligence_service.dart';
@@ -647,7 +648,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
           }
         }
       }
-      final engine = getIt<DownloadEngine>();
+      final engine = getIt<IDownloadEngine>();
       final nameForReq = _nameController.text.trim().isNotEmpty
           ? _composeFullName(
               _nameController.text.trim(), _extController.text.trim())

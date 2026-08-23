@@ -264,9 +264,9 @@ class PermissionService {
     if (kIsWeb || !Platform.isAndroid) return false;
     final sdk = await _androidSdkLevel();
     if (sdk >= 33) {
-      return (await Permission.photos.status.isPermanentlyDenied) ||
-          (await Permission.videos.status.isPermanentlyDenied) ||
-          (await Permission.audio.status.isPermanentlyDenied);
+      // Android 33+ uses app-specific storage / scoped storage by default,
+      // media permissions are optional/opportunistic.
+      return false;
     }
     return (await Permission.storage.status).isPermanentlyDenied;
   }

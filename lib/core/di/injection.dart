@@ -117,7 +117,8 @@ Future<void> configureDependencies() async {
       ),
     );
 
-    getIt.registerLazySingleton<DownloadEngine>(
+    // FIX-3.3: Register IDownloadEngine interface only in DI
+    getIt.registerLazySingleton<IDownloadEngine>(
       () => DownloadEngine(
         httpOrchestrator: getIt<HttpDownloadOrchestrator>(),
         torrentOrchestrator: getIt<TorrentDownloadOrchestrator>(),
@@ -126,11 +127,9 @@ Future<void> configureDependencies() async {
         ytCoordinator: getIt<YtCounterpartCoordinator>(),
         dioPool: getIt<DioClientPool>(),
       ),
-      dispose: (e) => e.dispose(),
-    );
-
-    getIt.registerLazySingleton<IDownloadEngine>(
-      () => getIt<DownloadEngine>(),
+      dispose: (e) {
+        if (e is DownloadEngine) e.dispose();
+      },
     );
 
     getIt.registerLazySingleton<DownloadQueueEngine>(
@@ -156,6 +155,12 @@ Future<void> configureDependencies() async {
       dispose: (p) => p.dispose(),
     );
 
+    getIt.registerLazySingleton<PermissionService>(() => PermissionService());
+    getIt.registerLazySingleton<NotificationService>(
+      () => NotificationService(),
+      dispose: (n) => n.dispose(),
+    );
+
     getIt.registerLazySingleton<DownloadProvider>(
       () => DownloadProvider(
         databaseService: getIt<DatabaseService>(),
@@ -174,7 +179,6 @@ Future<void> configureDependencies() async {
       () => PowerMonitor(),
       dispose: (_) => PowerMonitor.dispose(),
     );
-    getIt.registerLazySingleton<PermissionService>(() => PermissionService());
     getIt.registerLazySingleton<ConnectionManager>(() => ConnectionManager(),
         dispose: (c) => c.dispose());
     getIt.registerLazySingleton<ServerIdentityCache>(
@@ -184,10 +188,6 @@ Future<void> configureDependencies() async {
         () => BandwidthGovernor(BandwidthGovernor.unlimited),
         dispose: (governor) => governor.dispose());
     getIt.registerLazySingleton<ChecksumService>(() => ChecksumService());
-    getIt.registerLazySingleton<NotificationService>(
-      () => NotificationService(),
-      dispose: (n) => n.dispose(),
-    );
     getIt.registerLazySingleton<ClipboardService>(() => ClipboardService());
     getIt.registerLazySingleton<ShareUrlHandler>(() => ShareUrlHandler());
     getIt.registerLazySingleton<BackgroundService>(

@@ -1,5 +1,5 @@
+import 'package:dmx/core/domain/torrent_models.dart';
 import 'package:dmx/core/services/torrent_disk_manager.dart';
-import 'package:dmx/core/services/torrent_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

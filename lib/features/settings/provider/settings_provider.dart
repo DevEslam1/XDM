@@ -5,13 +5,12 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/domain/torrent_models.dart';
 import '../../../core/domain/torrent_session_settings.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/services/power_monitor.dart';
 import '../../../core/services/quiet_hours.dart';
-import '../../../core/services/torrent_models.dart';
 import '../../../core/services/xdm_backend_client.dart';
-
 import 'mixins/torrent_settings_mixin.dart';
 
 // FIX-P2-03: Modular settings mixin references
@@ -269,7 +268,7 @@ class SettingsProvider extends ChangeNotifier
 
   String backendUrl = '';
   String backendToken = '';
-  bool sendBrowserCookiesToBackend = true;
+  bool sendBrowserCookiesToBackend = false;
   bool useLocalYtFallback = false;
   int downloadStalledTimeoutMinutes = 5;
 
@@ -1436,7 +1435,7 @@ class SettingsProvider extends ChangeNotifier
     _maxTotalConnections = 32;
     backendUrl = '';
     backendToken = '';
-    sendBrowserCookiesToBackend = true;
+    sendBrowserCookiesToBackend = false;
     useRemoteBackend = true;
     useLocalYtFallback = false;
     resumeIntegrityCheck = true;

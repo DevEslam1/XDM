@@ -78,6 +78,7 @@ void main() {
     });
 
     tearDown(() {
+      provider.dispose();
       if (getIt.isRegistered<AmbientProgress>()) {
         getIt<AmbientProgress>().stopAll();
       }

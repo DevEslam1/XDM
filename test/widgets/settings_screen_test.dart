@@ -17,6 +17,7 @@ void main() {
 
     testWidgets('dark mode switch is toggleable', (tester) async {
       final settings = createMockSettingsProvider();
+      await settings.load();
 
       await tester.pumpWidget(createTestApp(
         child: const SettingsScreen(),
@@ -48,6 +49,7 @@ void main() {
     });
     testWidgets('supports setting theme mode to amoled', (tester) async {
       final settings = createMockSettingsProvider();
+      await settings.load();
       await settings.setThemeMode('amoled');
 
       expect(settings.themeMode, equals('amoled'));
@@ -59,6 +61,7 @@ void main() {
         'enabling battery saver mode keeps power tab active and page visible',
         (tester) async {
       final settings = createMockSettingsProvider();
+      await settings.load();
       await tester.pumpWidget(createTestApp(
         child: const SettingsScreen(initialSection: 'power'),
         settingsProvider: settings,

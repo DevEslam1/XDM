@@ -40,14 +40,29 @@ class DatabaseMaintenanceService {
     );
   }
 
-  Future<void> runPeriodicMaintenanceForTesting() => _runPeriodicMaintenance();
+  // FIX-4.9: Cache active downloads COUNT query for 5 minutes to avoid redundant DB reads
+  DateTime? _lastActiveCountCheck;
+  bool _cachedHasActiveDownloads = false;
 
-  Future<void> _runPeriodicMaintenance() async {
+  Future<bool> _checkActiveDownloads() async {
+    final now = DateTime.now();
+    if (_lastActiveCountCheck != null &&
+        now.difference(_lastActiveCountCheck!) < const Duration(minutes: 5)) {
+      return _cachedHasActiveDownloads;
+    }
     final activeRows = await _db
         .customSelect(
             "SELECT COUNT(*) as cnt FROM download_tasks WHERE status = 'downloading'")
         .get();
-    final hasActiveDownloads = (activeRows.first.read<int>('cnt')) > 0;
+    _cachedHasActiveDownloads = (activeRows.first.read<int>('cnt')) > 0;
+    _lastActiveCountCheck = now;
+    return _cachedHasActiveDownloads;
+  }
+
+  Future<void> runPeriodicMaintenanceForTesting() => _runPeriodicMaintenance();
+
+  Future<void> _runPeriodicMaintenance() async {
+    final hasActiveDownloads = await _checkActiveDownloads();
 
     final swCheckpoint = Stopwatch()..start();
     int logPages = 0;

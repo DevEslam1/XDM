@@ -56,6 +56,7 @@ void main() {
       request.response.close();
     });
     await settings.setBackendUrl('http://127.0.0.1:${server.port}');
+    XdmBackendClient().refreshConfig();
   });
 
   tearDown(() async {
@@ -80,6 +81,7 @@ void main() {
     final deadPort = deadServer.port;
     await deadServer.close(force: true);
     await SettingsProvider.instance.setBackendUrl('http://127.0.0.1:$deadPort');
+    XdmBackendClient().refreshConfig();
 
     await expectLater(
       YoutubeService.getStreams(testUrl),

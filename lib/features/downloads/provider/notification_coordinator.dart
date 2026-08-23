@@ -396,6 +396,11 @@ class NotificationCoordinator {
         now.difference(lastPost).inMilliseconds < minIntervalMs) {
       return;
     }
+    // FIX-2.7: Prevent unbounded growth of progress tracking maps
+    if (_lastProgressPostTimes.length > 200) {
+      final oldestKey = _lastProgressPostTimes.keys.first;
+      _lastProgressPostTimes.remove(oldestKey);
+    }
     _lastProgressPostTimes[notificationId] = now;
 
     final activeCount = _downloadingTasksCount();

@@ -15,10 +15,12 @@ import 'background_scheduler.dart';
 import 'database_service.dart';
 import 'diagnostic_service.dart';
 import 'download_engine.dart';
+import 'download_journal.dart';
 import 'ios_background_service.dart';
 import 'logging_service.dart';
 import 'notification_service.dart';
 import 'power_monitor.dart';
+import 'tick_manager.dart';
 import 'torrent_service.dart';
 
 final _log = LoggingService.logger('BackgroundService');
@@ -45,7 +47,7 @@ class BackgroundService {
   static Timer? _heartbeatTimer;
   static Duration get _maxWakeLockHold => Platform.isIOS
       ? const Duration(seconds: 30)
-      : const Duration(minutes: 10);
+      : const Duration(minutes: 9);
   static DateTime? _lastHeartbeatTime;
   static final Lock _activeLock = Lock();
   static final Set<String> _activeTaskIds = <String>{};
@@ -129,6 +131,7 @@ class BackgroundService {
     if (_activeDownloadCount <= 0) {
       final queryCount = _activeDownloadCountQuery?.call() ?? 0;
       if (queryCount <= 0) {
+        TickManager.instance.unregisterTick('bg_heartbeat');
         _heartbeatTimer?.cancel();
         _heartbeatTimer = null;
         await releaseWakeLock();
@@ -138,9 +141,13 @@ class BackgroundService {
         final isRunning =
             _testMode || await FlutterBackgroundService().isRunning();
         if (isRunning) {
-          _heartbeatTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
-            sendHeartbeat();
-          });
+          // FIX-02: Consolidate heartbeat into TickManager
+          TickManager.instance.registerTick(
+            id: 'bg_heartbeat',
+            interval: const Duration(seconds: 30),
+            priority: TickPriority.critical,
+            callback: (_) => sendHeartbeat(),
+          );
         }
       }
       await acquireWakeLock();
@@ -499,14 +506,73 @@ class BackgroundService {
   static Future<void> _handleDataSyncTimeout() async {
     _log.warning(
       'Android 15 dataSync 6-hour foreground service timeout reached. '
-      'Pausing tasks, flushing state, and scheduling background retry.',
+      'Flushing state, checkpointing journals, and scheduling background retry.',
     );
     _dataSyncTimeoutTimer?.cancel();
     _dataSyncTimeoutTimer = null;
     _dataSyncSessionStartTime = null;
 
     try {
-      // 1. Save all torrent fast-resume data first
+      // 2a. Flush all active download journals
+      try {
+        await DownloadJournal.flushAllActive();
+      } catch (e, st) {
+        _log.warning('Failed to flush active download journals on timeout', e, st);
+      }
+
+      // 2b. Synchronously flush database saves
+      try {
+        DatabaseService.instance.flushPendingSavesSync();
+      } catch (e, st) {
+        _log.warning('Failed to synchronously flush pending saves on timeout', e, st);
+      }
+
+      // 2c & 2d. For each active HTTP task: save TransferState; For torrents: save resume data
+      try {
+        final allTasks = await DatabaseService.instance.loadTasks();
+        final activeTasks = allTasks.where((t) =>
+            t.status == DownloadStatus.downloading ||
+            t.status == DownloadStatus.queued ||
+            t.status == DownloadStatus.merging ||
+            (t.status == DownloadStatus.paused &&
+                t.pauseReason == PauseReason.appRestarted));
+        for (final t in activeTasks) {
+          if (!t.isTorrent && t.tempFilePath.isNotEmpty) {
+            try {
+              final state = TransferState(
+                url: t.url,
+                totalSize: t.fileSize,
+                threadCount: t.threadCount,
+                chunks: t.chunks.asMap().entries.map((e) {
+                  final chunkSize = t.fileSize > 0 && t.threadCount > 0
+                      ? (t.fileSize / t.threadCount).round()
+                      : 0;
+                  final start = e.key * chunkSize;
+                  final end = (e.key == t.threadCount - 1 && t.fileSize > 0)
+                      ? t.fileSize - 1
+                      : start + chunkSize - 1;
+                  return ChunkState(
+                    start: start,
+                    end: end,
+                    downloaded: (e.value * (end - start + 1)).round(),
+                  );
+                }).toList(),
+                status: DmxStateStatus.paused,
+              );
+              await StateStore.save(t.tempFilePath, state, durable: true);
+            } catch (_) {}
+          }
+          await DatabaseService.instance.saveTask(t.copyWith(
+            status: DownloadStatus.paused,
+            pauseReason: PauseReason.scheduled,
+            cycleState: CycleState.paused,
+          ));
+        }
+      } catch (e) {
+        _log.warning(
+            'Failed to checkpoint active tasks on timeout: $e');
+      }
+
       try {
         await TorrentService.saveAllResumeData();
       } catch (e) {
@@ -514,29 +580,10 @@ class BackgroundService {
             'Failed to save torrent resume data on dataSync timeout: $e');
       }
 
-      // 2. Pause active tasks with PauseReason.scheduled
-      try {
-        final allTasks = await DatabaseService.instance.loadTasks();
-        final activeTasks = allTasks.where((t) =>
-            t.status == DownloadStatus.downloading ||
-            t.status == DownloadStatus.queued ||
-            t.status == DownloadStatus.merging);
-        for (final t in activeTasks) {
-          await DatabaseService.instance.saveTask(t.copyWith(
-            status: DownloadStatus.paused,
-            pauseReason: PauseReason.scheduled,
-          ));
-        }
-      } catch (e) {
-        _log.warning(
-            'Failed to update active tasks with PauseReason.scheduled: $e');
-      }
-
       if (onDataSyncTimeout != null) {
         await onDataSyncTimeout!();
       }
       DownloadEngine.markBackground();
-      DatabaseService.instance.flushPendingSavesSync();
       await Future.wait([
         DatabaseService.instance.flushPendingSaves(),
         DatabaseService.instance.checkpointWal(truncate: false),
@@ -552,6 +599,7 @@ class BackgroundService {
       _log.warning('Error releasing wakelock during dataSync timeout', e, st);
     }
 
+    // 2f. Schedule background restart via WorkManager / BackgroundScheduler
     try {
       BackgroundScheduler.instance.scheduleBackgroundSync();
     } catch (e, st) {
@@ -559,6 +607,7 @@ class BackgroundService {
           'Error scheduling background sync on dataSync timeout', e, st);
     }
 
+    // 2e. Stop foreground service
     try {
       final service = FlutterBackgroundService();
       service.invoke('stopService');
@@ -706,9 +755,9 @@ class BackgroundService {
       // Safety net: auto-release or renew if downloads still active
       _scheduleWakeLockSafetyCheck();
 
-      // Start periodic renewal every 15 minutes to prevent native timeout expiry.
+      // FIX-03: Start periodic renewal every 8 minutes (before Android 10-minute timeout).
       _wakeLockRenewalTimer?.cancel();
-      _wakeLockRenewalTimer = Timer.periodic(const Duration(minutes: 15), (
+      _wakeLockRenewalTimer = Timer.periodic(const Duration(minutes: 8), (
         _,
       ) async {
         if (!isSupported) return;
@@ -781,6 +830,7 @@ class BackgroundService {
 
   static void _scheduleWakeLockSafetyCheck() {
     _wakeLockSafetyTimer?.cancel();
+    // FIX-03: Safety check at 9 minutes before max 10m hold time
     _wakeLockSafetyTimer = Timer(_maxWakeLockHold, () async {
       // FIX: P0-03 — check active downloads before releasing
       final hasActive = await _checkActiveDownloadCount();

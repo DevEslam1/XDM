@@ -134,13 +134,17 @@ class UserScriptManager extends ChangeNotifier implements ScriptRepository {
       throw Exception('"with" statement is prohibited.');
     }
 
+    // FIX-4.5: Block Object.defineProperty, defineProperties, and Object.create to prevent sandbox escape
     if (stripped.contains('__proto__') ||
         stripped.contains('constructor.prototype') ||
         stripped.contains('Object.prototype') ||
-        stripped.contains('Function.prototype')) {
+        stripped.contains('Function.prototype') ||
+        stripped.contains('Object.defineProperty') ||
+        stripped.contains('Object.defineProperties') ||
+        stripped.contains('Object.create')) {
       _log.warning(
           'Security Violation: Prototype pollution in script "${script.name}"');
-      throw Exception('Prototype access or pollution is prohibited.');
+      throw Exception('Prototype access or property redefinition is prohibited.');
     }
 
     if (stripped.contains('navigator.sendBeacon')) {

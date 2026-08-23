@@ -36,69 +36,23 @@ class DriftTaskSnapshotStore implements TaskSnapshotStore {
     final isCanc = isCancelled ?? (to == DomainDownloadState.failed && command is CancelTask);
     final isPausedUser = pausedByUser ?? (to == DomainDownloadState.paused);
 
-    final updated = DownloadTask(
-      id: task.id,
-      fileName: task.fileName,
-      url: task.url,
-      fileSize: task.fileSize,
-      downloadedBytes: task.downloadedBytes,
-      speed: (to == DomainDownloadState.paused || to == DomainDownloadState.failed || to == DomainDownloadState.completed) ? 0.0 : task.speed,
-      eta: task.eta,
-      category: task.category,
+    final updated = task.copyWith(
       status: legacyStatus,
-      savePath: task.savePath,
-      localFilePath: task.localFilePath,
-      tempFilePath: task.tempFilePath,
       errorMessage: errorMessage ?? task.errorMessage,
-      statusMessage: task.statusMessage,
-      failureCategory: task.failureCategory,
-      recoveryHint: task.recoveryHint,
-      threadCount: task.threadCount,
-      chunks: task.chunks,
-      createdAt: task.createdAt,
-      updatedAt: DateTime.now(),
-      completedAt: to == DomainDownloadState.completed ? DateTime.now() : task.completedAt,
-      scheduledAt: task.scheduledAt,
-      wasScheduledAt: task.wasScheduledAt,
-      supportsResume: task.supportsResume,
-      speedLimitKbps: task.speedLimitKbps,
-      seedingEnabled: task.seedingEnabled,
-      seedingLimited: task.seedingLimited,
-      seedingLimitKbps: task.seedingLimitKbps,
-      torrentFiles: task.torrentFiles,
-      downloadPageUrl: task.downloadPageUrl,
-      mergedAudioUrl: task.mergedAudioUrl,
-      audioSize: task.audioSize,
-      videoStreamSize: task.videoStreamSize,
-      audioProgress: task.audioProgress,
-      audioThreadCount: task.audioThreadCount,
+      pauseReason: pauseReason != null ? PauseReason.fromName(pauseReason) : task.pauseReason,
       pausedByUser: isPausedUser,
       isCancelled: isCanc,
-      youtubeQualityPreset: task.youtubeQualityPreset,
-      notes: task.notes,
-      isAppUpdate: task.isAppUpdate,
-      priority: task.priority,
-      queueOrder: task.queueOrder,
-      playlistId: task.playlistId,
-      playlistTitle: task.playlistTitle,
-      thumbnailUrl: task.thumbnailUrl,
-      expectedSha256: task.expectedSha256,
-      mirrorUrls: task.mirrorUrls,
-      siteType: task.siteType,
-      siteDisplayName: task.siteDisplayName,
-      contentHint: task.contentHint,
-      totalPieces: task.totalPieces,
-      completedPieces: task.completedPieces,
-      ytCounterpartDownloadedBytes: task.ytCounterpartDownloadedBytes,
-      cycleState: task.cycleState,
-      previousCycleState: task.previousCycleState,
-      totalFiles: task.totalFiles,
-      completedFiles: task.completedFiles,
-      totalFileBytes: task.totalFileBytes,
-      downloadedFileBytes: task.downloadedFileBytes,
-      infoHash: task.infoHash,
+      speed: (to == DomainDownloadState.paused ||
+              to == DomainDownloadState.failed ||
+              to == DomainDownloadState.completed)
+          ? 0.0
+          : task.speed,
+      completedAt:
+          to == DomainDownloadState.completed ? DateTime.now() : task.completedAt,
+      updatedAt: DateTime.now(),
     );
 
+    // FIX-07: Use the callback instead of direct collection modification
     _onTaskUpdated?.call(updated);
     await _databaseService.saveTask(updated);
   }

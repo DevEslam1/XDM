@@ -1,7 +1,8 @@
 import 'package:libtorrent_flutter/libtorrent_flutter.dart';
+
 import '../../features/settings/provider/settings_provider.dart';
+import '../domain/torrent_models.dart';
 import 'power_monitor.dart';
-import 'torrent_models.dart';
 
 /// Phase 1: Session Configuration Overhaul & Runtime Tuning
 class TorrentSessionConfig {

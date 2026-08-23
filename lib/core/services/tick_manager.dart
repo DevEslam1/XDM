@@ -38,7 +38,6 @@ class TickManager {
   static final _log = Logger('TickManager');
   static final TickManager instance = TickManager._();
   TickManager._() {
-    _startHeartbeat();
     PowerMonitor.screenStateStream.listen((screenOn) {
       _onPowerStateChanged();
     });
@@ -51,6 +50,11 @@ class TickManager {
   bool _isPaused = false;
 
   void _startHeartbeat() {
+    if (_subscribers.isEmpty) {
+      _heartbeatTimer?.cancel();
+      _heartbeatTimer = null;
+      return;
+    }
     _heartbeatTimer?.cancel();
     final isBg = DownloadEngine.isInBackground || PowerMonitor.screenOff;
     final resolution = isBg
@@ -71,13 +75,21 @@ class TickManager {
       priority: priority,
       callback: callback,
     );
+    if (_heartbeatTimer == null) {
+      _startHeartbeat();
+    }
   }
 
   void unregisterTick(String id) {
     _subscribers.remove(id);
+    if (_subscribers.isEmpty) {
+      _heartbeatTimer?.cancel();
+      _heartbeatTimer = null;
+    }
   }
 
   void _onPowerStateChanged() {
+    if (_subscribers.isEmpty) return;
     _startHeartbeat();
     if (_heartbeatTimer != null) {
       _onHeartbeat(_heartbeatTimer!);
@@ -103,7 +115,7 @@ class TickManager {
           }
           break;
         case TickPriority.ambient:
-          if (screenOff || !isForeground || !hasActive && DownloadEngine.activeDownloadsCount > 0) {
+          if (screenOff || !isForeground || !hasActive) {
             continue; // Skip ambient UI updates
           }
           break;

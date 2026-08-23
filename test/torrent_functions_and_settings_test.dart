@@ -1,6 +1,6 @@
 // ignore_for_file: avoid_print
 
-import 'package:dmx/core/services/torrent_models.dart';
+import 'package:dmx/core/domain/torrent_models.dart';
 import 'package:dmx/core/services/torrent_service_stub.dart';
 import 'package:dmx/core/services/torrent_session_config.dart';
 import 'package:flutter_test/flutter_test.dart';

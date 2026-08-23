@@ -9,6 +9,8 @@ class DownloadListProvider extends ChangeNotifier {
   final List<DownloadTask> _tasks = [];
   final Map<String, ValueNotifier<double>> _progressNotifiers = {};
   final Map<String, ValueNotifier<double>> _speedNotifiers = {};
+  // FIX-3.4: Add _disposed guard
+  bool _disposed = false;
 
   DownloadListProvider(this._repository);
 
@@ -30,8 +32,10 @@ class DownloadListProvider extends ChangeNotifier {
   }
 
   Future<void> load() async {
+    if (_disposed) return;
     _tasks.clear();
     _tasks.addAll(await _repository.getAll());
+    if (_disposed) return;
     for (final task in _tasks) {
       _progressNotifiers[task.id]?.value = task.progressRatio;
       _speedNotifiers[task.id]?.value = task.speed;
@@ -40,6 +44,7 @@ class DownloadListProvider extends ChangeNotifier {
   }
 
   void setTasks(List<DownloadTask> tasks) {
+    if (_disposed) return;
     final newIds = tasks.map((t) => t.id).toSet();
     _progressNotifiers.removeWhere((id, notifier) {
       if (!newIds.contains(id)) {
@@ -65,8 +70,10 @@ class DownloadListProvider extends ChangeNotifier {
   }
 
   Future<void> addTask(DownloadTask task) async {
+    if (_disposed) return;
     // Task 1.1: DB First — save to repository before modifying in-memory state
     await _repository.save(task);
+    if (_disposed) return;
     _tasks.insert(0, task);
     _progressNotifiers[task.id]?.value = task.progressRatio;
     _speedNotifiers[task.id]?.value = task.speed;
@@ -74,26 +81,32 @@ class DownloadListProvider extends ChangeNotifier {
   }
 
   Future<void> updateTask(DownloadTask task) async {
+    if (_disposed) return;
     final index = _tasks.indexWhere((t) => t.id == task.id);
     if (index == -1) return;
     final previous = _tasks[index];
     try {
       // Task 1.1: DB First — save to repository before committing in-memory change
       await _repository.save(task);
+      if (_disposed) return;
       _tasks[index] = task;
       _progressNotifiers[task.id]?.value = task.progressRatio;
       _speedNotifiers[task.id]?.value = task.speed;
       notifyListeners();
     } catch (e) {
       // Rollback to previous state on failure
-      _tasks[index] = previous;
+      if (!_disposed) {
+        _tasks[index] = previous;
+      }
       rethrow;
     }
   }
 
   Future<void> deleteTask(String id) async {
+    if (_disposed) return;
     // Task 1.1 & 1.2: DB Delete FIRST, UI Remove on success
     await _repository.delete(id);
+    if (_disposed) return;
     _tasks.removeWhere((t) => t.id == id);
     _progressNotifiers.remove(id)?.dispose();
     _speedNotifiers.remove(id)?.dispose();
@@ -104,6 +117,7 @@ class DownloadListProvider extends ChangeNotifier {
   /// reflects real progress/speed even if the streaming progress path stalls.
   /// [taskToTorrentIds] maps taskId → native torrentId (from the engine).
   void forceRefreshTorrents([Map<String, int>? taskToTorrentIds]) {
+    if (_disposed) return;
     var changed = false;
     for (var i = 0; i < _tasks.length; i++) {
       final task = _tasks[i];
@@ -142,10 +156,11 @@ class DownloadListProvider extends ChangeNotifier {
       _speedNotifiers[task.id]?.value = updated.speed;
       changed = true;
     }
-    if (changed) notifyListeners();
+    if (changed && !_disposed) notifyListeners();
   }
 
   void removeTask(String id) {
+    if (_disposed) return;
     _tasks.removeWhere((t) => t.id == id);
     _progressNotifiers.remove(id)?.dispose();
     _speedNotifiers.remove(id)?.dispose();
@@ -153,8 +168,10 @@ class DownloadListProvider extends ChangeNotifier {
   }
 
   Future<void> deleteMultipleTasks(List<String> ids) async {
+    if (_disposed) return;
     // Task 1.1: DB Delete FIRST
     await _repository.deleteAll(ids);
+    if (_disposed) return;
     _tasks.removeWhere((t) => ids.contains(t.id));
     for (final id in ids) {
       _progressNotifiers.remove(id)?.dispose();
@@ -201,6 +218,8 @@ class DownloadListProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
     for (final notifier in _progressNotifiers.values) {
       notifier.dispose();
     }

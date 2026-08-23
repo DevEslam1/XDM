@@ -407,11 +407,18 @@ class _FadeIndexedStackState extends State<_FadeIndexedStack>
       _c.reset();
       _c.forward();
     }
+    // FIX-3.5: Clean up stale cached widgets if item count changes
+    if (old.itemCount != widget.itemCount) {
+      _cachedWidgets.removeWhere((key, _) => key >= widget.itemCount);
+      _activatedIndices.removeWhere((key) => key >= widget.itemCount);
+    }
   }
 
   @override
   void dispose() {
     _c.dispose();
+    _cachedWidgets.clear();
+    _activatedIndices.clear();
     super.dispose();
   }
 
@@ -938,41 +945,7 @@ class _RailItem extends StatelessWidget {
                         PositionedDirectional(
                           top: -4,
                           end: -6,
-                          child: Selector<DownloadProvider, int>(
-                            selector: (_, p) => p.downloadingTasksCount,
-                            builder: (_, count, __) {
-                              if (count <= 0) return const SizedBox.shrink();
-                              return Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 4,
-                                  vertical: 1,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: isDark
-                                      ? AppTheme.neonGreen
-                                      : AppTheme.lightNeonGreen,
-                                  borderRadius: BorderRadius.circular(8),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: (isDark
-                                              ? AppTheme.neonGreen
-                                              : AppTheme.lightNeonGreen)
-                                          .withValues(alpha: 0.4),
-                                      blurRadius: 4,
-                                    ),
-                                  ],
-                                ),
-                                child: Text(
-                                  '$count',
-                                  style: TextStyle(
-                                    color: isDark ? Colors.black : Colors.white,
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
+                          child: _ActiveCountBadge(isDark: isDark),
                         ),
                     ],
                   ),
@@ -1158,6 +1131,47 @@ class _NavItem extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+// FIX-4.3: Separate widget for badge to avoid rebuilding parent nav buttons
+class _ActiveCountBadge extends StatelessWidget {
+  final bool isDark;
+  const _ActiveCountBadge({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    return Selector<DownloadProvider, int>(
+      selector: (_, p) => p.downloadingTasksCount,
+      builder: (_, count, __) {
+        if (count <= 0) return const SizedBox.shrink();
+        return Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 4,
+            vertical: 1,
+          ),
+          decoration: BoxDecoration(
+            color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: [
+              BoxShadow(
+                color: (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
+                    .withValues(alpha: 0.4),
+                blurRadius: 4,
+              ),
+            ],
+          ),
+          child: Text(
+            '$count',
+            style: TextStyle(
+              color: isDark ? Colors.black : Colors.white,
+              fontSize: 9,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        );
+      },
     );
   }
 }

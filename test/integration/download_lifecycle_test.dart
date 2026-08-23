@@ -1,8 +1,8 @@
 import 'dart:io';
 
+import 'package:dmx/core/domain/torrent_models.dart';
 import 'package:dmx/core/services/download_engine.dart';
 import 'package:dmx/core/services/notification_service.dart';
-import 'package:dmx/core/services/torrent_models.dart';
 import 'package:dmx/features/downloads/data/task_repository.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/features/downloads/provider/download_list_provider.dart';

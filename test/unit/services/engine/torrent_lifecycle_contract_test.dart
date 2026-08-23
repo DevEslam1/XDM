@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:crypto/crypto.dart';
+import 'package:dmx/core/domain/torrent_models.dart';
 import 'package:dmx/core/interfaces/i_torrent_service.dart';
 import 'package:dmx/core/services/database/app_database.dart';
 import 'package:dmx/core/services/database/repositories/task_companion_converter.dart';
-import 'package:dmx/core/services/torrent_models.dart';
 import 'package:dmx/core/services/torrent_resume_store.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:flutter/foundation.dart';
@@ -40,7 +41,8 @@ class _FakeContractTorrentService implements ITorrentService {
   @override
   Map<int, TorrentUpdateInfo> get latestStats => Map.unmodifiable(_stats);
   @override
-  Stream<Map<int, TorrentUpdateInfo>> get torrentUpdates => _updateController.stream;
+  Stream<Map<int, TorrentUpdateInfo>> get torrentUpdates =>
+      _updateController.stream;
 
   @override
   bool isTorrentAlive(int id) => _alive.contains(id);
@@ -90,7 +92,9 @@ void main() {
     }
   });
 
-  test('Auto-Resume Filter: user-paused or cancelled tasks are never auto-resumed', () {
+  test(
+      'Auto-Resume Filter: user-paused or cancelled tasks are never auto-resumed',
+      () {
     final now = DateTime.now();
     final userPausedTask = DownloadTask(
       id: 'task-user-paused',
@@ -131,13 +135,19 @@ void main() {
       return true;
     }
 
-    expect(isEligibleForAutoResume(userPausedTask), isFalse, reason: 'User-paused tasks must not auto-resume');
-    expect(isEligibleForAutoResume(cancelledTask), isFalse, reason: 'Cancelled tasks must not auto-resume');
-    expect(isEligibleForAutoResume(offlinePausedTask), isTrue, reason: 'Network-paused tasks are eligible to auto-resume on reconnect');
+    expect(isEligibleForAutoResume(userPausedTask), isFalse,
+        reason: 'User-paused tasks must not auto-resume');
+    expect(isEligibleForAutoResume(cancelledTask), isFalse,
+        reason: 'Cancelled tasks must not auto-resume');
+    expect(isEligibleForAutoResume(offlinePausedTask), isTrue,
+        reason:
+            'Network-paused tasks are eligible to auto-resume on reconnect');
   });
 
-  test('Fastresume Store: Save, SHA-256 verification, and roundtrip load', () async {
-    const sourceUrl = 'magnet:?xt=urn:btih:c12fe1c06bba254a9dc9f519b335de7ec7667a80&dn=Test';
+  test('Fastresume Store: Save, SHA-256 verification, and roundtrip load',
+      () async {
+    const sourceUrl =
+        'magnet:?xt=urn:btih:c12fe1c06bba254a9dc9f519b335de7ec7667a80&dn=Test';
     final sampleResumeBytes = Uint8List.fromList(
       List.generate(2048, (i) => (i * 23 + 3) % 256),
     );
@@ -147,15 +157,23 @@ void main() {
       sourceUrl: sourceUrl,
       fetchResumeData: () => sampleResumeBytes,
       files: [
-        {'name': 'file1.bin', 'size': 2048, 'downloadedBytes': 1024, 'selected': true, 'priority': 4}
+        {
+          'name': 'file1.bin',
+          'size': 2048,
+          'downloadedBytes': 1024,
+          'selected': true,
+          'priority': 4
+        }
       ],
     );
 
     expect(saved, isTrue);
 
-    final loadedBytes = await TorrentResumeStore.loadResumeDataForSource(sourceUrl);
+    final loadedBytes =
+        await TorrentResumeStore.loadResumeDataForSource(sourceUrl);
     expect(loadedBytes, isNotNull);
-    expect(sha256.convert(loadedBytes!).toString(), equals(sha256.convert(sampleResumeBytes).toString()));
+    expect(sha256.convert(loadedBytes!).toString(),
+        equals(sha256.convert(sampleResumeBytes).toString()));
 
     final loadedFiles = await TorrentResumeStore.loadFilesForSource(sourceUrl);
     expect(loadedFiles, isNotNull);
@@ -164,7 +182,9 @@ void main() {
     expect(loadedFiles.first['downloadedBytes'], equals(1024));
   });
 
-  test('Pause Verification Semantics (D4): null stats rejected, confirmation succeeds on stateLabel paused', () async {
+  test(
+      'Pause Verification Semantics (D4): null stats rejected, confirmation succeeds on stateLabel paused',
+      () async {
     final fakeService = _FakeContractTorrentService()..addAlive(10);
 
     final streamFuture = fakeService.torrentUpdates.firstWhere((updateMap) {
@@ -239,7 +259,9 @@ void main() {
     expect(verifiedMap[10]?.stateLabel, equals('paused'));
   });
 
-  test('Cancel Persistence: cancel -> DB roundtrip -> task remains cancelled across restart', () {
+  test(
+      'Cancel Persistence: cancel -> DB roundtrip -> task remains cancelled across restart',
+      () {
     final originalTask = DownloadTask(
       id: 'task-cancel-persist',
       fileName: 'cancel_me.zip',
@@ -311,7 +333,9 @@ void main() {
     expect(isEligibleForAutoResume(restoredTask), isFalse);
   });
 
-  test('N2: Task failed with Dio cancel errorMessage (isCancelled: false in DB) must NOT be isCancelled on restart', () {
+  test(
+      'N2: Task failed with Dio cancel errorMessage (isCancelled: false in DB) must NOT be isCancelled on restart',
+      () {
     final dioFailedTask = DownloadTask(
       id: 'task-dio-error',
       fileName: 'network_file.zip',
@@ -327,7 +351,8 @@ void main() {
       chunks: const [0.0, 0.0],
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
-      errorMessage: 'DioException [bad response]: The request was cancelled by client',
+      errorMessage:
+          'DioException [bad response]: The request was cancelled by client',
       isCancelled: false,
       pausedByUser: false,
     );
@@ -368,10 +393,13 @@ void main() {
 
     final restoredTask = TaskCompanionConverter.rowToTask(dbRow);
     expect(restoredTask.isCancelled, isFalse,
-        reason: 'Generic error message containing the word "cancelled" must NOT mark task as isCancelled');
+        reason:
+            'Generic error message containing the word "cancelled" must NOT mark task as isCancelled');
   });
 
-  test('N1: Monotonic floor resets on legitimate decrease events (file deselect, recheck, removal)', () {
+  test(
+      'N1: Monotonic floor resets on legitimate decrease events (file deselect, recheck, removal)',
+      () {
     // 1. Initial download state: 1000 totalWanted, 50% progress -> 500 bytes
     var totalWanted = 1000;
     var priorities = [4, 4];
@@ -386,8 +414,11 @@ void main() {
       Map<String, dynamic> floorState,
     ) {
       final safeProgress = currentProgress.clamp(0.0, 1.0);
-      final calculated = (safeProgress * currentTotalWanted).toInt().clamp(0, currentTotalWanted);
-      final prioritiesHash = currentPriorities.fold<int>(0, (acc, p) => acc * 31 + p);
+      final calculated = (safeProgress * currentTotalWanted)
+          .toInt()
+          .clamp(0, currentTotalWanted);
+      final prioritiesHash =
+          currentPriorities.fold<int>(0, (acc, p) => acc * 31 + p);
       final currentKey = '$currentTotalWanted:$prioritiesHash:$currentState';
       final prevKey = floorState['key'];
 
@@ -406,32 +437,41 @@ void main() {
     }
 
     final floorState = <String, dynamic>{};
-    final step1 = calculateSynthesized(totalWanted, priorities, stateLabel, progress, floorState);
+    final step1 = calculateSynthesized(
+        totalWanted, priorities, stateLabel, progress, floorState);
     expect(step1, equals(500));
 
     // Transient drop during same key is clamped by monotonic floor
     progress = 0.48;
-    final step2 = calculateSynthesized(totalWanted, priorities, stateLabel, progress, floorState);
-    expect(step2, equals(500), reason: 'Monotonic floor prevents transient jitter');
+    final step2 = calculateSynthesized(
+        totalWanted, priorities, stateLabel, progress, floorState);
+    expect(step2, equals(500),
+        reason: 'Monotonic floor prevents transient jitter');
 
     // Deselect file -> totalWanted drops to 500, priorities change to [4, 0]
     totalWanted = 500;
     priorities = [4, 0];
     progress = 0.6; // 60% of 500 = 300
-    final step3 = calculateSynthesized(totalWanted, priorities, stateLabel, progress, floorState);
-    expect(step3, equals(300), reason: 'Deselecting files resets floor to new wanted extent');
+    final step3 = calculateSynthesized(
+        totalWanted, priorities, stateLabel, progress, floorState);
+    expect(step3, equals(300),
+        reason: 'Deselecting files resets floor to new wanted extent');
 
     // Recheck event -> state becomes checkingFiles, progress is 0.1
     stateLabel = 'checkingFiles';
     progress = 0.1; // 10% of 500 = 50
-    final step4 = calculateSynthesized(totalWanted, priorities, stateLabel, progress, floorState);
-    expect(step4, equals(50), reason: 'Rechecking files resets floor immediately');
+    final step4 = calculateSynthesized(
+        totalWanted, priorities, stateLabel, progress, floorState);
+    expect(step4, equals(50),
+        reason: 'Rechecking files resets floor immediately');
 
     // Remove and re-add torrent -> state clears
     floorState.clear();
     stateLabel = 'downloading';
     progress = 0.2; // 20% of 500 = 100
-    final step5 = calculateSynthesized(totalWanted, priorities, stateLabel, progress, floorState);
-    expect(step5, equals(100), reason: 'Removed torrent clears floor completely');
+    final step5 = calculateSynthesized(
+        totalWanted, priorities, stateLabel, progress, floorState);
+    expect(step5, equals(100),
+        reason: 'Removed torrent clears floor completely');
   });
 }

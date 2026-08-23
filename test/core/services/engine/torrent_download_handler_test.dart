@@ -7,7 +7,6 @@ import 'package:dmx/core/domain/cycle_state.dart';
 import 'package:dmx/core/domain/engine_types.dart';
 import 'package:dmx/core/domain/torrent_models.dart';
 import 'package:dmx/core/services/engine/torrent_download_handler.dart';
-import 'package:dmx/core/services/torrent_resume_store.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 

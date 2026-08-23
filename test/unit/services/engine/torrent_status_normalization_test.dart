@@ -1,5 +1,5 @@
 import 'package:dmx/core/domain/download_data_status.dart';
-import 'package:dmx/core/domain/torrent_models.dart';
+import 'package:dmx/core/domain/torrent_models.dart' hide TorrentState;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:libtorrent_flutter/libtorrent_flutter.dart';
 

@@ -244,6 +244,7 @@ void main() {
         {
           'name': 'empty.txt',
           'length': 0,
+          'lengthKnown': true,
           'downloadedBytes': 0,
           'selected': true,
         },

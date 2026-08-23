@@ -146,7 +146,7 @@ class _DashRingPainter extends CustomPainter {
     final radius = size.width / 2 - 1.5;
     _paint.color = color.withValues(alpha: 0.45);
 
-    const dashes = 28;
+    const dashes = 12;
     const gapRatio = 0.45;
     const step = (2 * 3.141592653589793) / dashes;
     final rect = Rect.fromCircle(center: center, radius: radius);

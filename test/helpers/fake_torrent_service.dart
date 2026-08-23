@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:dmx/core/domain/torrent_models.dart';
 import 'package:dmx/core/domain/torrent_session_settings.dart';
 import 'package:dmx/core/interfaces/i_torrent_service.dart';
-import 'package:dmx/core/services/torrent_models.dart';
 import 'package:flutter/foundation.dart' show ValueNotifier;
 
 /// Scriptable test fake for [ITorrentService] satisfying Phase 0 test harness requirements.
@@ -57,8 +57,7 @@ class FakeITorrentService implements ITorrentService {
       _torrentUpdatesCtrl.stream;
 
   @override
-  Map<int, TorrentUpdateInfo> get latestStats =>
-      Map.unmodifiable(_latestStats);
+  Map<int, TorrentUpdateInfo> get latestStats => Map.unmodifiable(_latestStats);
 
   @override
   int? idForSource(String source) => null;
@@ -135,7 +134,11 @@ class FakeITorrentService implements ITorrentService {
       totalWantedDone: totalWantedDone,
       totalDone: totalWantedDone,
       hasMetadata: hasMetadata,
-      stateLabel: isPaused ? 'Paused' : (isFinished ? 'Seeding' : (hasMetadata ? 'Downloading' : 'Fetching Metadata')),
+      stateLabel: isPaused
+          ? 'Paused'
+          : (isFinished
+              ? 'Seeding'
+              : (hasMetadata ? 'Downloading' : 'Fetching Metadata')),
       numPeers: numPeers,
       numSeeds: numSeeds,
     );
@@ -163,7 +166,8 @@ class FakeITorrentService implements ITorrentService {
 
   @override
   Future<void> saveResumeData(int torrentId) async {
-    final blob = Uint8List.fromList([0x64, 0x31, 0x30, 0x3a, 0x66, 0x61, 0x73, 0x74]);
+    final blob =
+        Uint8List.fromList([0x64, 0x31, 0x30, 0x3a, 0x66, 0x61, 0x73, 0x74]);
     _resumeBlobs[torrentId] = blob;
     emitAlert(TorrentAlertEvent(
       type: 30, // saveResumeDataCompleted
@@ -247,7 +251,8 @@ class FakeITorrentService implements ITorrentService {
   }
 
   @override
-  void removeTorrent(int id, {bool deleteFiles = false, bool deleteResumeData = false}) {
+  void removeTorrent(int id,
+      {bool deleteFiles = false, bool deleteResumeData = false}) {
     _activeTorrentIds.remove(id);
     _latestStats.remove(id);
     _isPausedMap.remove(id);
@@ -397,7 +402,8 @@ class FakeITorrentService implements ITorrentService {
   }
 
   @override
-  List<TrackerInfo> getTrackers(int torrentId) => _trackers[torrentId] ?? const [];
+  List<TrackerInfo> getTrackers(int torrentId) =>
+      _trackers[torrentId] ?? const [];
 
   @override
   void addTracker(int torrentId, String trackerUrl, {int tier = 0}) {
@@ -464,7 +470,8 @@ class FakeITorrentService implements ITorrentService {
 
   @override
   Future<List<TorrentFileProgress>> getAccurateFileProgress(
-      int torrentId, String savePath, {Map<int, int>? knownSizes}) async {
+      int torrentId, String savePath,
+      {Map<int, int>? knownSizes}) async {
     return _fileProgress[torrentId] ?? const [];
   }
 
@@ -518,7 +525,8 @@ class FakeITorrentService implements ITorrentService {
     DateTime? completedAt,
   }) {
     if (progress < 1.0) return false;
-    final limit = customRatioLimit ?? shareRatioLimit ?? simulatedShareRatioLimit;
+    final limit =
+        customRatioLimit ?? shareRatioLimit ?? simulatedShareRatioLimit;
     if (limit > 0 && downloadedBytes != null && downloadedBytes > 0) {
       if ((uploadedBytes / downloadedBytes) >= limit) return true;
     }

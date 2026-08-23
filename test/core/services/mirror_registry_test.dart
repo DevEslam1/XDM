@@ -1,4 +1,6 @@
+import 'package:dmx/core/services/database/app_database.dart';
 import 'package:dmx/core/services/mirror/mirror_registry.dart';
+import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -9,7 +11,24 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  group('MirrorHealthStore / Registry Tests (FIX-21)', () {
+  group('Mirror Registry & Health Store Hardening', () {
+    test('MirrorHealthStore coalesces dirty state and flushes', () async {
+      final db = AppDatabase.forTesting(NativeDatabase.memory());
+      final repo = MirrorHealthDriftRepository(db);
+      final store = MirrorHealthStore(repository: repo);
+      await store.init();
+
+      await store.recordFailure('https://mirror1.example.com', statusCode: 503);
+      expect(store.getFailureCount('https://mirror1.example.com'), equals(1));
+
+      await store.flushPending(durable: true);
+      final rows = await repo.loadAll();
+      expect(rows.any((r) => r.url == 'https://mirror1.example.com'), isTrue);
+
+      await store.clear();
+      await db.close();
+    });
+
     test('recordFailure increments failures and trips blacklist circuit at 5',
         () async {
       final store = MirrorHealthStore();

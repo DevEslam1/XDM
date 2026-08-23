@@ -3,10 +3,10 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:dmx/core/di/injection.dart';
+import 'package:dmx/core/domain/torrent_models.dart';
 import 'package:dmx/core/interfaces/i_torrent_service.dart';
 import 'package:dmx/core/services/engine/engine_models.dart';
 import 'package:dmx/core/services/engine/torrent_download_handler.dart';
-import 'package:dmx/core/services/torrent_models.dart';
 import 'package:dmx/core/services/torrent_service_stub.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -321,7 +321,8 @@ void main() {
       controller.add({42: seedingInfo(42)});
       await downloadFuture;
 
-      final lastProgress = emittedProgress.lastWhere((p) => p.torrentFiles != null);
+      final lastProgress =
+          emittedProgress.lastWhere((p) => p.torrentFiles != null);
       final lastFiles = lastProgress.torrentFiles!;
       expect(lastFiles[0]['selected'], isTrue);
       expect(lastFiles[1]['selected'], isTrue);

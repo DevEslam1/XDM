@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:typed_data';
+
 import 'package:flutter/foundation.dart' show ValueNotifier;
+
+import '../domain/torrent_models.dart';
 import '../domain/torrent_session_settings.dart';
 import '../interfaces/i_torrent_native.dart';
 import '../interfaces/i_torrent_service.dart';
-import 'torrent_models.dart';
 
 class TorrentService {
   static bool get isSupported => false;
@@ -150,12 +152,15 @@ class TorrentService {
     return false;
   }
 
-  static Future<Map<String, dynamic>?> getPieceProgress(int torrentId) async => null;
-  static Future<List<PeerConnectionQuality>> getPeers(int torrentId) async => const [];
+  static Future<Map<String, dynamic>?> getPieceProgress(int torrentId) async =>
+      null;
+  static Future<List<PeerConnectionQuality>> getPeers(int torrentId) async =>
+      const [];
   static List<TorrentAlertEvent> getRecentAlerts([int? torrentId]) => const [];
   static void applySettingsPack(TorrentSettingsPack pack) {}
   static void setSequentialDownload(int torrentId, bool enabled) {}
-  static void prioritizeFile(int torrentId, int fileIndex, {int priority = 7}) {}
+  static void prioritizeFile(int torrentId, int fileIndex,
+      {int priority = 7}) {}
   static void autoEnableSequentialForVideo(int torrentId) {}
   static Future<void> autoSaveResumeData() async {}
   static Map<String, dynamic>? getTorrentSnapshot(int id) => null;

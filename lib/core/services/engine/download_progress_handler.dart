@@ -47,10 +47,23 @@ class DownloadProgressHandler {
   int _urlExpireCount = 0;
   DateTime? _urlExpireWindowStart;
   bool _selfActuallyFinalized = false;
+  bool _disposed = false;
   int _lastChunkDetailsHash = 0;
   int _emittedChunkDetailsHash = -1;
 
   int get chunkFingerprint => _lastChunkDetailsHash;
+
+  void dispose() {
+    _disposed = true;
+    if (_pendingProgress != null && !cancelToken.isCancelled) {
+      final pending = _pendingProgress!;
+      _pendingProgress = null;
+      emit(pending);
+    }
+    _throttleTimer?.cancel();
+    _throttleTimer = null;
+    _pendingProgress = null;
+  }
 
   @visibleForTesting
   DateTime? get counterpartWaitStartForTesting => _counterpartWaitStart;
@@ -172,17 +185,6 @@ class DownloadProgressHandler {
     onProgress(progress);
   }
 
-  void dispose() {
-    if (_pendingProgress != null && !cancelToken.isCancelled) {
-      final pending = _pendingProgress!;
-      _pendingProgress = null;
-      emit(pending);
-    }
-    _throttleTimer?.cancel();
-    _throttleTimer = null;
-    _pendingProgress = null;
-  }
-
   static CycleState deriveCycleState(
     String? statusMessage,
     bool isCancelled,
@@ -244,7 +246,8 @@ class DownloadProgressHandler {
     HttpDownloadEngine? httpEngine,
     bool isCounterpartUnregistered = false,
   }) async {
-    if (cancelToken.isCancelled) return;
+    // FIX-06: Guard against post-dispose worker progress
+    if (_disposed || cancelToken.isCancelled) return;
 
     if (adaptiveThreads && httpEngine != null) {
       final speed = (p['speed'] as num?)?.toDouble() ?? 0.0;
