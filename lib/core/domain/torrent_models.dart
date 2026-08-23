@@ -86,7 +86,6 @@ class TorrentUpdateInfo {
   bool get isChecking =>
       state == TorrentState.checkingFiles ||
       state == TorrentState.checkingResume ||
-      state == TorrentState.queuedForChecking ||
       stateLabel.toLowerCase().contains('checking');
   bool get isFetchingMetadata =>
       (state == TorrentState.downloadingMetadata ||

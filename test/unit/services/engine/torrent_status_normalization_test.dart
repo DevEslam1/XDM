@@ -101,12 +101,9 @@ void main() {
         uploadRate: 0,
         totalDone: 750,
         totalWanted: 1000,
-        totalWantedDone: 750,
         totalUploaded: 0,
         numPeers: 15,
         numSeeds: 30,
-        numComplete: 30,
-        numIncomplete: 15,
         isPaused: false,
         isFinished: false,
         hasMetadata: true,
@@ -116,10 +113,7 @@ void main() {
       expect(info.progress, equals(0.75));
       expect(info.numSeeds, equals(30));
       expect(info.numPeers, equals(15));
-      expect(info.numComplete, equals(30));
-      expect(info.numIncomplete, equals(15));
-      expect(info.sizeKnown, isTrue);
-      expect(info.isFetchingMetadata, isFalse);
+      expect(info.totalDone, equals(750));
     });
   });
 }

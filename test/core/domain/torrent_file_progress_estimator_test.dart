@@ -104,6 +104,7 @@ void main() {
       final file = {
         'name': 'empty.nfo',
         'length': 0,
+        'lengthKnown': true,
         'selected': true,
         'downloadedBytes': 0,
       };

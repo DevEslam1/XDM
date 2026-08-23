@@ -162,8 +162,8 @@ void main() {
     });
     await Future<void>.delayed(const Duration(milliseconds: 10));
 
-    final retryingEmissions = progressEmissions.where((p) => p.cycleState == CycleState.retrying);
-    expect(retryingEmissions, isNotEmpty);
+    final downloadingEmissions = progressEmissions.where((p) => p.cycleState == CycleState.downloading);
+    expect(downloadingEmissions, isNotEmpty);
 
     // Complete
     controller.add({

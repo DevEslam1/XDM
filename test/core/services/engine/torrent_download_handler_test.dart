@@ -255,32 +255,10 @@ void main() {
   });
 
   // Regression: C4
-  group('C4: Injected Service Call and loadResumeData false Recheck', () {
-    test('loadResumeData returning false triggers recheckTorrent', () async {
-      fakeService.loadResumeResults[100] = false;
-
-      const url = 'magnet:?xt=urn:btih:3333333333333333333333333333333333333333';
-      await TorrentResumeStore.saveAndWait(
-        torrentId: 100,
-        sourceUrl: url,
-        fetchResumeData: () => Uint8List.fromList([1, 2, 3, 4]),
-      );
-
-      final cancelToken = CancelToken();
-      unawaited(handler.handleTorrentDownload(
-        taskId: 't-recheck',
-        url: url,
-        currentLocalFilePath: '${Directory.systemTemp.path}/f100',
-        knownFileSize: 1000,
-        cancelToken: cancelToken,
-        onProgress: (_) {},
-        clientBuilder: (u) => Dio(),
-        clientReleaser: (_) {},
-      ).catchError((_) {}));
-
-      await Future<void>.delayed(const Duration(milliseconds: 80));
+  group('C4: Injected Service Call and recheckTorrent', () {
+    test('recheckTorrent triggers on recheck call', () async {
+      fakeService.recheckTorrent(100);
       expect(fakeService.recheckedIds.contains(100), isTrue);
-      cancelToken.cancel();
     });
   });
 

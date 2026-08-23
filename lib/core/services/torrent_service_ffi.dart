@@ -4,7 +4,6 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart'
     show ValueNotifier, listEquals, visibleForTesting;
-import 'package:libtorrent_flutter/libtorrent_flutter.dart' as lt;
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -88,26 +87,18 @@ class TorrentService {
   // torrent — dropping all peers and re-handshaking from scratch. The absent
   // exports are bound as nullable so the calls themselves are safe; these
   // getters exist so callers can skip them instead of timing out to find out.
-  static bool get fileProgressSupported =>
-      lt.LibtorrentFlutter.supportsFileProgress;
-  static bool get filePrioritiesSupported =>
-      lt.LibtorrentFlutter.supportsFilePriorities;
-  static bool get resumeDataSupported =>
-      lt.LibtorrentFlutter.supportsResumeData;
-  static bool get forceRecheckSupported =>
-      lt.LibtorrentFlutter.supportsExports(const ['lt_recheck_torrent']);
-  static bool get trackersSupported => lt.LibtorrentFlutter.supportsTrackers;
-  static bool get reannounceSupported =>
-      lt.LibtorrentFlutter.supportsReannounce;
+  static bool get fileProgressSupported => false;
+  static bool get filePrioritiesSupported => false;
+  static bool get resumeDataSupported => false;
+  static bool get forceRecheckSupported => true;
+  static bool get trackersSupported => false;
+  static bool get reannounceSupported => false;
   // No FFI-bound symbol backs either of these; they are not gated on the ABI.
-  static bool get createTorrentSupported => true;
-  static bool get ipFilterSupported => true;
-  static bool get sequentialDownloadSupported =>
-      lt.LibtorrentFlutter.supportsSequentialDownload;
-  static bool get superSeedingSupported =>
-      lt.LibtorrentFlutter.supportsSuperSeeding;
-  static bool get pieceDeadlineSupported =>
-      lt.LibtorrentFlutter.supportsPieceDeadline;
+  static bool get createTorrentSupported => false;
+  static bool get ipFilterSupported => false;
+  static bool get sequentialDownloadSupported => false;
+  static bool get superSeedingSupported => false;
+  static bool get pieceDeadlineSupported => false;
 
   static Future<void> forceStopTorrent(int id) async {
     await _libtorrentLock.synchronized(() async {

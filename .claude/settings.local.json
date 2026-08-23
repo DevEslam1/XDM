@@ -25,7 +25,16 @@
       "Bash(cd \"d:/Courses/Projectss/dmx\" && echo \"=== 1.9.2 lt_get_all_statuses ===\" && grep -n \"lt_get_all_statuses\" -A 25 ~/AppData/Local/Pub/Cache/hosted/pub.dev/libtorrent_flutter-1.9.2/src/torrent_bridge.cpp | head -35)",
       "Bash(cd \"d:/Courses/Projectss/dmx\" && echo \"=== native id allocation \\(1.9.2 cpp = shipped .so\\) ===\" && grep -n \"next_id\\\\|next_torrent_id\" ~/AppData/Local/Pub/Cache/hosted/pub.dev/libtorrent_flutter-1.9.2/src/torrent_bridge.cpp | head -20; echo; echo \"=== local 2.0.0 cpp ===\"; grep -n \"next_id\\\\|next_torrent_id\" packages/libtorrent_flutter/src/torrent_bridge.cpp | head -20)",
       "Bash(cd \"d:/Courses/Projectss/dmx\" && echo \"=== add-path failure returns \\(shipped .so source\\) ===\" && sed -n '2060,2125p' ~/AppData/Local/Pub/Cache/hosted/pub.dev/libtorrent_flutter-1.9.2/src/torrent_bridge.cpp | grep -n \"return\\\\|lt_add\\\\|int64_t id\")",
-      "Bash(echo \"exit: $?\")"
+      "Bash(echo \"exit: $?\")",
+      "Bash(sort -t: -k2 -rn)",
+      "Bash(awk -F: '{s+=$2} END {print \"total mounted guards:\", s}')",
+      "Bash(awk 'NR>=1246 && NR<=2760 && /^  }$/ {print \"build ends approx line \" NR; exit}' lib/features/add_download/widgets/add_download_dialog.dart)",
+      "Bash(grep -Ei '\\\\.\\(jks|keystore|p12|pem|key|env|mobileprovision|cer|p8\\)$|key\\\\.properties|\\\\.env')",
+      "Bash(dart check_l10n.dart)",
+      "Bash(grep -rniE \"api[_-]?key|secret|[a-z0-9]{32,}\" landing/index.html)",
+      "Bash(sed 's/^[0-9:]* +[0-9]* -[0-9]*: //')",
+      "Bash(echo \"EXIT=$?\")",
+      "Read(//tmp/**)"
     ]
   }
 }

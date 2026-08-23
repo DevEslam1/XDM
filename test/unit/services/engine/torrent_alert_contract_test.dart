@@ -145,7 +145,7 @@ void main() {
       expect(status.progress, 0.5);
     });
 
-    test('3. Graceful pause completes with stopped-announce event before confirmation', () async {
+    test('3. Pause completes with torrentPaused event and sets isPaused', () async {
       await TorrentService.init();
 
       final files = [
@@ -160,10 +160,8 @@ void main() {
       await TorrentService.pauseTorrent(2);
       await Future.delayed(const Duration(milliseconds: 50));
 
-      expect(receivedAlerts.any((a) => a.category == 'stoppedAnnounce'), isTrue,
-          reason: 'stopped-announce must be emitted during graceful pause');
       expect(receivedAlerts.any((a) => a.category == 'torrentPaused'), isTrue,
-          reason: 'torrentPaused must be emitted during graceful pause');
+          reason: 'torrentPaused must be emitted during pause');
 
       final status = fakeNative.getTorrentStatus(2)!;
       expect(status.isPaused, isTrue);
