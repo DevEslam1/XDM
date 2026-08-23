@@ -82,6 +82,9 @@ TorrentInfo _toTorrentInfo(LtTorrentStatus s, [LibtorrentFlutter? engine]) {
     totalUploaded: s.totalUploaded < 0 ? 0 : s.totalUploaded,
     numPeers: s.numPeers < 0 ? 0 : s.numPeers,
     numSeeds: s.numSeeds < 0 ? 0 : s.numSeeds,
+    // Swarm totals from the tracker/DHT, distinct from the connected counts
+    // above. Negative means the engine has no figure yet — report unknown
+    // rather than 0, which would read as "nobody has this file".
     numComplete: s.numComplete < 0 ? null : s.numComplete,
     numIncomplete: s.numIncomplete < 0 ? null : s.numIncomplete,
     numPieces: s.numPieces < 0 ? 0 : s.numPieces,
@@ -183,6 +186,72 @@ class LibtorrentFlutter {
   /// a stale binary yields zeros for seeds, peers, and sizes rather than
   /// erroring.
   static BridgeAbiReport? get abiReport => _abiReport;
+
+  /// Whether the loaded binary exports every symbol in [symbols].
+  ///
+  /// Optional exports are bound as nullable, so a call into an absent one is a
+  /// silent no-op that returns "unknown" rather than throwing. That is safe but
+  /// invisible: callers that retry, or that wait on an alert the native side
+  /// will never post, spend their whole timeout budget discovering it. Ask
+  /// here first and skip the work.
+  ///
+  /// Returns true before [init] — nothing is known to be missing yet, and the
+  /// nullable bindings still make the call itself safe.
+  static bool supportsExports(Iterable<String> symbols) {
+    final missing = _abiReport?.missingSymbols;
+    if (missing == null || missing.isEmpty) return true;
+    for (final s in symbols) {
+      if (missing.contains(s)) return false;
+    }
+    return true;
+  }
+
+  /// Fast-resume is usable end to end: the blob can be produced *and* read back.
+  ///
+  /// Both halves matter. Without `lt_save_resume_data` no alert is ever posted,
+  /// so every graceful pause waits out its timeout and then force-stops —
+  /// which drops all peer connections and restarts the handshake from scratch.
+  static bool get supportsResumeData => supportsExports(const [
+        'lt_save_resume_data',
+        'lt_take_saved_resume_data',
+      ]);
+
+  /// Per-file byte counters (`lt_get_file_progress`) are available.
+  static bool get supportsFileProgress =>
+      supportsExports(const ['lt_get_file_progress']);
+
+  /// Per-file priorities can be read back, not just written.
+  static bool get supportsFilePriorities =>
+      supportsExports(const ['lt_get_file_priorities']);
+
+  /// Tracker list can be enumerated and edited.
+  static bool get supportsTrackers => supportsExports(const [
+        'lt_get_trackers',
+        'lt_add_tracker',
+        'lt_remove_tracker',
+      ]);
+
+  /// A manual reannounce can actually reach the trackers/DHT.
+  static bool get supportsReannounce => supportsExports(const [
+        'lt_force_reannounce',
+        'lt_force_dht_announce',
+      ]);
+
+  /// Resume data can be supplied at add time, avoiding a full recheck.
+  static bool get supportsAddWithResume => supportsExports(const [
+        'lt_add_torrent_file_resume',
+        'lt_add_magnet_resume',
+        'lt_load_resume_data',
+      ]);
+
+  static bool get supportsSequentialDownload =>
+      supportsExports(const ['lt_set_sequential_download']);
+
+  static bool get supportsSuperSeeding =>
+      supportsExports(const ['lt_set_super_seeding']);
+
+  static bool get supportsPieceDeadline =>
+      supportsExports(const ['lt_set_piece_deadline']);
 
   /// Initialize the libtorrent engine.
   ///
@@ -344,12 +413,17 @@ class LibtorrentFlutter {
 
   /// Trigger save_resume_data and await the native alert.
   Future<List<int>?> saveResumeData(int torrentId, {Duration timeout = const Duration(seconds: 5)}) async {
+    final saveResume = _b.saveResumeData;
+    // No lt_save_resume_data export means the native side will never post a
+    // save_resume_data alert, so the completer below could only ever be
+    // resolved by its own timeout. Registering it would burn `timeout` per
+    // call and leak an entry in _saveResumeCompleters that nothing completes.
+    // Report "unavailable" straight away and let callers gate on
+    // resumeDataSupported instead.
+    if (saveResume == null) return null;
     final completer = Completer<List<int>?>();
     _saveResumeCompleters.putIfAbsent(torrentId, () => []).add(completer);
-    final saveResume = _b.saveResumeData;
-    if (saveResume != null) {
-      saveResume(_session, torrentId);
-    }
+    saveResume(_session, torrentId);
     return completer.future.timeout(timeout, onTimeout: () => null);
   }
 
@@ -435,8 +509,18 @@ class LibtorrentFlutter {
     }
     final cached = _cachedFilePriorities[torrentId];
     if (cached != null) return List.unmodifiable(cached);
+    // No `lt_get_file_priorities` export. Derive the engine default (4 =
+    // normal) from the file count — but cache it, because this runs from
+    // getAllStatuses on every poll tick. Uncached, each tick re-entered
+    // getFiles, which calls lt_get_file_count + lt_get_files and rebuilds a
+    // 1.5KB-per-file struct array with two string conversions per file. On the
+    // UI isolate at poll cadence that was enough to drop ~100% of frames and
+    // flood the log with `lt_get_files: successfully processed N files`.
     final files = getFiles(torrentId);
-    return List.filled(files.length, 4);
+    if (files.isEmpty) return const [];
+    final defaults = List.filled(files.length, 4);
+    _cachedFilePriorities[torrentId] = defaults;
+    return List.unmodifiable(defaults);
   }
 
   /// Set download priorities per file (0 = skip, 1-7 = priority levels).
@@ -883,14 +967,20 @@ class LibtorrentFlutter {
 
       for (var i = 0; i < n; i++) {
         final raw = buf[i];
-        final info = _toTorrentInfo(raw, this);
-        seen.add(info.id);
+        // raw.id is the same value _toTorrentInfo copies into TorrentInfo.id,
+        // so read it straight from the struct instead of decoding a whole
+        // snapshot just to learn the id.
+        seen.add(raw.id);
         // file_progress is not part of torrent_status. Populate its cache at
         // the same boundary so every UI consumer gets complete snapshots.
         if (raw.hasMetadata != 0) {
-          try { getFileProgress(info.id); } catch (_) {}
-          try { getFilePriorities(info.id); } catch (_) {}
+          try { getFileProgress(raw.id); } catch (_) {}
+          try { getFilePriorities(raw.id); } catch (_) {}
         }
+        // Built once, after the caches above are warm. This used to run twice
+        // per torrent per tick and throw the first result away; each call
+        // decodes name (512B) and savePath (1024B) into Dart strings, so the
+        // duplicate doubled the cost of every poll on the UI isolate.
         final completeInfo = _toTorrentInfo(raw, this);
         final old = _torrents[completeInfo.id];
         if (old == null || _changed(old, completeInfo)) {

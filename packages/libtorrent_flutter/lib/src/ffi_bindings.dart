@@ -9,6 +9,27 @@ import 'package:ffi/ffi.dart';
 final class LtSessionOpaque extends Opaque {}
 
 // ─── lt_torrent_status ────────────────────────────────────────────────────────
+//
+// Mirrors the ABI-2 `lt_torrent_status` (1880 bytes), which is what every
+// liblibtorrent_flutter binary shipped in prebuilt/android/ actually writes.
+// Do not add or remove fields in the middle of this struct without a matching
+// binary.
+//
+// The shipped binaries are a hybrid and it matters: they carry the ABI-2
+// *struct* but only the ABI-1 *export set* (see missingSymbols — 15 ABI-2 entry
+// points are absent). So the export list is not evidence about the layout, and
+// an earlier revision of this file drew exactly that wrong conclusion: it read
+// the 29-symbol export table, matched it against libtorrent_flutter 1.9.2,
+// removed `numComplete`/`numIncomplete` to match 1.9.2's 1872-byte C header,
+// and shifted every field from `numPieces` on 8 bytes early. `hasMetadata` then
+// landed on native `is_paused` — 0 for any running torrent — so a torrent added
+// from a .torrent file with fully-known metadata reported "no metadata": the UI
+// showed 0/1 files, per-file progress never populated, and haltTorrent skipped
+// the graceful pause every time.
+//
+// What settled it: native logged `lt_get_files: successfully processed 1 files`
+// and knew the total size, so native has_metadata was unambiguously 1, while
+// Dart read 0 at the 1872-byte offset. Only the 1880-byte layout explains that.
 final class LtTorrentStatus extends Struct {
   @Int64()   external int id;
   @Array(512)  external Array<Char> name;
@@ -18,13 +39,13 @@ final class LtTorrentStatus extends Struct {
   @Float()   external double progress;
   @Int32()   external int downloadRate;
   @Int32()   external int uploadRate;
-  @Int64()   external int totalWantedDone;   // Renamed from totalDone
+  @Int64()   external int totalWantedDone;
   @Int64()   external int totalWanted;
   @Int64()   external int totalUploaded;
   @Int32()   external int numPeers;
   @Int32()   external int numSeeds;
-  @Int32()   external int numComplete;       // Swarm seeds (-1 = unknown)
-  @Int32()   external int numIncomplete;     // Swarm peers (-1 = unknown)
+  @Int32()   external int numComplete;    // swarm seeds, ABI 2
+  @Int32()   external int numIncomplete;  // swarm leechers, ABI 2
   @Int32()   external int numPieces;
   @Int32()   external int piecesDone;
   @Int32()   external int isPaused;
@@ -33,11 +54,20 @@ final class LtTorrentStatus extends Struct {
   @Int32()   external int queuePosition;
 }
 
-/// Bridge ABI revision these bindings were written against.
-/// Must match `LT_BRIDGE_ABI` in `src/torrent_bridge.h`.
-const int kExpectedBridgeAbi = 2;
+/// Bridge ABI revision these bindings are pinned to.
+///
+/// The shipped binaries emit no `bridge_abi=` / `status_size=` marker on
+/// `lt_version()`, so a binary reporting no markers is treated as this revision
+/// and is the expected, compatible case — see [BridgeAbiReport]. The absence of
+/// a marker says nothing about the struct layout, which is separately pinned by
+/// [kExpectedStatusSize].
+const int kExpectedBridgeAbi = 1;
 
-/// Byte size of [LtTorrentStatus] as laid out by `src/torrent_bridge.h`.
+/// Byte size of [LtTorrentStatus] as laid out by the shipped binaries.
+///
+/// 1880 = the ABI-2 layout, including `numComplete`/`numIncomplete`. Confirmed
+/// at runtime rather than inferred from the export table: see the note on
+/// [LtTorrentStatus] for why the 29-symbol export set is not evidence here.
 const int kExpectedStatusSize = 1880;
 
 // Add ABI guard
@@ -49,9 +79,20 @@ bool verifyStatusStructContract() {
 
 /// Result of handshaking these bindings against the loaded native binary.
 ///
-/// A binary built from an older `torrent_bridge.h` writes a differently sized
-/// `lt_torrent_status`, which makes every field after the drift point decode as
-/// garbage. That failure is otherwise silent, so it is reported explicitly.
+/// These bindings are pinned to ABI [kExpectedBridgeAbi] (see
+/// [LtTorrentStatus]). Two distinct things are reported, and only one of them
+/// is fatal:
+///
+///  * **Layout agreement** — whether the binary lays out `lt_torrent_status`
+///    the way [LtTorrentStatus] reads it. A disagreement is silent but
+///    catastrophic: every field past the drift point decodes as unrelated
+///    memory, and `lt_get_all_statuses` strides wrong. This is fatal, and
+///    [isCompatible] goes false.
+///  * **Absent optional exports** — ABI-2-only entry points (resume data,
+///    trackers, per-file progress, sequential download, …) that the pinned
+///    binaries never exported. These are expected to be absent, are bound as
+///    nullable, and callers degrade to "unavailable". Not fatal; surfaced
+///    through [missingSymbols] and [describe] for diagnostics only.
 class BridgeAbiReport {
   const BridgeAbiReport({
     required this.rawVersion,
@@ -69,7 +110,9 @@ class BridgeAbiReport {
   /// `sizeof(lt_torrent_status)` reported by the binary, or null if unreported.
   final int? nativeStatusSize;
 
-  /// Exported functions declared by these bindings but absent from the binary.
+  /// Optional exports declared by these bindings but absent from the binary.
+  ///
+  /// Expected to be non-empty on the pinned binaries. Non-fatal.
   final List<String> missingSymbols;
 
   int get expectedAbi => kExpectedBridgeAbi;
@@ -78,50 +121,59 @@ class BridgeAbiReport {
   /// libtorrent version, with the bridge markers stripped.
   String get libtorrentVersion => rawVersion.split(';').first;
 
-  /// A binary older than the ABI marker cannot be verified at all.
+  /// Whether the binary emits the ABI markers at all.
+  ///
+  /// False means it predates them, which is precisely ABI 1 — the revision
+  /// these bindings target. Absence is therefore agreement, not a fault.
   bool get reportsAbi => nativeAbi != null;
 
-  bool get abiMatches => nativeAbi == kExpectedBridgeAbi;
+  /// An unmarked binary is ABI 1 by definition.
+  int get effectiveNativeAbi => nativeAbi ?? 1;
 
-  bool get statusSizeMatches => nativeStatusSize == kExpectedStatusSize;
+  bool get abiMatches => effectiveNativeAbi == kExpectedBridgeAbi;
 
-  /// True only when the binary is a safe match for these bindings.
-  bool get isCompatible =>
-      reportsAbi && abiMatches && statusSizeMatches && missingSymbols.isEmpty;
+  /// An unmarked binary cannot self-report a size; ABI 1 implies the pinned one.
+  bool get statusSizeMatches =>
+      nativeStatusSize == null || nativeStatusSize == kExpectedStatusSize;
+
+  /// True when the binary's `lt_torrent_status` layout is safe to decode.
+  ///
+  /// Deliberately independent of [missingSymbols]: absent optional exports cost
+  /// features, never correctness, so they must not suppress otherwise-valid
+  /// status data.
+  bool get isCompatible => abiMatches && statusSizeMatches;
+
+  /// Whether any ABI-2-only feature is unavailable on this binary.
+  bool get hasDegradedFeatures => missingSymbols.isNotEmpty;
 
   String describe() {
     if (isCompatible) {
-      return 'libtorrent $libtorrentVersion, bridge ABI $nativeAbi — OK';
+      final abi = nativeAbi == null
+          ? 'bridge ABI 1 (unmarked)'
+          : 'bridge ABI $nativeAbi';
+      final base = 'libtorrent $libtorrentVersion, $abi — OK';
+      if (!hasDegradedFeatures) return base;
+      return '$base; ${missingSymbols.length} optional exports absent, '
+          'those features report unavailable: ${missingSymbols.join(', ')}';
     }
     final problems = <String>[];
-    if (!reportsAbi) {
+    if (!abiMatches) {
       problems.add(
-        'binary reports no bridge_abi marker, so it predates ABI '
+        'bridge ABI $effectiveNativeAbi, but these bindings are pinned to '
         '$kExpectedBridgeAbi (raw version: "$rawVersion")',
       );
-    } else if (!abiMatches) {
-      problems.add('bridge ABI $nativeAbi, expected $kExpectedBridgeAbi');
     }
-    if (nativeStatusSize == null) {
-      problems.add(
-        'binary reports no status_size; these bindings read '
-        '$kExpectedStatusSize bytes per lt_torrent_status',
-      );
-    } else if (!statusSizeMatches) {
+    if (nativeStatusSize != null && !statusSizeMatches) {
       problems.add(
         'lt_torrent_status is $nativeStatusSize bytes native but '
         '$kExpectedStatusSize bytes in Dart — every field past the drift '
         'point decodes as garbage, and lt_get_all_statuses strides mismatch',
       );
     }
-    if (missingSymbols.isNotEmpty) {
-      problems.add(
-        '${missingSymbols.length} missing exports: '
-        '${missingSymbols.join(', ')}',
-      );
-    }
     return 'INCOMPATIBLE native bridge — ${problems.join('; ')}. '
-        'Rebuild liblibtorrent_flutter from src/torrent_bridge.cpp.';
+        'The binary is newer than these bindings: either rebuild it from '
+        'src/torrent_bridge.cpp at ABI $kExpectedBridgeAbi, or unpin '
+        'LtTorrentStatus in ffi_bindings.dart to match it.';
   }
 }
 

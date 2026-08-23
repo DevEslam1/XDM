@@ -10,7 +10,22 @@
       "Bash(flutter analyze *)",
       "Bash(flutter test *)",
       "Bash(flutter build *)",
-      "Bash(python -c 'import zipfile *)"
+      "Bash(python -c 'import zipfile *)",
+      "Bash(git log *)",
+      "Read(//c/Users/Eslam/AppData/Local/Pub/Cache/hosted/pub.dev/**)",
+      "Bash(echo \"=== exit: $? ===\")",
+      "Bash(/c/Python314/python tool/probe_elf_symbols.py ~/AppData/Local/Pub/Cache/hosted/pub.dev/libtorrent_flutter-1.9.2/prebuilt/android/arm64-v8a/liblibtorrent_flutter.so)",
+      "Bash(/c/Python314/python tool/probe_elf_symbols.py \"packages/libtorrent_flutter/prebuilt/android/arm64-v8a/liblibtorrent_flutter.so\")",
+      "Bash(grep -E \"total|lt_add_magnet$|lt_version$|lt_get_status$\")",
+      "Bash(cd ~/AppData/Local/Pub/Cache/hosted/pub.dev/libtorrent_flutter-1.9.2 && echo \"=== 1.9.2 C header ===\" && find . -name \"*.h\" -o -name \"*.hpp\" | head; echo \"---\"; grep -rn \"lt_torrent_status\" -A 40 src/torrent_bridge.h 2>/dev/null | head -60)",
+      "Read(//c/Users/Eslam/AppData/Local/Pub/Cache/hosted/pub.dev/libtorrent_flutter-1.9.2/**)",
+      "Bash(cd \"d:/Courses/Projectss/dmx\" && echo \"=== 1.9.2 lt_torrent_status body ===\" && sed -n '30,62p' ~/AppData/Local/Pub/Cache/hosted/pub.dev/libtorrent_flutter-1.9.2/src/torrent_bridge.h)",
+      "Read(//c/Users/Eslam/AppData/Local/Pub/Cache/hosted/pub.dev/libtorrent_flutter-1.9.2/src/**)",
+      "Bash(cd \"d:/Courses/Projectss/dmx\" && echo \"=== 1.9.2 fill_status \\(what the shipped .so writes\\) ===\" && grep -n \"fill_status\" -A 40 ~/AppData/Local/Pub/Cache/hosted/pub.dev/libtorrent_flutter-1.9.2/src/torrent_bridge.cpp | head -55)",
+      "Bash(cd \"d:/Courses/Projectss/dmx\" && echo \"=== 1.9.2 lt_get_all_statuses ===\" && grep -n \"lt_get_all_statuses\" -A 25 ~/AppData/Local/Pub/Cache/hosted/pub.dev/libtorrent_flutter-1.9.2/src/torrent_bridge.cpp | head -35)",
+      "Bash(cd \"d:/Courses/Projectss/dmx\" && echo \"=== native id allocation \\(1.9.2 cpp = shipped .so\\) ===\" && grep -n \"next_id\\\\|next_torrent_id\" ~/AppData/Local/Pub/Cache/hosted/pub.dev/libtorrent_flutter-1.9.2/src/torrent_bridge.cpp | head -20; echo; echo \"=== local 2.0.0 cpp ===\"; grep -n \"next_id\\\\|next_torrent_id\" packages/libtorrent_flutter/src/torrent_bridge.cpp | head -20)",
+      "Bash(cd \"d:/Courses/Projectss/dmx\" && echo \"=== add-path failure returns \\(shipped .so source\\) ===\" && sed -n '2060,2125p' ~/AppData/Local/Pub/Cache/hosted/pub.dev/libtorrent_flutter-1.9.2/src/torrent_bridge.cpp | grep -n \"return\\\\|lt_add\\\\|int64_t id\")",
+      "Bash(echo \"exit: $?\")"
     ]
   }
 }

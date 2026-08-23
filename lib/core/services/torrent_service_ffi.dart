@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart'
     show ValueNotifier, listEquals, visibleForTesting;
+import 'package:libtorrent_flutter/libtorrent_flutter.dart' as lt;
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -58,6 +59,15 @@ class TorrentService {
 
   static void _startPeriodicResumeSave() {
     _periodicResumeTimer?.cancel();
+    // Nothing to save without the export — the timer would wake every 30s only
+    // to have every call report unavailable.
+    if (!resumeDataSupported) {
+      _log.info(
+        'Periodic resume-data save disabled: this native binary has no '
+        'lt_save_resume_data export, so torrents will re-check on next launch.',
+      );
+      return;
+    }
     _periodicResumeTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (isInitialized && _activeTorrentIds.isNotEmpty) {
         saveAllResumeData();
@@ -70,16 +80,34 @@ class TorrentService {
     _periodicResumeTimer = null;
   }
 
-  static bool get fileProgressSupported => true;
-  static bool get filePrioritiesSupported => true;
-  static bool get resumeDataSupported => true;
-  static bool get forceRecheckSupported => true;
-  static bool get trackersSupported => true;
+  // Capability flags, derived from what the loaded binary actually exports
+  // rather than asserted. These were hardcoded `true`, which made the app
+  // request work the native side could not perform: `resumeDataSupported`
+  // sent every graceful pause into a 5s wait for a save_resume_data alert that
+  // no export could ever post, three times over, and then force-stopped the
+  // torrent — dropping all peers and re-handshaking from scratch. The absent
+  // exports are bound as nullable so the calls themselves are safe; these
+  // getters exist so callers can skip them instead of timing out to find out.
+  static bool get fileProgressSupported =>
+      lt.LibtorrentFlutter.supportsFileProgress;
+  static bool get filePrioritiesSupported =>
+      lt.LibtorrentFlutter.supportsFilePriorities;
+  static bool get resumeDataSupported =>
+      lt.LibtorrentFlutter.supportsResumeData;
+  static bool get forceRecheckSupported =>
+      lt.LibtorrentFlutter.supportsExports(const ['lt_recheck_torrent']);
+  static bool get trackersSupported => lt.LibtorrentFlutter.supportsTrackers;
+  static bool get reannounceSupported =>
+      lt.LibtorrentFlutter.supportsReannounce;
+  // No FFI-bound symbol backs either of these; they are not gated on the ABI.
   static bool get createTorrentSupported => true;
   static bool get ipFilterSupported => true;
-  static bool get sequentialDownloadSupported => true;
-  static bool get superSeedingSupported => true;
-  static bool get pieceDeadlineSupported => true;
+  static bool get sequentialDownloadSupported =>
+      lt.LibtorrentFlutter.supportsSequentialDownload;
+  static bool get superSeedingSupported =>
+      lt.LibtorrentFlutter.supportsSuperSeeding;
+  static bool get pieceDeadlineSupported =>
+      lt.LibtorrentFlutter.supportsPieceDeadline;
 
   static Future<void> forceStopTorrent(int id) async {
     await _libtorrentLock.synchronized(() async {
@@ -241,20 +269,30 @@ class TorrentService {
   static double _shareRatioLimit = 2.0;
   static int _maxSeedingTimeMinutes = 0;
 
-  /// Whether the loaded native bridge matches the Dart FFI bindings.
+  /// Whether the loaded native bridge lays out `lt_torrent_status` the way the
+  /// Dart FFI bindings read it.
   ///
-  /// False means the bundled `liblibtorrent_flutter` binary is stale. The
-  /// failure mode is worse than missing data: because the bindings read a
-  /// fixed-size `lt_torrent_status` (see `kExpectedStatusSize`), a binary that
-  /// lays the struct out differently makes every field past the drift point
-  /// decode as unrelated memory — a freshly added torrent can report 100%
-  /// progress with zero bytes done and invented transfer rates. Exports such as
-  /// `lt_get_file_progress`, `lt_get_trackers` and the resume-data functions are
-  /// also missing, so per-file progress, swarm counters and fast resume are all
-  /// unavailable until the binary is rebuilt from `src/torrent_bridge.cpp`.
+  /// This tracks *struct layout agreement only*. The bindings are pinned to
+  /// bridge ABI 1, which is what the bundled `liblibtorrent_flutter` binaries
+  /// actually provide, so the normal case is true.
+  ///
+  /// False means the binary disagrees about the struct — in practice, a binary
+  /// newer than the bindings. The failure mode is worse than missing data:
+  /// because the bindings read a fixed-size `lt_torrent_status` (see
+  /// `kExpectedStatusSize`), a differing layout makes every field past the drift
+  /// point decode as unrelated memory — a freshly added torrent can report 100%
+  /// progress with zero bytes done and invented transfer rates.
   ///
   /// Callers must not present anything derived from the status struct as fact
   /// while this is false.
+  ///
+  /// Note what this deliberately does *not* cover: ABI-2-only exports such as
+  /// `lt_get_file_progress`, `lt_get_trackers` and the resume-data functions are
+  /// absent from the pinned binaries, so per-file progress, tracker management,
+  /// swarm counters and fast resume are unavailable. Those cost features, never
+  /// correctness, so they are reported through `bridgeDiagnostics` and must not
+  /// gate this flag — treating them as incompatibility is what previously
+  /// blanked speeds, peers, seeds and downloaded sizes to zero.
   static bool bridgeCompatible = true;
 
   /// Last bridge health report, or null when the platform has no native bridge.
@@ -1522,19 +1560,20 @@ class TorrentServiceImpl implements ITorrentService {
   @override
   bool get resumeDataSupported => TorrentService.resumeDataSupported;
   @override
-  bool get forceRecheckSupported => true;
+  bool get forceRecheckSupported => TorrentService.forceRecheckSupported;
   @override
-  bool get trackersSupported => true;
+  bool get trackersSupported => TorrentService.trackersSupported;
   @override
-  bool get createTorrentSupported => true;
+  bool get createTorrentSupported => TorrentService.createTorrentSupported;
   @override
-  bool get ipFilterSupported => true;
+  bool get ipFilterSupported => TorrentService.ipFilterSupported;
   @override
-  bool get sequentialDownloadSupported => true;
+  bool get sequentialDownloadSupported =>
+      TorrentService.sequentialDownloadSupported;
   @override
-  bool get superSeedingSupported => true;
+  bool get superSeedingSupported => TorrentService.superSeedingSupported;
   @override
-  bool get pieceDeadlineSupported => true;
+  bool get pieceDeadlineSupported => TorrentService.pieceDeadlineSupported;
   @override
   bool get sequentialDownloadEnabled =>
       TorrentService.sequentialDownloadEnabled;

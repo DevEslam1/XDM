@@ -204,7 +204,14 @@ class LibtorrentNativeImpl implements ITorrentNative {
 
   @override
   Future<void> pauseTorrent(int id, {bool graceful = true}) async {
-    if (graceful) {
+    // A graceful pause flushes resume data first, which means waiting for a
+    // save_resume_data alert. When the binary has no lt_save_resume_data export
+    // that alert never arrives, so this block used to burn its full 5s timeout,
+    // report the pause unconfirmed, and hand the caller a force-stop — tearing
+    // down every peer connection and restarting the handshake from scratch on
+    // the next resume. Skip straight to the pause when resume data is
+    // unavailable: there is nothing to flush.
+    if (graceful && lt.LibtorrentFlutter.supportsResumeData) {
       try {
         final alertFuture = alertStream
             .firstWhere(
