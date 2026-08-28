@@ -10,6 +10,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:synchronized/synchronized.dart';
 
+import '../../features/settings/provider/settings_provider.dart';
 import '../domain/torrent_models.dart';
 import '../interfaces/i_torrent_native.dart';
 import '../interfaces/i_torrent_service.dart';
@@ -33,8 +34,10 @@ enum TorrentSessionLifecycleState {
 }
 
 class TorrentService {
-  static final Lock _libtorrentLock = Lock();
-  // FIX-1.3: Lock TorrentService state mutations
+  // FIX(P2.6.10): Unified single lock for all mutable state — the previous
+  // two-lock design (_libtorrentLock + _torrentLock) caused data races since
+  // both mutated the same maps (_activeTorrentIds, _latestProgress, etc.)
+  // without mutual exclusion across the two Lock instances.
   static final Lock _torrentLock = Lock();
   static TorrentSessionLifecycleState _state =
       TorrentSessionLifecycleState.uninitialized;
@@ -110,9 +113,38 @@ class TorrentService {
   static bool get sequentialDownloadSupported => false;
   static bool get superSeedingSupported => false;
   static bool get pieceDeadlineSupported => false;
+  // The 1.9.2 bridge maps addWebSeed/setProxy/setSslCertificate to logged
+  // no-ops, so the "Advanced Controls" sheet would accept input and report
+  // success while doing nothing. Gated false so callers hide those controls.
+  static bool get webSeedsSupported => false;
+  static bool get proxySupported => false;
+  static bool get sslSupported => false;
+  // libtorrent_flutter 1.9.2's BtConfig exposes no knob for peer exchange,
+  // local peer/service discovery, standalone NAT-PMP (it is folded into the
+  // UPnP toggle), anonymous mode, or a per-torrent connection cap. Gated false
+  // so the settings UI hides these instead of showing functionless toggles.
+  static bool get peerExchangeSupported => false;
+  static bool get localPeerDiscoverySupported => false;
+  static bool get natPmpSupported => false;
+  static bool get anonymousModeSupported => false;
+  static bool get perTorrentConnectionLimitSupported => false;
 
   static Future<void> forceStopTorrent(int id) async {
-    await _libtorrentLock.synchronized(() async {
+    await _torrentLock.synchronized(() async {
+      // FIX(P2.6.10): Attempt native pause BEFORE cleaning Dart-side state so
+      // the native handle is properly stopped. If it fails, we still clean up
+      // Dart-side (the caller expects it), but we log the failure so operators
+      // know the native session may hold an orphaned handle.
+      try {
+        await _native.pauseTorrent(id, graceful: false);
+      } catch (e, st) {
+        _log.warning(
+          'forceStopTorrent: native pause failed for id=$id '
+          '(native handle may be orphaned)',
+          e,
+          st,
+        );
+      }
       _activeTorrentIds.remove(id);
       _latestProgress.remove(id);
       _latestStats.remove(id);
@@ -120,9 +152,6 @@ class TorrentService {
       _torrentSources.remove(id);
       _cachedPrioritiesSnapshot.remove(id);
       _latestResumeBlobs.remove(id);
-      try {
-        await _native.pauseTorrent(id, graceful: false);
-      } catch (_) {}
     });
   }
 
@@ -316,7 +345,11 @@ class TorrentService {
     }
   }
 
-  static bool get sequentialDownloadEnabled => _sequentialDownload;
+  // FIX(H-9): Only report sequential mode as active when the native binary
+  // actually supports it — the setter is a no-op on libtorrent_flutter 1.9.2,
+  // so the flag would mislead the per-file progress estimator.
+  static bool get sequentialDownloadEnabled =>
+      _sequentialDownload && sequentialDownloadSupported;
   static double get shareRatioLimit => _shareRatioLimit;
   static int get maxSeedingTimeMinutes => _maxSeedingTimeMinutes;
 
@@ -331,6 +364,8 @@ class TorrentService {
         connectionsLimit: s.torrentConnectionsLimit,
         downloadRateLimit: s.downloadRateLimitKbps * 1024,
         uploadRateLimit: s.uploadRateLimitKbps * 1024,
+        disableUtp: !s.enableUtp,
+        cacheSize: s.diskCacheSizeBytes,
       );
       _native.configureSession(config);
 
@@ -346,7 +381,17 @@ class TorrentService {
     }
   }
 
-  static void _configureSessionFromSettings() => configureSession();
+  static void _configureSessionFromSettings() {
+    TorrentSessionSettings settings;
+    try {
+      settings = SettingsProvider.instance.toTorrentSessionSettings();
+    } catch (e) {
+      _log.warning(
+          'Failed to read torrent session settings, using defaults: $e');
+      settings = const TorrentSessionSettings();
+    }
+    configureSession(settings);
+  }
 
   static void _startTrackingAlerts() {
     _alertsSub?.cancel();
@@ -665,13 +710,27 @@ class TorrentService {
     _disposeCompleter = null;
   }
 
+  // FIX P0-6: Enrich tracker-less magnets with default trackers so
+  // metadata can resolve via trackers when DHT is unavailable (1.9.2 stub)
+  // or behind NAT without bootstrap nodes.  See tracker_manager defaultTrackers.
+  static String _enrichMagnetWithTrackersIfNeeded(String magnetUri) {
+    if (!magnetUri.toLowerCase().startsWith('magnet:')) return magnetUri;
+    if (magnetUri.contains('&tr=') || magnetUri.contains('?tr=')) return magnetUri;
+    final buffer = StringBuffer(magnetUri);
+    for (final tr in TrackerManager.defaultTrackers.take(5)) {
+      buffer.write('&tr=${Uri.encodeComponent(tr)}');
+    }
+    return buffer.toString();
+  }
+
   // FIX-1.3: Lock TorrentService state mutations
   static int addMagnet(String magnetUri, String savePath,
       {List<int>? resumeData}) {
     if (!isInitialized) return -1;
     _startTrackingUpdates();
+    final enrichedUri = _enrichMagnetWithTrackersIfNeeded(magnetUri);
     try {
-      final id = _native.addMagnet(magnetUri, savePath, resumeData: resumeData);
+      final id = _native.addMagnet(enrichedUri, savePath, resumeData: resumeData);
       if (id >= 0) {
         _torrentLock.synchronized(() {
           _activeTorrentIds.add(id);
@@ -764,11 +823,21 @@ class TorrentService {
         );
 
         if (attempt <= maxRetries) {
-          onStatusUpdate?.call(
-            'Retrying metadata fetch with additional default trackers (Attempt ${attempt + 1})...',
-          );
-          for (final tracker in TrackerManager.defaultTrackers) {
-            addTracker(id, tracker);
+          // FIX(H-8): Only add trackers if the native binary supports it.
+          // Previous code called addTracker unconditionally, which is a no-op
+          // on libtorrent_flutter 1.9.2, making the "retrying with trackers"
+          // message misleading.
+          if (trackersSupported) {
+            onStatusUpdate?.call(
+              'Retrying metadata fetch with additional default trackers (Attempt ${attempt + 1})...',
+            );
+            for (final tracker in TrackerManager.defaultTrackers) {
+              addTracker(id, tracker);
+            }
+          } else {
+            onStatusUpdate?.call(
+              'Retrying metadata fetch (DHT/PEX only — tracker add not supported)...',
+            );
           }
           await Future.delayed(retryDelay);
           continue;
@@ -864,6 +933,15 @@ class TorrentService {
         try {
           if (isTorrentAlive(id)) {
             _native.removeTorrent(id, deleteFiles: deleteFiles);
+          } else if (deleteFiles) {
+            // FIX(H-11): When the native handle is dead, _native.removeTorrent
+            // can't be called. TorrentUpdateInfo lacks savePath, so we cannot
+            // delete files from here. Log a warning so callers know the
+            // deletion was not performed.
+            _log.warning(
+              'deleteFiles=true but handle $id is dead; '
+              'on-disk files must be cleaned up manually or by the caller',
+            );
           }
           if (deleteResumeData) {
             unawaited(TorrentResumeStore.delete(id));
@@ -948,7 +1026,7 @@ class TorrentService {
   static Future<void> pauseTorrent(int id) async {
     if (!isPluginAvailable || !isInitialized || !isTorrentAlive(id)) return;
     if (id >= 0) {
-      await _libtorrentLock.synchronized(() async {
+      await _torrentLock.synchronized(() async {
         try {
           var confirmed = false;
           for (var attempt = 1; attempt <= 3; attempt++) {
@@ -1026,7 +1104,7 @@ class TorrentService {
   static bool loadResumeData(int id, List<int> data) {
     final uint8 = Uint8List.fromList(data);
     _latestResumeBlobs[id] = uint8;
-    if (!isInitialized || id < 0) return true;
+    if (!isInitialized || id < 0) return false;
     final loaded = _native.loadResumeData(id, data);
     return loaded;
   }
@@ -1049,13 +1127,9 @@ class TorrentService {
       }
       return false;
     } catch (_) {
-      final stats = _latestStats[id];
-      if (stats != null) {
-        final label = stats.stateLabel.toLowerCase();
-        if (label.contains('paused') || label.contains('stopped')) {
-          return true;
-        }
-      }
+      // FIX(P2.6): The native handle threw — treat it as dead regardless of
+      // stale stats. Previously a stale "paused"/"stopped" label could keep
+      // the handle alive indefinitely after a native crash.
       _activeTorrentIds.remove(id);
       _latestProgress.remove(id);
       _latestStats.remove(id);
@@ -1261,15 +1335,21 @@ class TorrentService {
   }
 
   static Future<bool> downloadAndApplyBlocklist(String url) async {
+    final tempDir = await getTemporaryDirectory();
+    final tempPath = p.join(tempDir.path, 'blocklist.p2p');
     try {
-      final tempDir = await getTemporaryDirectory();
-      final tempPath = p.join(tempDir.path, 'blocklist.p2p');
       final dio = Dio();
       await dio.download(url, tempPath);
-      return loadIpFilter(tempPath);
+      return await loadIpFilter(tempPath);
     } catch (e) {
       _log.warning('downloadAndApplyBlocklist failed: $e');
       return false;
+    } finally {
+      // FIX P1-17: Always delete temp blocklist file.
+      try {
+        final f = File(tempPath);
+        if (await f.exists()) await f.delete();
+      } catch (_) {}
     }
   }
 
@@ -1465,7 +1545,16 @@ class TorrentService {
 
   static void reconfigureSession() => _configureSessionFromSettings();
 
-  static bool get seedingEnabled => true;
+  /// Global torrent seeding master switch, driven by the user setting.
+  /// When disabled, completed torrents are not promoted to the seeding cycle
+  /// state and the seeding manager stops any in-progress uploads.
+  static bool get seedingEnabled {
+    try {
+      return SettingsProvider.instance.globalTorrentSeeding;
+    } catch (_) {
+      return true;
+    }
+  }
 
   static void boostMagnetDiscovery(int torrentId) {
     if (!isInitialized || torrentId < 0) return;
@@ -1551,23 +1640,6 @@ class TorrentService {
         current[fileIndex] = priority;
         setFilePriorities(torrentId, current);
       }
-    } catch (_) {}
-  }
-
-  static void applySettingsPack(TorrentSettingsPack pack) {
-    if (!isInitialized) return;
-    try {
-      _native.configureSession(NativeBtConfig(
-        downloadRateLimit: pack.maxDownloadRate ?? 0,
-        uploadRateLimit: pack.maxUploadRate ?? 0,
-        connectionsLimit: pack.maxConnectionsGlobal ?? 200,
-        disableDht: !pack.enableDht,
-        disableUpnp: !pack.enableUpnp,
-        disableUtp: !pack.enableUtp,
-        disableTcp: !pack.enableTcp,
-        forceEncrypt: pack.forceEncrypt,
-        cacheSize: pack.cacheSize ?? 64 * 1024 * 1024,
-      ));
     } catch (_) {}
   }
 }
@@ -1728,7 +1800,8 @@ class TorrentServiceImpl implements ITorrentService {
   @override
   void announceNow(int torrentId) => TorrentService.announceNow(torrentId);
   @override
-  void boostMagnetDiscovery(int torrentId) {}
+  void boostMagnetDiscovery(int torrentId) =>
+      TorrentService.boostMagnetDiscovery(torrentId);
 
   @override
   Future<String?> createTorrent({
@@ -1762,7 +1835,8 @@ class TorrentServiceImpl implements ITorrentService {
   void setSequentialDownload(int torrentId, bool enabled) =>
       TorrentService.enableSequentialDownload(torrentId, enabled);
   @override
-  void prioritizeFile(int torrentId, int fileIndex, {int priority = 7}) {}
+  void prioritizeFile(int torrentId, int fileIndex, {int priority = 7}) =>
+      TorrentService.prioritizeFile(torrentId, fileIndex, priority: priority);
   @override
   void setPieceDeadline(int torrentId, int pieceIndex, int deadlineMs) =>
       TorrentService.setPieceDeadline(torrentId, pieceIndex, deadlineMs);
@@ -1774,8 +1848,6 @@ class TorrentServiceImpl implements ITorrentService {
   Stream<TorrentAlertEvent> get alertUpdates => TorrentService.alertUpdates;
   @override
   List<TorrentAlertEvent> getRecentAlerts([int? torrentId]) => const [];
-  @override
-  void applySettingsPack(TorrentSettingsPack pack) {}
 
   @override
   Future<List<TorrentFileProgress>> getAccurateFileProgress(
@@ -1848,10 +1920,16 @@ class TorrentServiceImpl implements ITorrentService {
       TorrentService.shouldStopSeeding(
         progress: progress,
         uploadedBytes: uploadedBytes,
-        downloadedBytes: downloadedBytes ?? 1,
+        // FIX(H-14): Never substitute a fake denominator — use totalBytes
+        // as the canonical fallback (totalDownloaded for ratio calc) rather
+        // than 1, which would cause ratio = uploadedBytes / 1 = huge.
+        downloadedBytes: downloadedBytes ?? totalBytes ?? 0,
         shareRatioLimit: shareRatioLimit ?? 2.0,
         maxSeedingMinutes: maxSeedingMinutes ?? 0,
         completedAt: completedAt,
+        seedingDuration: seedingDuration,
+        customRatioLimit: customRatioLimit,
+        customMaxTimeMinutes: customMaxTimeMinutes,
       );
 }
 
@@ -2018,8 +2096,6 @@ class TorrentServiceStub implements ITorrentService {
   Stream<TorrentAlertEvent> get alertUpdates => const Stream.empty();
   @override
   List<TorrentAlertEvent> getRecentAlerts([int? torrentId]) => const [];
-  @override
-  void applySettingsPack(TorrentSettingsPack pack) {}
 
   @override
   Future<List<TorrentFileProgress>> getAccurateFileProgress(

@@ -111,7 +111,8 @@ void main() {
       expect(vm.filesLabel(), '1/2 FILES');
     });
 
-    test('D3: TorrentFileProgressEstimator never marks estimated files as complete',
+    test(
+        'D3: TorrentFileProgressEstimator never marks estimated files as complete',
         () {
       final files = [
         {

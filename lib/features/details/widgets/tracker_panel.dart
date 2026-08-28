@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/app_theme.dart';
-import '../../../core/domain/torrent_models.dart';
+import '../../../core/services/torrent_service.dart';
 import '../../../core/services/tracker_manager.dart';
 import '../../../core/utils/localization.dart';
 
@@ -77,6 +77,44 @@ class _TrackerPanelState extends State<TrackerPanel> {
 
   @override
   Widget build(BuildContext context) {
+    // The libtorrent 1.9.2 bridge exposes no tracker management symbols
+    // (getTrackers/addTracker/removeTracker/announceNow are no-ops), so the
+    // TrackerManager is a throwaway facade the swarm never sees. Rather than
+    // present editable controls that silently do nothing, show an honest
+    // "unavailable" state gated on the engine capability flag.
+    if (!TorrentService.trackersSupported) {
+      final isRtl = L10n.isRtl(context);
+      return Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Trackers',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.info_outline,
+                    size: 16, color: AppTheme.textMuted),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    isRtl
+                        ? 'إدارة المتتبعات غير متاحة في نسخة المحرك الحالية.'
+                        : 'Tracker management is not available on this engine build.',
+                    style: const TextStyle(
+                        color: AppTheme.textMuted, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
     return ListenableBuilder(
       listenable: widget.trackerManager,
       builder: (context, _) {

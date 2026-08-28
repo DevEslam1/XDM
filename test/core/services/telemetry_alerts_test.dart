@@ -65,10 +65,14 @@ void main() {
     });
 
     test('resetTelemetryMetrics resets all alert counters', () {
-      diagnosticService.recordTelemetryAlert('resume_range_ignored', taskId: 't1');
-      diagnosticService.recordTelemetryAlert('journal_reconciled', taskId: 't2');
-      diagnosticService.recordTelemetryAlert('resume_data_missing', taskId: 't3');
-      diagnosticService.recordTelemetryAlert('watchdog_skip_paused', taskId: 't4');
+      diagnosticService.recordTelemetryAlert('resume_range_ignored',
+          taskId: 't1');
+      diagnosticService.recordTelemetryAlert('journal_reconciled',
+          taskId: 't2');
+      diagnosticService.recordTelemetryAlert('resume_data_missing',
+          taskId: 't3');
+      diagnosticService.recordTelemetryAlert('watchdog_skip_paused',
+          taskId: 't4');
 
       expect(diagnosticService.resumeRangeIgnoredCount, equals(1));
       expect(diagnosticService.journalReconciledCount, equals(1));

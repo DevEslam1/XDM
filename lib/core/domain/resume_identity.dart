@@ -48,7 +48,8 @@ class ResumeIdentity {
     for (final entry in headers.entries) {
       final key = entry.key.toLowerCase();
       final val = entry.value;
-      final strVal = val is List ? val.firstOrNull?.toString() : val?.toString();
+      final strVal =
+          val is List ? val.firstOrNull?.toString() : val?.toString();
       if (strVal == null || strVal.isEmpty) continue;
 
       if (key == 'etag') {
@@ -183,10 +184,10 @@ class ResumeValidationResult {
       : isValid = true,
         mismatchReason = null;
 
-  const ResumeValidationResult.mismatch(this.mismatchReason)
-      : isValid = false;
+  const ResumeValidationResult.mismatch(this.mismatchReason) : isValid = false;
 
   @override
-  String toString() =>
-      isValid ? 'ResumeValidationResult.valid()' : 'ResumeValidationResult.mismatch($mismatchReason)';
+  String toString() => isValid
+      ? 'ResumeValidationResult.valid()'
+      : 'ResumeValidationResult.mismatch($mismatchReason)';
 }

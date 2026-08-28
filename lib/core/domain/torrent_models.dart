@@ -43,15 +43,24 @@ class TorrentFileItem {
 /// Convert native integer state code to [DmxTorrentState].
 DmxTorrentState stateFromInt(int v) {
   switch (v) {
-    case -2: return DmxTorrentState.error;
-    case  0: return DmxTorrentState.checkingFiles;
-    case  1: return DmxTorrentState.downloadingMetadata;
-    case  2: return DmxTorrentState.downloading;
-    case  3: return DmxTorrentState.finished;
-    case  4: return DmxTorrentState.seeding;
-    case  5: return DmxTorrentState.allocating;
-    case  6: return DmxTorrentState.checkingResume;
-    default: return DmxTorrentState.unknown;
+    case -2:
+      return DmxTorrentState.error;
+    case 0:
+      return DmxTorrentState.checkingFiles;
+    case 1:
+      return DmxTorrentState.downloadingMetadata;
+    case 2:
+      return DmxTorrentState.downloading;
+    case 3:
+      return DmxTorrentState.finished;
+    case 4:
+      return DmxTorrentState.seeding;
+    case 5:
+      return DmxTorrentState.allocating;
+    case 6:
+      return DmxTorrentState.checkingResume;
+    default:
+      return DmxTorrentState.unknown;
   }
 }
 
@@ -68,6 +77,7 @@ class TorrentUpdateInfo {
   final String stateLabel;
   // FIX: [Audit] Numeric state matching support
   final TorrentState state;
+
   /// libtorrent reports pause as a flag orthogonal to [state], so a paused
   /// torrent still carries its underlying state (e.g. downloading).
   final bool isPaused;
@@ -103,8 +113,8 @@ class TorrentUpdateInfo {
       stateLabel.toLowerCase().contains('checking');
   bool get isFetchingMetadata =>
       (state == TorrentState.downloadingMetadata ||
-       stateLabel.toLowerCase().contains('metadata') ||
-       stateLabel.toLowerCase().contains('getting')) &&
+          stateLabel.toLowerCase().contains('metadata') ||
+          stateLabel.toLowerCase().contains('getting')) &&
       !hasMetadata;
 
   TorrentUpdateInfo({
@@ -356,111 +366,6 @@ enum TorrentHashVersion {
   v2,
   hybrid,
   unknown,
-}
-
-/// Session settings pack model matching libtorrent settings_pack capabilities.
-class TorrentSettingsPack {
-  final bool enableDht;
-  final bool enableLsd;
-  final bool enablePex;
-  final bool enableUpnp;
-  final int? maxConnectionsGlobal;
-  final int? maxUploadRate; // bytes/sec
-  final int? maxDownloadRate; // bytes/sec
-  final String? socks5ProxyHost;
-  final int? socks5ProxyPort;
-  final bool enforceProxy;
-  final bool forceEncrypt;
-  final bool enableUtp;
-  final bool enableTcp;
-  final int? cacheSize;
-
-  const TorrentSettingsPack({
-    this.enableDht = true,
-    this.enableLsd = true,
-    this.enablePex = true,
-    this.enableUpnp = true,
-    this.maxConnectionsGlobal,
-    this.maxUploadRate,
-    this.maxDownloadRate,
-    this.socks5ProxyHost,
-    this.socks5ProxyPort,
-    this.enforceProxy = false,
-    this.forceEncrypt = false,
-    this.enableUtp = true,
-    this.enableTcp = true,
-    this.cacheSize,
-  });
-
-  TorrentSettingsPack copyWith({
-    bool? enableDht,
-    bool? enableLsd,
-    bool? enablePex,
-    bool? enableUpnp,
-    int? maxConnectionsGlobal,
-    int? maxUploadRate,
-    int? maxDownloadRate,
-    String? socks5ProxyHost,
-    int? socks5ProxyPort,
-    bool? enforceProxy,
-    bool? forceEncrypt,
-    bool? enableUtp,
-    bool? enableTcp,
-    int? cacheSize,
-  }) {
-    return TorrentSettingsPack(
-      enableDht: enableDht ?? this.enableDht,
-      enableLsd: enableLsd ?? this.enableLsd,
-      enablePex: enablePex ?? this.enablePex,
-      enableUpnp: enableUpnp ?? this.enableUpnp,
-      maxConnectionsGlobal: maxConnectionsGlobal ?? this.maxConnectionsGlobal,
-      maxUploadRate: maxUploadRate ?? this.maxUploadRate,
-      maxDownloadRate: maxDownloadRate ?? this.maxDownloadRate,
-      socks5ProxyHost: socks5ProxyHost ?? this.socks5ProxyHost,
-      socks5ProxyPort: socks5ProxyPort ?? this.socks5ProxyPort,
-      enforceProxy: enforceProxy ?? this.enforceProxy,
-      forceEncrypt: forceEncrypt ?? this.forceEncrypt,
-      enableUtp: enableUtp ?? this.enableUtp,
-      enableTcp: enableTcp ?? this.enableTcp,
-      cacheSize: cacheSize ?? this.cacheSize,
-    );
-  }
-
-  Map<String, dynamic> toMap() => {
-        'enableDht': enableDht,
-        'enableLsd': enableLsd,
-        'enablePex': enablePex,
-        'enableUpnp': enableUpnp,
-        'maxConnectionsGlobal': maxConnectionsGlobal,
-        'maxUploadRate': maxUploadRate,
-        'maxDownloadRate': maxDownloadRate,
-        'socks5ProxyHost': socks5ProxyHost,
-        'socks5ProxyPort': socks5ProxyPort,
-        'enforceProxy': enforceProxy,
-        'forceEncrypt': forceEncrypt,
-        'enableUtp': enableUtp,
-        'enableTcp': enableTcp,
-        'cacheSize': cacheSize,
-      };
-
-  factory TorrentSettingsPack.fromMap(Map<String, dynamic> map) {
-    return TorrentSettingsPack(
-      enableDht: (map['enableDht'] as bool?) ?? true,
-      enableLsd: (map['enableLsd'] as bool?) ?? true,
-      enablePex: (map['enablePex'] as bool?) ?? true,
-      enableUpnp: (map['enableUpnp'] as bool?) ?? true,
-      maxConnectionsGlobal: (map['maxConnectionsGlobal'] as num?)?.toInt(),
-      maxUploadRate: (map['maxUploadRate'] as num?)?.toInt(),
-      maxDownloadRate: (map['maxDownloadRate'] as num?)?.toInt(),
-      socks5ProxyHost: map['socks5ProxyHost'] as String?,
-      socks5ProxyPort: (map['socks5ProxyPort'] as num?)?.toInt(),
-      enforceProxy: (map['enforceProxy'] as bool?) ?? false,
-      forceEncrypt: (map['forceEncrypt'] as bool?) ?? false,
-      enableUtp: (map['enableUtp'] as bool?) ?? true,
-      enableTcp: (map['enableTcp'] as bool?) ?? true,
-      cacheSize: (map['cacheSize'] as num?)?.toInt(),
-    );
-  }
 }
 
 /// Comprehensive torrent metadata model supporting BitTorrent v1, v2, and Hybrid.

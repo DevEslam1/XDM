@@ -27,7 +27,9 @@ void main() {
       } catch (_) {}
     });
 
-    test('Saving state with durable: true flushes state and journal immediately', () async {
+    test(
+        'Saving state with durable: true flushes state and journal immediately',
+        () async {
       // Create temp file on disk so reconciliation matches downloaded bytes
       await File(tempFilePath).writeAsBytes(List.filled(512, 0));
 
@@ -50,7 +52,8 @@ void main() {
         taskId: 'task_durable_1',
       );
 
-      final statePath = StateStore.pathFor(tempFilePath, taskId: 'task_durable_1');
+      final statePath =
+          StateStore.pathFor(tempFilePath, taskId: 'task_durable_1');
       final stateFile = File(statePath);
       expect(await stateFile.exists(), isTrue);
 
@@ -67,7 +70,9 @@ void main() {
       expect(loadedState.state.downloadedBytes, equals(512));
     });
 
-    test('saveTaskDebounced immediately writes paused tasks without batch timer debounce', () async {
+    test(
+        'saveTaskDebounced immediately writes paused tasks without batch timer debounce',
+        () async {
       final dbService = DatabaseService.instance;
       await dbService.init(testPath: tempDir.path);
       final now = DateTime.now();

@@ -19,6 +19,7 @@ class TorrentSeedingManager {
 
   Timer? _seedingCheckTimer;
   final Map<int, DateTime> _seedStartTimes = {};
+  bool _isChecking = false;
 
   /// Starts the periodic seeding policy enforcement loop.
   void startSeedingCheck() {
@@ -57,79 +58,103 @@ class TorrentSeedingManager {
   }
 
   /// Calculates share ratio from download and upload stats with fallback for magnet-only additions.
-  static double calculateRatio(int uploadedBytes, int downloadedBytes, {int? fallbackBytes}) {
-    final effectiveDownload = downloadedBytes > 0 ? downloadedBytes : (fallbackBytes ?? 0);
+  static double calculateRatio(int uploadedBytes, int downloadedBytes,
+      {int? fallbackBytes}) {
+    final effectiveDownload =
+        downloadedBytes > 0 ? downloadedBytes : (fallbackBytes ?? 0);
     if (effectiveDownload <= 0) return 0.0;
     return uploadedBytes / effectiveDownload;
   }
 
   /// Checks all active torrents against seeding policies and pauses those that exceed limits.
   void checkSeedingPolicies({SettingsProvider? settingsProvider}) {
-    SettingsProvider? s = settingsProvider;
-    if (s == null) {
-      try {
-        s = SettingsProvider.instance;
-      } catch (_) {}
-    }
-    final activeIds = TorrentService.activeTorrentIds;
-    final statsMap = TorrentService.latestStats;
-
-    // Prune stale tracked IDs that are no longer active
-    _seedStartTimes.removeWhere((id, _) => !activeIds.contains(id));
-
-    for (final id in activeIds) {
-      final stats = statsMap[id];
-      if (stats == null) continue;
-
-      final stateLabel = stats.stateLabel.toLowerCase();
-      final isSeeding = stateLabel.contains('seeding') ||
-          (stats.progress >= 1.0 && stats.uploadRate > 0);
-
-      if (!isSeeding) {
-        clearSeedStart(id);
-        continue;
+    if (_isChecking) return;
+    _isChecking = true;
+    try {
+      SettingsProvider? s = settingsProvider;
+      if (s == null) {
+        try {
+          s = SettingsProvider.instance;
+        } catch (_) {}
       }
+      final activeIds = TorrentService.activeTorrentIds;
+      final statsMap = TorrentService.latestStats;
 
-      recordSeedStart(id);
+      // Prune stale tracked IDs that are no longer active
+      _seedStartTimes.removeWhere((id, _) => !activeIds.contains(id));
 
-      final policy = SeedingPolicy(
-        maxRatio: s?.shareRatioLimit ?? 2.0,
-        maxSeedTime: Duration(minutes: s?.maxSeedingTimeMinutes ?? 0),
-        seedOnlyWhenCharging: s?.seedOnlyWhenCharging ?? false,
-        seedOnlyOnWifi: s?.seedOnlyOnWifi ?? false,
-        minSeedTimeMinutes: s?.minSeedTimeMinutes ?? 0,
-      );
+      for (final id in activeIds) {
+        final stats = statsMap[id];
+        if (stats == null) continue;
 
-      final isCharging = PowerMonitor.isCharging;
-      // FIX v2.0.0: Actually check wifi status instead of hardcoding true.
-      bool isWifi = true;
-      try {
-        if (getIt.isRegistered<NetworkMonitor>()) {
-          isWifi = getIt<NetworkMonitor>().hasWifiOrEthernet;
+        final stateLabel = stats.stateLabel.toLowerCase();
+        final isSeeding = stateLabel.contains('seeding') ||
+            (stats.progress >= 0.999 && stats.uploadRate > 0);
+
+        if (!isSeeding) {
+          clearSeedStart(id);
+          continue;
         }
-      } catch (_) {}
-      final currentRatio = calculateRatio(
-        stats.totalPayloadUpload,
-        stats.totalPayloadDownload,
-        fallbackBytes: stats.totalDone > 0 ? stats.totalDone : null,
-      );
-      final seedDuration = getSeedDuration(id);
 
-      final shouldStop = policy.shouldStopSeeding(
-        currentRatio: currentRatio,
-        seedDuration: seedDuration,
-        uploadedBytes: stats.totalPayloadUpload,
-        isCharging: isCharging,
-        isOnWifi: isWifi,
-      );
+        recordSeedStart(id);
 
-      if (shouldStop) {
-        _log.info(
-            'Stopping seeding for torrent $id (seeding policy conditions met)');
-        TorrentService.pauseTorrent(id);
-        clearSeedStart(id);
+        // Global seeding master switch: when disabled, stop every seeding
+        // torrent regardless of per-torrent ratio/time policy.
+        if (s != null && !s.globalTorrentSeeding) {
+          _log.info(
+              'Stopping seeding for torrent $id (global seeding disabled)');
+          TorrentService.pauseTorrent(id);
+          clearSeedStart(id);
+          continue;
+        }
+
+        final policy = SeedingPolicy(
+          maxRatio: s?.shareRatioLimit ?? 2.0,
+          maxSeedTime: Duration(minutes: s?.maxSeedingTimeMinutes ?? 0),
+          seedOnlyWhenCharging: s?.seedOnlyWhenCharging ?? false,
+          seedOnlyOnWifi: s?.seedOnlyOnWifi ?? false,
+          minSeedTimeMinutes: s?.minSeedTimeMinutes ?? 0,
+        );
+
+        final isCharging = PowerMonitor.isCharging;
+        // FIX v2.0.0: Actually check wifi status instead of hardcoding true.
+        bool isWifi = true;
+        try {
+          if (getIt.isRegistered<NetworkMonitor>()) {
+            isWifi = getIt<NetworkMonitor>().hasWifiOrEthernet;
+          }
+        } catch (_) {}
+        final currentRatio = calculateRatio(
+          stats.totalPayloadUpload,
+          stats.totalPayloadDownload,
+          fallbackBytes: stats.totalDone > 0 ? stats.totalDone : null,
+        );
+        final seedDuration = getSeedDuration(id);
+
+        final shouldStop = policy.shouldStopSeeding(
+          currentRatio: currentRatio,
+          seedDuration: seedDuration,
+          uploadedBytes: stats.totalPayloadUpload,
+          isCharging: isCharging,
+          isOnWifi: isWifi,
+        );
+
+        if (shouldStop) {
+          _log.info(
+              'Stopping seeding for torrent $id (seeding policy conditions met)');
+          TorrentService.pauseTorrent(id);
+          clearSeedStart(id);
+        }
       }
+    } finally {
+      _isChecking = false;
     }
+  }
+
+  /// Disposes the manager, stopping timers and clearing tracking state.
+  void dispose() {
+    stopSeedingCheck();
+    _seedStartTimes.clear();
   }
 
   /// Checks whether seeding should stop for a specific task.
@@ -178,6 +203,10 @@ class TorrentSeedingManager {
         task.pausedByUser == true) {
       return false;
     }
+    // Respect the global seeding master switch.
+    try {
+      if (!SettingsProvider.instance.globalTorrentSeeding) return false;
+    } catch (_) {}
     return task.isTorrent &&
         task.status == DownloadStatus.completed &&
         task.seedingEnabled;
@@ -222,5 +251,48 @@ class TorrentSeedingManager {
     }
     final perTask = globalLimit ~/ activeSeedingCount;
     return perTask.clamp(0, globalLimit);
+  }
+}
+
+/// Advanced multi-factor seeding policy engine (Phase 2.2).
+class AdaptiveSeedingPolicy {
+  AdaptiveSeedingPolicy._();
+
+  static bool shouldContinueSeeding({
+    required double currentRatio,
+    required double currentUploadSpeed,
+    required Duration seedDuration,
+    required bool isOnWifi,
+    required bool isCharging,
+    required int activeDownloads,
+    required SeedingPolicy policy,
+  }) {
+    // 1. Yield bandwidth if active downloads require upload/download bandwidth
+    if (activeDownloads > 0 && currentUploadSpeed > 100 * 1024) {
+      return false;
+    }
+
+    // 2. On cellular, only seed if allowed
+    if (!isOnWifi && policy.seedOnlyOnWifi) {
+      return false;
+    }
+
+    // 3. On battery, only seed if charging
+    if (!isCharging && policy.seedOnlyWhenCharging) {
+      return false;
+    }
+
+    // 4. Maximum share ratio constraint
+    if (policy.maxRatio > 0 && currentRatio >= policy.maxRatio) {
+      return false;
+    }
+
+    // 5. Maximum seed time constraint
+    if (policy.maxSeedTime > Duration.zero &&
+        seedDuration >= policy.maxSeedTime) {
+      return false;
+    }
+
+    return true;
   }
 }

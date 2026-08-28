@@ -20,7 +20,9 @@ void main() {
       final sub1 = fakeNative.statusStream.listen(received1.add);
       final sub2 = fakeNative.statusStream.listen(received2.add);
 
-      fakeNative.addMagnet('magnet:?xt=urn:btih:1111111111111111111111111111111111111111', '/tmp');
+      fakeNative.addMagnet(
+          'magnet:?xt=urn:btih:1111111111111111111111111111111111111111',
+          '/tmp');
 
       await Future<void>.delayed(const Duration(milliseconds: 20));
 
@@ -107,7 +109,8 @@ void main() {
       expect(spaceA, isTrue);
 
       // Check path B with huge size: 100 PB (100 * 1024^5 bytes)
-      final spaceB = await engine.hasEnoughDiskSpace(tempDirB.path, 100 * 1024 * 1024 * 1024 * 1024 * 1024);
+      final spaceB = await engine.hasEnoughDiskSpace(
+          tempDirB.path, 100 * 1024 * 1024 * 1024 * 1024 * 1024);
       expect(spaceB, isFalse);
 
       // Clean up
@@ -119,7 +122,8 @@ void main() {
   });
 
   group('Regression N5: Pool initialization retry on transient failure', () {
-    test('engine recovers and allows pool init after an initial transient failure',
+    test(
+        'engine recovers and allows pool init after an initial transient failure',
         () async {
       final engine = DownloadEngine();
 

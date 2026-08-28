@@ -100,3 +100,23 @@ class ProtocolCache {
     await prefs.setString(_key, encoded);
   }
 }
+
+/// Proactive detector for HTTP/2 and QUIC / HTTP/3 via headers and capabilities.
+class ProtocolDetector {
+  ProtocolDetector._();
+
+  /// Inspects response headers (especially `Alt-Svc`) to determine if HTTP/2 or HTTP/3 is supported.
+  static ProtocolSupport parseFromHeaders(Map<String, List<String>> headers) {
+    final altSvc = headers['alt-svc'] ?? headers['Alt-Svc'];
+    if (altSvc != null && altSvc.isNotEmpty) {
+      final joined = altSvc.join(',').toLowerCase();
+      if (joined.contains('h3') || joined.contains('quic')) {
+        return ProtocolSupport.http3;
+      }
+      if (joined.contains('h2')) {
+        return ProtocolSupport.http2;
+      }
+    }
+    return ProtocolSupport.http11;
+  }
+}

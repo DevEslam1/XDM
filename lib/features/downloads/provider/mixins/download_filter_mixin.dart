@@ -136,8 +136,9 @@ mixin DownloadFilterMixin {
   Map<String, int> get categoryCounts {
     final counts = _emptyCategoryCounts<int>(0);
     for (final task in providerTasks) {
-      if (!counts.containsKey(task.category)) continue;
-      counts[task.category] = (counts[task.category] ?? 0) + 1;
+      final cat = task.category.isEmpty ? 'Auto' : task.category;
+      if (!counts.containsKey(cat)) continue;
+      counts[cat] = (counts[cat] ?? 0) + 1;
     }
     return counts;
   }
@@ -145,11 +146,13 @@ mixin DownloadFilterMixin {
   Map<String, double> get categorySizes {
     final sizes = _emptyCategoryCounts<double>(0);
     for (final task in providerTasks) {
-      if (!sizes.containsKey(task.category)) continue;
+      final cat = task.category.isEmpty ? 'Auto' : task.category;
+      if (!sizes.containsKey(cat)) continue;
       if (task.status == DownloadStatus.failed) continue;
       if (task.status == DownloadStatus.queued) continue;
-      sizes[task.category] =
-          (sizes[task.category] ?? 0) + task.fileSize / (1024 * 1024);
+      // FIX(M-1): Use downloadedBytes (actual disk usage) not fileSize
+      // (declared size). Un-downloaded tasks should not count full size.
+      sizes[cat] = (sizes[cat] ?? 0) + task.downloadedBytes / (1024 * 1024);
     }
     return sizes;
   }
@@ -316,7 +319,9 @@ mixin DownloadFilterMixin {
   // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
+  // FIX(H-20): Include 'Auto' to represent tasks stored with empty category.
   static const List<String> _categories = [
+    'Auto',
     'Video',
     'Audio',
     'Document',

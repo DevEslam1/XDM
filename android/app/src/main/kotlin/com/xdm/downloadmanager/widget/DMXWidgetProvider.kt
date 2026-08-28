@@ -39,15 +39,6 @@ class DMXWidgetProvider : AppWidgetProvider() {
         updateWidget(context, appWidgetManager, appWidgetId)
     }
 
-    override fun onReceive(context: Context, intent: Intent) {
-        super.onReceive(context, intent)
-        if (intent.action == ACTION_UPDATE_WIDGETS) {
-            val manager = AppWidgetManager.getInstance(context)
-            val ids = manager.getAppWidgetIds(ComponentName(context, DMXWidgetProvider::class.java))
-            onUpdate(context, manager, ids)
-        }
-    }
-
     companion object {
         const val ACTION_UPDATE_WIDGETS = "com.xdm.downloadmanager.UPDATE_WIDGETS"
 

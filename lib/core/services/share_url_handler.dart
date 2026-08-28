@@ -36,7 +36,8 @@ class ShareUrlHandler {
         final isDark = Theme.of(context).brightness == Brightness.dark;
         ThemedSnackbar.show(
           context,
-          message: 'Unsupported link: ${scheme.isEmpty ? "invalid URL" : scheme}',
+          message:
+              'Unsupported link: ${scheme.isEmpty ? "invalid URL" : scheme}',
           color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
           icon: Icons.error_outline,
           isDarkMode: isDark,

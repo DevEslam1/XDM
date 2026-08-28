@@ -33,13 +33,16 @@ class DriftTaskSnapshotStore implements TaskSnapshotStore {
     if (task == null) return;
 
     final legacyStatus = DownloadStateMachine.toStatus(to);
-    final isCanc = isCancelled ?? (to == DomainDownloadState.failed && command is CancelTask);
+    final isCanc = isCancelled ??
+        (to == DomainDownloadState.failed && command is CancelTask);
     final isPausedUser = pausedByUser ?? (to == DomainDownloadState.paused);
 
     final updated = task.copyWith(
       status: legacyStatus,
       errorMessage: errorMessage ?? task.errorMessage,
-      pauseReason: pauseReason != null ? PauseReason.fromName(pauseReason) : task.pauseReason,
+      pauseReason: pauseReason != null
+          ? PauseReason.fromName(pauseReason)
+          : task.pauseReason,
       pausedByUser: isPausedUser,
       isCancelled: isCanc,
       speed: (to == DomainDownloadState.paused ||
@@ -47,8 +50,9 @@ class DriftTaskSnapshotStore implements TaskSnapshotStore {
               to == DomainDownloadState.completed)
           ? 0.0
           : task.speed,
-      completedAt:
-          to == DomainDownloadState.completed ? DateTime.now() : task.completedAt,
+      completedAt: to == DomainDownloadState.completed
+          ? DateTime.now()
+          : task.completedAt,
       updatedAt: DateTime.now(),
     );
 

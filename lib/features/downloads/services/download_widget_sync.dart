@@ -114,7 +114,8 @@ class DownloadWidgetSync {
         return completedAt != null && completedAt.isAfter(todayStart);
       }).length;
 
-      final historiesMap = speedHistories.map((k, v) => MapEntry(k, v.toList()));
+      final historiesMap =
+          speedHistories.map((k, v) => MapEntry(k, v.toList()));
       final args = _WidgetBuildArgs(
         allTasks: allTasks,
         speedHistories: historiesMap,

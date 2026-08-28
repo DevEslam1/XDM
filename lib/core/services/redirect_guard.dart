@@ -144,7 +144,8 @@ class RedirectGuard {
       _tabs.remove(_tabs.keys.first);
     }
     // Ignore non-web URLs (e.g. magnet:, tel:, mailto:, intent:)
-    if (!navigatingTo.startsWith('http://') && !navigatingTo.startsWith('https://')) {
+    if (!navigatingTo.startsWith('http://') &&
+        !navigatingTo.startsWith('https://')) {
       return RedirectResult.ignored;
     }
     final st = _tabs.putIfAbsent(tabId, () => _TabState());
@@ -287,6 +288,9 @@ class RedirectGuard {
 
   /// Reset state for a tab (e.g., user manually navigated).
   void reset(String tabId) => _tabs.remove(tabId);
+
+  /// Clears all tab redirect state. Call when the guard is no longer needed.
+  void disposeAll() => _tabs.clear();
 
   @visibleForTesting
   void addToChain(String tabId, String url) {

@@ -621,4 +621,45 @@ const Map<String, String> frTranslations = {
   'torrent_meta_retry': 'Réessayer la récupération des métadonnées',
   'torrent_peers_label': 'Pairs',
   'torrent_dht_nodes': 'Nœuds DHT',
+  // Abonnement (Sub Club)
+  'subscription_title': 'Abonnement',
+  'subscription_subtitle': 'Débloquez l\'expérience complète de XDM',
+  'subscription_free_tier': 'Plan Gratuit',
+  'subscription_free_description':
+      'Fonctionnalités limitées — passez à Premium pour un accès complet',
+  'subscription_premium': 'Premium',
+  'subscription_premium_feature': 'Fonctionnalité Premium',
+  'subscription_upgrade_to_unlock':
+      'Passez à Premium pour débloquer cette fonctionnalité',
+  'subscription_upgrade_now': 'Upgrade Maintenant',
+  'subscription_view_plans': 'Voir les Plans',
+  'subscription_choose_plan': 'Choisissez Votre Plan',
+  'subscription_subscribe': 'S\'abonner',
+  'subscription_subscribe_now': 'S\'abonner Maintenant',
+  'subscription_manage': 'Gérer',
+  'subscription_manage_description':
+      'Gérez votre abonnement dans l\'App Store ou le Play Store.',
+  'subscription_restore': 'Restaurer les Achats',
+  'subscription_restore_success': 'Achats restaurés avec succès',
+  'subscription_restore_failed': 'Aucun achat trouvé à restaurer',
+  'subscription_status_active': 'Premium Actif',
+  'subscription_status_expired': 'Abonnement Expiré',
+  'subscription_expires': 'Expire',
+  'subscription_grace_period':
+      'Vos téléchargements continueront jusqu\'à la fin de la période de grâce.',
+  'subscription_free_limit':
+      'Le plan gratuit permet jusqu\'à {0} téléchargements simultanés',
+  'subscription_max_downloads_reached': 'Limite de Téléchargements Atteinte',
+  'subscription_compare_plans': 'Comparer les Plans',
+  'subscription_feature': 'Fonctionnalité',
+  'subscription_free': 'Gratuit',
+  'subscription_go_premium': 'Passer à Premium',
+  'subscription_paywall_subtitle':
+      'Débloquez les téléchargements illimités, le support torrent et plus',
+  'subscription_unlock_feature': 'Débloquer Cette Fonctionnalité',
+  'subscription_terms':
+      'L\'abonnement se renouvelle automatiquement sauf annulation au moins 24 heures avant la fin de la période en cours.',
+  'subscription_welcome_premium':
+      'Bienvenue dans Premium ! Profitez de téléchargements illimités.',
+  'maybe_later': 'Plus Tard',
 };

@@ -254,12 +254,18 @@ class NativeBtConfig {
   final bool disableDht;
   final bool disableUpnp;
   final bool enableIpv6;
+
   /// Download rate limit in Bytes/s (0 = unlimited).
   final int downloadRateLimit;
+
   /// Upload rate limit in Bytes/s (0 = unlimited).
   final int uploadRateLimit;
   final int peersListenPort;
   final bool responsiveMode;
+
+  // FIX P0-6: DHT bootstrap routers for magnet metadata.
+  // Without routers, DHT never connects behind NAT on libtorrent 2.x.
+  final List<String> dhtBootstrapNodes;
 
   const NativeBtConfig({
     this.cacheSize = 64 * 1024 * 1024,
@@ -278,6 +284,12 @@ class NativeBtConfig {
     this.uploadRateLimit = 0,
     this.peersListenPort = 0,
     this.responsiveMode = true,
+    this.dhtBootstrapNodes = const [
+      'router.bittorrent.com:6881',
+      'dht.transmissionbt.com:6881',
+      'router.utorrent.com:6881',
+      'dht.libtorrent.org:25401',
+    ],
   });
 }
 

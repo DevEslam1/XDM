@@ -13,7 +13,8 @@ void main() {
       TorrentService.setNativeForTesting(fakeNative);
     });
 
-    test('saveResumeData triggers saveResumeData on native and returns blob', () async {
+    test('saveResumeData triggers saveResumeData on native and returns blob',
+        () async {
       const tid = 101;
       fakeNative.emitStatuses(const {
         tid: NativeTorrentStatus(
@@ -46,10 +47,13 @@ void main() {
       final blob = TorrentService.resumeBlobFor(tid);
       expect(blob, isNotNull);
       expect(blob, isNotEmpty);
-      expect(blob, equals([0x64, 0x31, 0x30, 0x3a, 0x66, 0x61, 0x73, 0x74, 0x65]));
+      expect(
+          blob, equals([0x64, 0x31, 0x30, 0x3a, 0x66, 0x61, 0x73, 0x74, 0x65]));
     });
 
-    test('removeTorrent unblocks any pending saveResumeData completer without throwing', () async {
+    test(
+        'removeTorrent unblocks any pending saveResumeData completer without throwing',
+        () async {
       const tid = 102;
       fakeNative.emitStatuses(const {
         tid: NativeTorrentStatus(

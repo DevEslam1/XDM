@@ -102,9 +102,18 @@ class BrowserTabWebViewState {
   void dispose() {
     if (_isDisposed) return;
     _isDisposed = true;
+    try {
+      controller?.dispose();
+    } catch (_) {}
     controller = null;
-    _findInteractionController = null;
+    try {
+      pullToRefreshController?.dispose();
+    } catch (_) {}
     pullToRefreshController = null;
+    try {
+      _findInteractionController?.dispose();
+    } catch (_) {}
+    _findInteractionController = null;
     progressNotifier.dispose();
     loadingNotifier.dispose();
     urlNotifier.dispose();

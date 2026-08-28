@@ -11,7 +11,6 @@ import 'package:dmx/core/domain/transfer_result.dart';
 import 'package:dmx/core/services/engines/speed_predictor.dart';
 import 'package:dmx/core/services/error_taxonomy.dart';
 import 'package:dmx/core/services/protocol_fallback_memory.dart';
-import 'package:dmx/features/settings/provider/settings_provider.dart';
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 import 'package:synchronized/synchronized.dart';
@@ -48,7 +47,7 @@ final RegExp _contentRangeHeaderRegex =
 
 /// HTML response detection patterns - more precise than substring matching
 final RegExp _htmlContentTypeRegex =
-    RegExp(r'text/html|application/xhtml', caseSensitive: false);
+    RegExp(r'text/html|application/xhtml(\+xml)?', caseSensitive: false);
 
 /// URL expiration detection - specific patterns only, not broad substring
 final RegExp _urlExpireParamRegex =
@@ -106,6 +105,9 @@ class HttpTransferJob {
   HttpTransferJob(this.cmd, this.out) {
     unawaited(_cancelToken.whenCancel.then((_) {
       _abortAllDelays();
+      if (!_multiThreadCancelToken.isCancelled) {
+        _multiThreadCancelToken.cancel(_cancelToken.cancelError?.message);
+      }
     }).catchError((e) {
       debugPrint('[IsolatePool] whenCancel failed: $e');
     }));
@@ -114,6 +116,7 @@ class HttpTransferJob {
   final DownloadCommand cmd;
   final SendPort out;
   final CancelToken _cancelToken = CancelToken();
+  CancelToken _multiThreadCancelToken = CancelToken();
   int _seq = 0;
   bool _cancelRequested = false;
 
@@ -232,6 +235,12 @@ class HttpTransferJob {
   final Queue<SpeedSample> _speedSamples = Queue();
   double _lastSpeed = 0.0;
   int _watchdogCheckpointBytes = 0;
+
+  /// FIX(C-2): Per-chunk progress already durable at job start (loaded from
+  /// previous session's durable save / journal replay). Bytes written this
+  /// session only count toward persisted state once the writer confirms the
+  /// OS write succeeded (see PositionalFileWriter.flushedHighWater).
+  List<int> _chunkDurabilityBaselines = const [];
   int _lastProgressBytes = 0;
   int _lastProgressTimeMs = 0;
   bool _stalledEmitted = false;
@@ -275,10 +284,6 @@ class HttpTransferJob {
       'seq': _seq++,
       if (data != null) 'data': data,
     });
-  }
-
-  void sendChunkBytes(Uint8List bytes) {
-    out.send(TransferableTypedData.fromList([bytes]));
   }
 
   /// Emits typed TransferResult containing classified taxonomy code and retryable flag.
@@ -325,11 +330,9 @@ class HttpTransferJob {
   /// has a lower minimum for small files.
   @visibleForTesting
   void registerWatchdogs() {
-    try {
-      stalledThreshold = Duration(
-        minutes: SettingsProvider.instance.downloadStalledTimeoutMinutes,
-      );
-    } catch (_) {}
+    stalledThreshold = Duration(
+      minutes: cmd.stalledTimeoutMinutes,
+    );
     final hardTimeoutDuration = _computeHardTimeout();
     void onHardTimeout() {
       requestCancel(PauseReason.userRequested);
@@ -391,9 +394,26 @@ class HttpTransferJob {
     _state = load.state;
     _watchdogCheckpointBytes = _state!.downloadedBytes;
 
-    // Redistribute chunks if thread count changed
+    // FIX(C-3): Resolve a known file size BEFORE any redistribution. Previously
+    // the size fix-up ran *after* redistribution, so an unknown-size download
+    // (totalSize 0 → plan() returns one indeterminate chunk with size == −1)
+    // produced nEnd = start + size = −1 → zero range overlap on every old
+    // chunk → all downloaded bytes wiped and the journal already cleared:
+    // unrecoverable full re-download whenever the thread count changed.
+    if (_state!.totalSize <= 0 && cmd.knownFileSize > 0) {
+      _state!.totalSize = cmd.knownFileSize;
+    }
+
+    // Redistribute chunks if thread count changed.
+    // FIX(C-3): never re-plan an unknown-size (indeterminate) layout — there
+    // are no byte ranges to map overlap against, so redistribution can only
+    // destroy progress. The indeterminate chunk is carried verbatim instead.
+    final hasIndeterminateProgress =
+        _state!.chunks.any((c) => c.isIndeterminate);
     if (_state!.chunks.isNotEmpty &&
         _state!.chunks.length != cmd.threadCount &&
+        _state!.totalSize > 0 &&
+        !hasIndeterminateProgress &&
         _state!.downloadedBytes > 0) {
       final savedBytes = _state!.downloadedBytes;
       final total = _state!.totalSize;
@@ -406,12 +426,14 @@ class HttpTransferJob {
         final nc = newChunks[ni];
         int overlap = 0;
         for (final oc in oldChunks) {
+          if (oc.isIndeterminate || (oc.end < 0 && !oc.isComplete)) continue;
           final oStart = oc.start;
           final oEnd = oc.isComplete
               ? (oc.end >= 0 ? oc.end + 1 : oc.start + oc.downloaded)
               : oc.start + oc.downloaded;
           final nStart = nc.start;
           final nEnd = nc.end >= 0 ? nc.end + 1 : nc.start + nc.size;
+          if (nEnd < 0) continue;
           final lo = max(oStart, nStart);
           final hi = min(oEnd, nEnd);
           if (hi > lo) overlap += (hi - lo);
@@ -425,11 +447,12 @@ class HttpTransferJob {
       );
     }
 
-    if (_state!.totalSize <= 0 && cmd.knownFileSize > 0) {
-      _state!.totalSize = cmd.knownFileSize;
-    }
     _state!.status = DmxStateStatus.active;
     await StateStore.save(cmd.tempFilePath, _state!, taskId: cmd.taskId);
+    // FIX(C-2): capture durability baselines once the final chunk layout is
+    // settled (after redistribution / size fix-up).
+    _chunkDurabilityBaselines =
+        List<int>.from(_state!.chunks.map((c) => c.downloaded));
 
     if (_state!.downloadedBytes > 0) {
       _stalledEmitted = false;
@@ -440,8 +463,7 @@ class HttpTransferJob {
         await _verifyServerIdentity(dio);
       }
       _emitProgress(0,
-          statusMessage: 'Resuming…',
-          cycleStateOverride: CycleState.resuming);
+          statusMessage: 'Resuming…', cycleStateOverride: CycleState.resuming);
     } else {
       _emitProgress(0,
           statusMessage: 'Starting…', cycleStateOverride: CycleState.starting);
@@ -478,6 +500,7 @@ class HttpTransferJob {
   /// start → (resume verify) → download → finalize → done
   /// Errors: pause, retry, fail, urlExpired, fileChanged, diskFull
   Future<void> run() async {
+    _stateSavedInCatch = false;
     _stopwatch.start();
     final dio = buildTransferDio(
       url: cmd.punyUrl,
@@ -485,6 +508,15 @@ class HttpTransferJob {
       referer: cmd.referer,
       cookies: cmd.cookies,
       oauthToken: cmd.oauthToken,
+      authUsername: cmd.authUsername,
+      authPassword: cmd.authPassword,
+      customHeaders: cmd.customHeaders,
+      httpsOnly: cmd.httpsOnly,
+      proxyType: cmd.proxyType,
+      proxyHost: cmd.proxyHost,
+      proxyPort: cmd.proxyPort,
+      proxyUsername: cmd.proxyUsername,
+      proxyPassword: cmd.proxyPassword,
     );
     _send('ack');
     try {
@@ -591,7 +623,8 @@ class HttpTransferJob {
         final rangeHeader = response.headers.value('accept-ranges');
         final contentRange = response.headers.value('content-range');
         _probeSupportsRange = response.statusCode == 206 ||
-            (rangeHeader != null && rangeHeader.toLowerCase().contains('bytes'));
+            (rangeHeader != null &&
+                rangeHeader.toLowerCase().contains('bytes'));
 
         int? serverTotal;
         if (contentRange != null) {
@@ -625,9 +658,11 @@ class HttpTransferJob {
               state: _state,
               deleteTempFile: true,
             );
-            _log.info('[Journal-J1] Server size changed ($serverTotal vs ${_state!.totalSize}); wiped state and journal');
+            _log.info(
+                '[Journal-J1] Server size changed ($serverTotal vs ${_state!.totalSize}); wiped state and journal');
             _state!.totalSize = serverTotal;
-            await StateStore.save(cmd.tempFilePath, _state!, durable: true, taskId: cmd.taskId);
+            await StateStore.save(cmd.tempFilePath, _state!,
+                durable: true, taskId: cmd.taskId);
             throw FileChangedOnServerException();
           }
         }
@@ -644,12 +679,14 @@ class HttpTransferJob {
             state: _state,
             deleteTempFile: true,
           );
-          _log.info('[Journal-J1] Server identity changed ($oldIdentity -> $newIdentity); wiped state and journal');
+          _log.info(
+              '[Journal-J1] Server identity changed ($oldIdentity -> $newIdentity); wiped state and journal');
           _state!.etag = newEtag;
           _state!.lastModified = newLm;
           _state!.migrationNote =
               '${_state!.migrationNote ?? ''} identity_restart'.trim();
-          await StateStore.save(cmd.tempFilePath, _state!, durable: true, taskId: cmd.taskId);
+          await StateStore.save(cmd.tempFilePath, _state!,
+              durable: true, taskId: cmd.taskId);
           _emitProgress(0,
               statusMessage: 'Source changed on server — restarting');
         } else {
@@ -673,7 +710,8 @@ class HttpTransferJob {
         if (_state != null) {
           _state!.cycleState = CycleState.updatingLinks.name;
           try {
-            await StateStore.save(cmd.tempFilePath, _state!, durable: true, taskId: cmd.taskId);
+            await StateStore.save(cmd.tempFilePath, _state!,
+                durable: true, taskId: cmd.taskId);
           } catch (e, st) {
             _log.fine('Failed to save state on expired URL', e, st);
           }
@@ -691,12 +729,17 @@ class HttpTransferJob {
 
   void _resetToSingleStream() {
     final st = _state!;
-    _log.info('resume_range_ignored: resetting to single-stream for ${cmd.taskId}');
+    _log.info(
+        'resume_range_ignored: resetting to single-stream for ${cmd.taskId}');
     _send('telemetry', {
       'event': 'resume_range_ignored',
       'taskId': cmd.taskId,
       'url': cmd.url,
     });
+    if (!_multiThreadCancelToken.isCancelled) {
+      _multiThreadCancelToken.cancel('fallback_to_single_stream');
+    }
+    _multiThreadCancelToken = CancelToken();
     StateStore.resetTransferState(
       cmd.tempFilePath,
       taskId: cmd.taskId,
@@ -722,8 +765,7 @@ class HttpTransferJob {
     try {
       await raf.setPosition(start);
       Digest? digest;
-      final innerSink =
-          ChunkedConversionSink<Digest>.withCallback((results) {
+      final innerSink = ChunkedConversionSink<Digest>.withCallback((results) {
         digest = results.single;
       });
       final sink = sha256.startChunkedConversion(innerSink);
@@ -768,10 +810,14 @@ class HttpTransferJob {
     final hasPriorBytes = st.downloadedBytes > 0;
     if (hasPriorBytes && await File(cmd.tempFilePath).exists()) {
       writer = await PositionalFileWriter.openForResume(cmd.tempFilePath,
-          threadCount: st.threadCount, totalSize: st.totalSize);
+          threadCount: st.threadCount,
+          totalSize: st.totalSize,
+          diskWriteBatching: cmd.diskWriteBatching);
     } else {
       writer = await PositionalFileWriter.open(cmd.tempFilePath,
-          totalSize: st.totalSize, threadCount: st.threadCount);
+          totalSize: st.totalSize,
+          threadCount: st.threadCount,
+          diskWriteBatching: cmd.diskWriteBatching);
       for (final c in st.chunks) {
         c.downloaded = 0;
       }
@@ -787,7 +833,7 @@ class HttpTransferJob {
       governor.setTaskLimit(cmd.taskId, cmd.speedLimitKbps * 125);
     }
 
-    if (hasPriorBytes && SettingsProvider.instance.resumeIntegrityCheck) {
+    if (hasPriorBytes && cmd.resumeIntegrityCheck) {
       await spotCheckResumedBytes(dio, st, writer);
     }
 
@@ -837,7 +883,8 @@ class HttpTransferJob {
           if (actualLen < st.downloadedBytes) {
             var remaining = actualLen;
             for (final c in st.chunks) {
-              final chunkOnDisk = min(c.downloaded, max(0, remaining - c.start));
+              final chunkOnDisk =
+                  min(c.downloaded, max(0, remaining - c.start));
               c.downloaded = chunkOnDisk.clamp(0, c.size >= 0 ? c.size : 0);
               remaining -= chunkOnDisk;
             }
@@ -846,7 +893,11 @@ class HttpTransferJob {
           _log.fine('Reconcile with disk on cancel failed', e, stLog);
         }
         _stateSavedInCatch = true;
-        await StateStore.save(cmd.tempFilePath, st, durable: true, taskId: cmd.taskId);
+        await _stateSaveLock.synchronized(() async {
+          await StateStore.save(
+              cmd.tempFilePath, _durableStateSnapshot(st, writer),
+              durable: true, taskId: cmd.taskId);
+        });
         _emitProgress(0,
             statusMessage: 'Paused', pauseReason: effectivePauseReason);
       } else if (e is! RangeUnsupportedException && e is! UrlExpiredException) {
@@ -862,7 +913,14 @@ class HttpTransferJob {
               'Writer flush on failure failed: $flushErr', flushErr, flushSt);
         }
         _stateSavedInCatch = true;
-        await StateStore.save(cmd.tempFilePath, st, durable: true, taskId: cmd.taskId);
+        // FIX(C-2): persist the durability-clamped snapshot — previously a
+        // failed flush was logged and then the *inflated* live counters were
+        // saved anyway, letting resume trust bytes that never hit the disk.
+        await _stateSaveLock.synchronized(() async {
+          await StateStore.save(
+              cmd.tempFilePath, _durableStateSnapshot(st, writer),
+              durable: true, taskId: cmd.taskId);
+        });
         _emitProgress(0, statusMessage: _formatFailedMessage(e));
       }
       rethrow;
@@ -904,12 +962,12 @@ class HttpTransferJob {
 
     Future<void> spawnWorker(int workerId) async {
       runningWorkers++;
-      activeSpeedPredictors[workerId] = SpeedPredictor();
-      if (_probeInitialGoodputBps != null && _probeInitialGoodputBps! > 0) {
-        activeSpeedPredictors[workerId]!.addSample(_probeInitialGoodputBps!);
-      }
-
       try {
+        activeSpeedPredictors[workerId] = SpeedPredictor();
+        if (_probeInitialGoodputBps != null && _probeInitialGoodputBps! > 0) {
+          activeSpeedPredictors[workerId]!.addSample(_probeInitialGoodputBps!);
+        }
+
         while (!_cancelRequested &&
             !_cancelToken.isCancelled &&
             !failFast.isCompleted) {
@@ -1094,7 +1152,8 @@ class HttpTransferJob {
       }
 
       if (corruptedChunks.isEmpty) {
-        _log.info('[IntegrityPipeline] All ${st.chunks.length} chunks verified OK.');
+        _log.info(
+            '[IntegrityPipeline] All ${st.chunks.length} chunks verified OK.');
         return;
       }
 
@@ -1109,7 +1168,8 @@ class HttpTransferJob {
         st.chunks[i].downloaded = 0;
         st.chunks[i].hash = null;
       }
-      await StateStore.save(cmd.tempFilePath, st, durable: true, taskId: cmd.taskId);
+      await StateStore.save(cmd.tempFilePath, st,
+          durable: true, taskId: cmd.taskId);
 
       await _executeAdaptiveScheduling(
         dio: dio,
@@ -1158,7 +1218,8 @@ class HttpTransferJob {
       try {
         var resumeFrom = chunk.downloaded;
         final tempFile = File(cmd.tempFilePath);
-        final currentDiskLen = tempFile.existsSync() ? tempFile.lengthSync() : 0;
+        final currentDiskLen =
+            tempFile.existsSync() ? tempFile.lengthSync() : 0;
         if (resumeFrom > 0 && chunk.start + resumeFrom > currentDiskLen) {
           _log.warning(
             '[DMX-Job-J4] Pre-flight violation on chunk $chunkIndex: '
@@ -1180,7 +1241,7 @@ class HttpTransferJob {
         }
         final response = await dio.get<ResponseBody>(
           activeUrl,
-          cancelToken: _cancelToken,
+          cancelToken: _multiThreadCancelToken,
           options: Options(
             responseType: ResponseType.stream,
             followRedirects: true,
@@ -1199,12 +1260,11 @@ class HttpTransferJob {
           if (resumeFrom > 0) {
             chunk.downloaded = 0;
             try {
-              await StateStore.resetTransferState(cmd.tempFilePath, taskId: cmd.taskId);
+              await StateStore.resetTransferState(cmd.tempFilePath,
+                  taskId: cmd.taskId);
             } catch (e, st) {
-              _log.fine(
-                  'Failed to reset state store on HTTP 200 resume reject',
-                  e,
-                  st);
+              _log.fine('Failed to reset state store on HTTP 200 resume reject',
+                  e, st);
             }
             throw RangeUnsupportedException();
           }
@@ -1373,7 +1433,11 @@ class HttpTransferJob {
         if (chunk.isComplete) {
           try {
             await writer.flushAll();
-            await StateStore.save(cmd.tempFilePath, _state!, durable: true, taskId: cmd.taskId);
+            // FIX(C-2): durability-clamped snapshot (other workers keep
+            // mutating the live state while we flush).
+            await StateStore.save(
+                cmd.tempFilePath, _durableStateSnapshot(_state!, writer),
+                durable: true, taskId: cmd.taskId);
             final journal = DownloadJournal('${cmd.tempFilePath}.journal');
             await journal.open();
             try {
@@ -1389,7 +1453,9 @@ class HttpTransferJob {
             debugPrint('[DMX] H-2: chunk-boundary save failed: $e');
             try {
               await Future<void>.delayed(const Duration(milliseconds: 150));
-              await StateStore.save(cmd.tempFilePath, _state!, durable: true, taskId: cmd.taskId);
+              await StateStore.save(
+                  cmd.tempFilePath, _durableStateSnapshot(_state!, writer),
+                  durable: true, taskId: cmd.taskId);
             } catch (e, st) {
               _log.fine('Failed backup state save at chunk boundary', e, st);
             }
@@ -1411,7 +1477,8 @@ class HttpTransferJob {
             if (_state != null) {
               _state!.cycleState = CycleState.updatingLinks.name;
               try {
-                await StateStore.save(cmd.tempFilePath, _state!, durable: true, taskId: cmd.taskId);
+                await StateStore.save(cmd.tempFilePath, _state!,
+                    durable: true, taskId: cmd.taskId);
               } catch (_) {}
             }
             await Future.delayed(const Duration(milliseconds: 10));
@@ -1589,7 +1656,7 @@ class HttpTransferJob {
     // Spot-check for single-stream
     if (chunk.downloaded > 0 &&
         cmd.supportsResume &&
-        SettingsProvider.instance.resumeIntegrityCheck &&
+        cmd.resumeIntegrityCheck &&
         await tempFile.exists()) {
       try {
         const sampleSize = 64 * 1024;
@@ -1648,96 +1715,284 @@ class HttpTransferJob {
             maxAttempts;
     var activeUrl = failover.activeUrl;
 
-    while (!st.isComplete || st.totalSize <= 0) {
-      _throwIfCancelled();
-      attempts++;
-      totalMirrorAttempts++;
-      if (totalMirrorAttempts > maxTotalAttempts) {
-        throw DownloadIntegrityException(
-            'Max total mirror attempts ($maxTotalAttempts) exceeded for single-stream job');
-      }
-      RandomAccessFile? raf;
-      try {
-        final resumeFrom = chunk.downloaded;
-        final headers = <String, dynamic>{};
-        if (resumeFrom > 0 && cmd.supportsResume) {
-          headers['Range'] = 'bytes=$resumeFrom-';
-          final ifRange = firstNonEmpty(st.etag, st.lastModified);
-          if (ifRange != null) headers['If-Range'] = ifRange;
+    // FIX(H-1): Ensure BandwidthGovernor is disposed on ALL exit paths from
+    // the single-stream path. Previously disposal only happened after the
+    // normal completion path (post-while-loop), leaking the governor's
+    // PowerMonitor listener on every exception/exit — a leak on every pause,
+    // timeout, range-reject, or other failure.
+    try {
+      while (!st.isComplete || st.totalSize <= 0) {
+        _throwIfCancelled();
+        attempts++;
+        totalMirrorAttempts++;
+        if (totalMirrorAttempts > maxTotalAttempts) {
+          throw DownloadIntegrityException(
+              'Max total mirror attempts ($maxTotalAttempts) exceeded for single-stream job');
         }
-        final response = await dio.get<ResponseBody>(
-          activeUrl,
-          cancelToken: _cancelToken,
-          options: Options(
-            responseType: ResponseType.stream,
-            followRedirects: true,
-            headers: headers,
-            validateStatus: (_) => true,
-          ),
-        );
+        RandomAccessFile? raf;
+        try {
+          final resumeFrom = chunk.downloaded;
+          final headers = <String, dynamic>{};
+          if (resumeFrom > 0 && cmd.supportsResume) {
+            headers['Range'] = 'bytes=$resumeFrom-';
+            final ifRange = firstNonEmpty(st.etag, st.lastModified);
+            if (ifRange != null) headers['If-Range'] = ifRange;
+          }
+          final response = await dio.get<ResponseBody>(
+            activeUrl,
+            cancelToken: _cancelToken,
+            options: Options(
+              responseType: ResponseType.stream,
+              followRedirects: true,
+              headers: headers,
+              validateStatus: (_) => true,
+            ),
+          );
 
-        if (response.statusCode == 416) {
-          await response.data?.stream.listen((_) {}).cancel();
-          handle416(chunk, st.totalSize);
-          if (st.totalSize > 0 && chunk.downloaded >= st.totalSize) break;
-          chunk.downloaded = 0;
-          if (await tempFile.exists()) await tempFile.delete();
-          continue;
-        }
+          if (response.statusCode == 416) {
+            await response.data?.stream.listen((_) {}).cancel();
+            handle416(chunk, st.totalSize);
+            if (st.totalSize > 0 && chunk.downloaded >= st.totalSize) break;
+            chunk.downloaded = 0;
+            if (await tempFile.exists()) await tempFile.delete();
+            continue;
+          }
 
-        // FIX 5: HTTP 200 resume rejection - handle server ignoring Range headers
-        if (response.statusCode == 200 && resumeFrom > 0) {
-          await response.data?.stream.listen((_) {}).cancel();
-          _log.info('resume_range_ignored (single-stream): resetting for ${cmd.taskId}');
-          _send('telemetry', {
-            'event': 'resume_range_ignored',
-            'taskId': cmd.taskId,
-            'url': cmd.url,
-          });
-          rangeRejectCount++;
-          if (rangeRejectCount > maxRangeRejects) {
-            st.status = DmxStateStatus.failed;
-            _emitProgress(0,
-                statusMessage: 'Failed: Server rejected resume requests.');
+          // FIX 5: HTTP 200 resume rejection - handle server ignoring Range headers
+          if (response.statusCode == 200 && resumeFrom > 0) {
+            await response.data?.stream.listen((_) {}).cancel();
+            _log.info(
+                'resume_range_ignored (single-stream): resetting for ${cmd.taskId}');
+            _send('telemetry', {
+              'event': 'resume_range_ignored',
+              'taskId': cmd.taskId,
+              'url': cmd.url,
+            });
+            rangeRejectCount++;
+            if (rangeRejectCount > maxRangeRejects) {
+              st.status = DmxStateStatus.failed;
+              _emitProgress(0,
+                  statusMessage: 'Failed: Server rejected resume requests.');
+              throw DioException(
+                requestOptions: response.requestOptions,
+                type: DioExceptionType.badResponse,
+                message: 'Server repeatedly ignored Range requests.',
+              );
+            }
+            // Clear state files
+            for (final p in [
+              '${cmd.tempFilePath}.dmxstate',
+              '${cmd.tempFilePath}.dmxstate.tmp',
+            ]) {
+              try {
+                final f = File(p);
+                if (await f.exists()) await f.delete();
+              } catch (e, st) {
+                _log.fine(
+                    'Failed to delete dmxstate file on single-stream restart',
+                    e,
+                    st);
+              }
+            }
+            if (await tempFile.exists()) {
+              try {
+                await tempFile.delete();
+              } catch (e, st) {
+                _log.fine('Failed to delete temp file on single-stream restart',
+                    e, st);
+              }
+            }
+            chunk.downloaded = 0;
+            st.chunks = ChunkScheduler.singleStream(st.totalSize);
+            // Restart from the beginning with this mirror
+            continue;
+          }
+
+          if (response.statusCode != 200 && response.statusCode != 206) {
+            await response.data?.stream.listen((_) {}).cancel();
+            // FIX 4: URL expiration detection
+            if (response.statusCode == 401 || response.statusCode == 403) {
+              final host = Uri.tryParse(cmd.punyUrl)?.host.toLowerCase() ?? '';
+              final isYtOrSigned = _isExpiredUrlOrSite(cmd.url, host);
+              if (isYtOrSigned) {
+                _emitProgress(0,
+                    statusMessage: 'Refreshing links…',
+                    cycleStateOverride: CycleState.updatingLinks);
+                if (_state != null) {
+                  _state!.cycleState = CycleState.updatingLinks.name;
+                  try {
+                    await StateStore.save(cmd.tempFilePath, _state!,
+                        durable: true);
+                  } catch (e, st) {
+                    _log.fine(
+                        'Failed to save state on expired URL in single-stream',
+                        e,
+                        st);
+                  }
+                }
+                await Future.delayed(const Duration(milliseconds: 10));
+                throw UrlExpiredException(
+                  'Download URL expired (HTTP ${response.statusCode}). Refresh required.',
+                );
+              }
+            }
             throw DioException(
               requestOptions: response.requestOptions,
               type: DioExceptionType.badResponse,
-              message: 'Server repeatedly ignored Range requests.',
+              response: response,
+              message: 'Server returned status code ${response.statusCode}',
             );
           }
-          // Clear state files
-          for (final p in [
-            '${cmd.tempFilePath}.dmxstate',
-            '${cmd.tempFilePath}.dmxstate.tmp',
-          ]) {
-            try {
-              final f = File(p);
-              if (await f.exists()) await f.delete();
-            } catch (e, st) {
-              _log.fine(
-                  'Failed to delete dmxstate file on single-stream restart',
-                  e,
-                  st);
-            }
-          }
-          if (await tempFile.exists()) {
-            try {
-              await tempFile.delete();
-            } catch (e, st) {
-              _log.fine(
-                  'Failed to delete temp file on single-stream restart', e, st);
-            }
-          }
-          chunk.downloaded = 0;
-          st.chunks = ChunkScheduler.singleStream(st.totalSize);
-          // Restart from the beginning with this mirror
-          continue;
-        }
 
-        if (response.statusCode != 200 && response.statusCode != 206) {
-          await response.data?.stream.listen((_) {}).cancel();
-          // FIX 4: URL expiration detection
-          if (response.statusCode == 401 || response.statusCode == 403) {
+          // FIX 6: HTML response detection - use precise regex
+          final contentType =
+              response.headers.value('content-type')?.toLowerCase() ?? '';
+          if (_htmlContentTypeRegex.hasMatch(contentType)) {
+            await response.data?.stream.listen((_) {}).cancel();
+            throw DioException(
+              requestOptions: response.requestOptions,
+              type: DioExceptionType.badResponse,
+              response: response,
+              message: 'HTML_INSTEAD_OF_MEDIA',
+            );
+          }
+
+          final isPartial = response.statusCode == 206;
+          if (isPartial) {
+            final contentRange = response.headers.value('content-range');
+            if (contentRange != null) {
+              try {
+                validateContentRange(
+                  contentRange,
+                  expectedStart: chunk.downloaded,
+                  expectedEnd: st.totalSize > 0 ? st.totalSize - 1 : -1,
+                  expectedTotal: st.totalSize,
+                  allowUnknown: chunk.downloaded == 0,
+                  url: cmd.punyUrl,
+                );
+              } on DioException {
+                chunk.downloaded = 0;
+                rethrow;
+              }
+            }
+          }
+
+          st.etag ??= response.headers.value('etag');
+          st.lastModified ??= response.headers.value('last-modified');
+          final contentLength = int.tryParse(
+                  response.headers.value(Headers.contentLengthHeader) ?? '') ??
+              0;
+          if (contentLength > 0) {
+            final actual = (isPartial ? chunk.downloaded : 0) + contentLength;
+            if (st.totalSize <= 0 || actual != st.totalSize) {
+              st.totalSize = actual;
+              chunk.end = actual - 1;
+            }
+          }
+
+          raf = await tempFile.open(
+            mode: chunk.downloaded > 0 ? FileMode.append : FileMode.write,
+          );
+          final stream = response.data?.stream;
+          if (stream == null) {
+            throw DioException(
+              requestOptions: response.requestOptions,
+              type: DioExceptionType.badResponse,
+              message: 'Empty response body.',
+            );
+          }
+          try {
+            await for (final piece in stream) {
+              _throwIfCancelled();
+              final sleepMs =
+                  await governor.acquire(piece.length, taskId: cmd.taskId);
+              if (sleepMs > 0) {
+                await _cancellableDelay(Duration(milliseconds: sleepMs));
+                _throwIfCancelled();
+              }
+              await raf.writeFrom(piece);
+              chunk.downloaded += piece.length;
+              _bytesSinceSave += piece.length;
+              await _throttledSaveAndReport(
+                null,
+                preSaveFlush: () async {
+                  await raf?.flush();
+                },
+              );
+            }
+          } on DioException catch (e) {
+            if (e.type == DioExceptionType.cancel) {
+              rethrow;
+            }
+            rethrow;
+          }
+
+          try {
+            await raf.flush();
+            await raf.close();
+          } catch (e, st) {
+            _log.fine('Failed to flush/close raf in single-stream', e, st);
+          }
+          raf = null;
+          failover.reportSuccess();
+          attempts = 0;
+          if (st.totalSize <= 0) {
+            // FIX-P0-1
+            final actualDiskLen = await tempFile.length(); // FIX-P0-1
+            // M-3: total size was never known (no usable Content-Length), so the
+            // on-disk length is the only measure of what arrived. Only seal it as
+            // a finished file when the response framing gave a real completion
+            // signal (chunked terminator / graceful close); otherwise the stream
+            // may have been truncated by an early socket close, so throw a
+            // retryable error and let the outer loop resume rather than reporting
+            // a partial file as success.
+            if (!unknownLengthEofIsTrustworthy(
+                response.headers, actualDiskLen)) {
+              throw DioException(
+                requestOptions: response.requestOptions,
+                type: DioExceptionType.connectionError,
+                message:
+                    'Stream ended without a completion signal (possible truncation).',
+              );
+            }
+            chunk.downloaded = actualDiskLen; // FIX-P0-1
+            st.totalSize = actualDiskLen; // FIX-P0-1
+            chunk.end = actualDiskLen > 0 ? actualDiskLen - 1 : 0; // FIX-P0-1
+          } // FIX-P0-1
+          if (chunk.isComplete ||
+              (st.totalSize > 0 && chunk.downloaded >= st.totalSize)) {
+            // FIX-P0-1
+            await StateStore.save(cmd.tempFilePath, _state!,
+                durable: true); // FIX-P0-1
+          } // FIX-P0-1
+          break;
+        } on DioException catch (e) {
+          if (e.type == DioExceptionType.cancel) {
+            // FIX 1: Pause - save state synchronously
+            _state!.status = DmxStateStatus.paused;
+            try {
+              await raf?.flush();
+              await raf?.close();
+            } catch (flushErr, flushSt) {
+              _log.fine(
+                  'RAF flush on pause failed: $flushErr', flushErr, flushSt);
+            }
+            raf = null;
+            _stateSavedInCatch = true;
+            await StateStore.save(cmd.tempFilePath, _state!, durable: true);
+            _emitProgress(0,
+                statusMessage: 'Paused', pauseReason: effectivePauseReason);
+            rethrow;
+          }
+          if (e.message == 'HTML_INSTEAD_OF_MEDIA') {
+            _state!.status = DmxStateStatus.failed;
+            _emitProgress(0, statusMessage: _formatFailedMessage(e));
+            rethrow;
+          }
+
+          final status = e.response?.statusCode;
+          // FIX 4: URL expiration detection - precise patterns only
+          if (status == 401 || status == 403) {
             final host = Uri.tryParse(cmd.punyUrl)?.host.toLowerCase() ?? '';
             final isYtOrSigned = _isExpiredUrlOrSite(cmd.url, host);
             if (isYtOrSigned) {
@@ -1758,249 +2013,99 @@ class HttpTransferJob {
               }
               await Future.delayed(const Duration(milliseconds: 10));
               throw UrlExpiredException(
-                'Download URL expired (HTTP ${response.statusCode}). Refresh required.',
+                'Download URL expired (HTTP $status). Refresh required.',
               );
             }
           }
-          throw DioException(
-            requestOptions: response.requestOptions,
-            type: DioExceptionType.badResponse,
-            response: response,
-            message: 'Server returned status code ${response.statusCode}',
-          );
-        }
-
-        // FIX 6: HTML response detection - use precise regex
-        final contentType =
-            response.headers.value('content-type')?.toLowerCase() ?? '';
-        if (_htmlContentTypeRegex.hasMatch(contentType)) {
-          await response.data?.stream.listen((_) {}).cancel();
-          throw DioException(
-            requestOptions: response.requestOptions,
-            type: DioExceptionType.badResponse,
-            response: response,
-            message: 'HTML_INSTEAD_OF_MEDIA',
-          );
-        }
-
-        final isPartial = response.statusCode == 206;
-        if (isPartial) {
-          final contentRange = response.headers.value('content-range');
-          if (contentRange != null) {
-            try {
-              validateContentRange(
-                contentRange,
-                expectedStart: chunk.downloaded,
-                expectedEnd: st.totalSize > 0 ? st.totalSize - 1 : -1,
-                expectedTotal: st.totalSize,
-                allowUnknown: chunk.downloaded == 0,
-                url: cmd.punyUrl,
-              );
-            } on DioException {
-              chunk.downloaded = 0;
-              rethrow;
-            }
-          }
-        }
-
-        st.etag ??= response.headers.value('etag');
-        st.lastModified ??= response.headers.value('last-modified');
-        final contentLength = int.tryParse(
-                response.headers.value(Headers.contentLengthHeader) ?? '') ??
-            0;
-        if (contentLength > 0) {
-          final actual = (isPartial ? chunk.downloaded : 0) + contentLength;
-          if (st.totalSize <= 0 || actual != st.totalSize) {
-            st.totalSize = actual;
-            chunk.end = actual - 1;
-          }
-        }
-
-        raf = await tempFile.open(
-          mode: chunk.downloaded > 0 ? FileMode.append : FileMode.write,
-        );
-        final stream = response.data?.stream;
-        if (stream == null) {
-          throw DioException(
-            requestOptions: response.requestOptions,
-            type: DioExceptionType.badResponse,
-            message: 'Empty response body.',
-          );
-        }
-        try {
-          await for (final piece in stream) {
-            _throwIfCancelled();
-            final sleepMs =
-                await governor.acquire(piece.length, taskId: cmd.taskId);
-            if (sleepMs > 0) {
-              await _cancellableDelay(Duration(milliseconds: sleepMs));
-              _throwIfCancelled();
-            }
-            await raf.writeFrom(piece);
-            chunk.downloaded += piece.length;
-            _bytesSinceSave += piece.length;
-            await _throttledSaveAndReport(
-              null,
-              preSaveFlush: () async {
-                await raf?.flush();
-              },
-            );
-          }
-        } on DioException catch (e) {
-          if (e.type == DioExceptionType.cancel) {
+          // Non-retryable client errors
+          if (status == 401 ||
+              status == 403 ||
+              status == 404 ||
+              status == 410) {
+            _state!.status = DmxStateStatus.failed;
+            _emitProgress(0, statusMessage: _formatFailedMessage(e));
             rethrow;
           }
-          rethrow;
-        }
-
-        try {
-          await raf.flush();
-          await raf.close();
-        } catch (e, st) {
-          _log.fine('Failed to flush/close raf in single-stream', e, st);
-        }
-        raf = null;
-        failover.reportSuccess();
-        attempts = 0;
-        if (st.totalSize <= 0) { // FIX-P0-1
-          final actualDiskLen = await tempFile.length(); // FIX-P0-1
-          chunk.downloaded = actualDiskLen; // FIX-P0-1
-          st.totalSize = actualDiskLen; // FIX-P0-1
-          chunk.end = actualDiskLen > 0 ? actualDiskLen - 1 : 0; // FIX-P0-1
-        } // FIX-P0-1
-        if (chunk.isComplete || (st.totalSize > 0 && chunk.downloaded >= st.totalSize)) { // FIX-P0-1
-          await StateStore.save(cmd.tempFilePath, _state!, durable: true); // FIX-P0-1
-        } // FIX-P0-1
-        break;
-      } on DioException catch (e) {
-        if (e.type == DioExceptionType.cancel) {
-          // FIX 1: Pause - save state synchronously
-          _state!.status = DmxStateStatus.paused;
+          if (status != null &&
+              status >= 400 &&
+              status < 500 &&
+              status != 408 &&
+              status != 429) {
+            _state!.status = DmxStateStatus.failed;
+            _emitProgress(0, statusMessage: _formatFailedMessage(e));
+            rethrow;
+          }
+          if (attempts >= maxAttempts) {
+            _state!.status = DmxStateStatus.failed;
+            final next = failover.advance();
+            if (next != null) {
+              activeUrl = next;
+              // FIX 16: Reset both attempt counters for new mirror
+              attempts = 0;
+              totalMirrorAttempts = 0;
+              _state!.status = DmxStateStatus.active;
+              _emitProgress(_stopwatch.elapsedMilliseconds,
+                  statusMessage: 'Retrying (mirror failover)…',
+                  cycleStateOverride: CycleState.retrying);
+              continue;
+            }
+            _emitProgress(0, statusMessage: _formatFailedMessage(e));
+            rethrow;
+          }
+          _emitProgress(_stopwatch.elapsedMilliseconds,
+              statusMessage: 'Retrying…');
+          await _cancellableDelay(
+              Duration(seconds: (attempts * attempts * 2) + _rng.nextInt(3)));
+        } finally {
           try {
             await raf?.flush();
             await raf?.close();
-          } catch (flushErr, flushSt) {
+          } catch (e, st) {
             _log.fine(
-                'RAF flush on pause failed: $flushErr', flushErr, flushSt);
+                'Failed to flush/close raf in single-stream finally', e, st);
           }
           raf = null;
-          _stateSavedInCatch = true;
-          await StateStore.save(cmd.tempFilePath, _state!, durable: true);
-          _emitProgress(0,
-              statusMessage: 'Paused', pauseReason: effectivePauseReason);
-          rethrow;
-        }
-        if (e.message == 'HTML_INSTEAD_OF_MEDIA') {
-          _state!.status = DmxStateStatus.failed;
-          _emitProgress(0, statusMessage: _formatFailedMessage(e));
-          rethrow;
-        }
-
-        final status = e.response?.statusCode;
-        // FIX 4: URL expiration detection - precise patterns only
-        if (status == 401 || status == 403) {
-          final host = Uri.tryParse(cmd.punyUrl)?.host.toLowerCase() ?? '';
-          final isYtOrSigned = _isExpiredUrlOrSite(cmd.url, host);
-          if (isYtOrSigned) {
-            _emitProgress(0,
-                statusMessage: 'Refreshing links…',
-                cycleStateOverride: CycleState.updatingLinks);
-            if (_state != null) {
-              _state!.cycleState = CycleState.updatingLinks.name;
-              try {
-                await StateStore.save(cmd.tempFilePath, _state!, durable: true);
-              } catch (e, st) {
-                _log.fine(
-                    'Failed to save state on expired URL in single-stream',
-                    e,
-                    st);
-              }
+          // FIX 15: Only save if not already saved in catch
+          if (!_stateSavedInCatch) {
+            try {
+              await StateStore.save(cmd.tempFilePath, _state!, durable: true);
+            } catch (e, st) {
+              _log.fine('Failed to save state in single-stream finally', e, st);
             }
-            await Future.delayed(const Duration(milliseconds: 10));
-            throw UrlExpiredException(
-              'Download URL expired (HTTP $status). Refresh required.',
-            );
-          }
-        }
-        // Non-retryable client errors
-        if (status == 401 || status == 403 || status == 404 || status == 410) {
-          _state!.status = DmxStateStatus.failed;
-          _emitProgress(0, statusMessage: _formatFailedMessage(e));
-          rethrow;
-        }
-        if (status != null &&
-            status >= 400 &&
-            status < 500 &&
-            status != 408 &&
-            status != 429) {
-          _state!.status = DmxStateStatus.failed;
-          _emitProgress(0, statusMessage: _formatFailedMessage(e));
-          rethrow;
-        }
-        if (attempts >= maxAttempts) {
-          _state!.status = DmxStateStatus.failed;
-          final next = failover.advance();
-          if (next != null) {
-            activeUrl = next;
-            // FIX 16: Reset both attempt counters for new mirror
-            attempts = 0;
-            totalMirrorAttempts = 0;
-            _state!.status = DmxStateStatus.active;
-            _emitProgress(_stopwatch.elapsedMilliseconds,
-                statusMessage: 'Retrying (mirror failover)…',
-                cycleStateOverride: CycleState.retrying);
-            continue;
-          }
-          _emitProgress(0, statusMessage: _formatFailedMessage(e));
-          rethrow;
-        }
-        _emitProgress(_stopwatch.elapsedMilliseconds,
-            statusMessage: 'Retrying…');
-        await _cancellableDelay(
-            Duration(seconds: (attempts * attempts * 2) + _rng.nextInt(3)));
-      } finally {
-        try {
-          await raf?.flush();
-          await raf?.close();
-        } catch (e, st) {
-          _log.fine(
-              'Failed to flush/close raf in single-stream finally', e, st);
-        }
-        raf = null;
-        // FIX 15: Only save if not already saved in catch
-        if (!_stateSavedInCatch) {
-          try {
-            await StateStore.save(cmd.tempFilePath, _state!, durable: true);
-          } catch (e, st) {
-            _log.fine('Failed to save state in single-stream finally', e, st);
           }
         }
       }
-    }
 
-    // Verify final file size
-    final actualLen = await tempFile.length();
-    if (st.totalSize > 0 && actualLen != st.totalSize) {
-      if (actualLen > st.totalSize) {
-        final raf = await tempFile.open(mode: FileMode.writeOnly);
-        await raf.truncate(st.totalSize);
-        await raf.close();
-      } else {
-        st.status = DmxStateStatus.failed;
-        await StateStore.save(cmd.tempFilePath, st, durable: true);
-        final err = DownloadIntegrityException(
-            'expected ${st.totalSize} bytes, got $actualLen');
-        _emitProgress(0, statusMessage: _formatFailedMessage(err));
-        throw err;
+      // Verify final file size
+      final actualLen = await tempFile.length();
+      if (st.totalSize > 0 && actualLen != st.totalSize) {
+        if (actualLen > st.totalSize) {
+          final raf = await tempFile.open(mode: FileMode.writeOnly);
+          await raf.truncate(st.totalSize);
+          await raf.close();
+        } else {
+          st.status = DmxStateStatus.failed;
+          await StateStore.save(cmd.tempFilePath, st, durable: true);
+          final err = DownloadIntegrityException(
+              'expected ${st.totalSize} bytes, got $actualLen');
+          _emitProgress(0, statusMessage: _formatFailedMessage(err));
+          throw err;
+        }
       }
+      governor.removeTaskLimit(cmd.taskId);
+      governor.unregisterConsumer();
+    } finally {
+      governor.dispose();
     }
-    governor.removeTaskLimit(cmd.taskId);
-    governor.unregisterConsumer();
-    governor.dispose();
   }
+
+  bool _finalized = false;
 
   /// Finalizes the download: renames temp file to final, cleans up state.
   Future<void> _finalize(Dio dio) async {
+    // M-2: guard against double finalize (called from both the multi-threaded
+    // and single-stream completion paths).
+    if (_finalized) return;
     final st = _state!;
     if (cmd.tempFilePath != cmd.localFilePath) {
       final tempExists = await File(cmd.tempFilePath).exists();
@@ -2068,8 +2173,31 @@ class HttpTransferJob {
     }
     st.status = DmxStateStatus.complete;
     await StateStore.save(cmd.tempFilePath, st, durable: true);
+    // H1: write a durable completion marker beside the temp path BEFORE deleting
+    // the snapshot/WAL. If the process dies after finalize but before the main
+    // isolate commits `completed` to the DB, startup reconciliation can still
+    // recognise the file as complete — critically for unknown-length
+    // (fileSize == 0) downloads, which the size-based reconcile gate misses.
+    await _writeCompletionMarker(st);
     _emitProgress(0, statusMessage: 'Completed');
     await StateStore.remove(cmd.tempFilePath);
+    _finalized = true;
+  }
+
+  /// Writes `<tempFilePath>.dmxdone` containing the final byte count. Best-effort:
+  /// a marker-write failure must never fail an otherwise-complete download, but
+  /// it is still surfaced as telemetry rather than swallowed.
+  Future<void> _writeCompletionMarker(TransferState st) async {
+    try {
+      final finalSize = st.totalSize > 0
+          ? st.totalSize
+          : await File(cmd.localFilePath).length();
+      await File('${cmd.tempFilePath}.dmxdone')
+          .writeAsString('$finalSize', flush: true);
+    } catch (e, stackTrace) {
+      StateStore.recordSaveFailure(
+          '${cmd.tempFilePath}.dmxdone', e, stackTrace);
+    }
   }
 
   int _effectiveGlobalLimit() {
@@ -2100,9 +2228,7 @@ class HttpTransferJob {
     PositionalFileWriter? writer, {
     Future<void> Function()? preSaveFlush,
   }) async {
-    if (_stateSavePending) return;
-
-    // If cancelled, force immediate durable save
+    // If cancelled or paused, force immediate durable save
     if (_cancelRequested || _cancelToken.isCancelled) {
       final st = _state;
       if (st != null && !_stateSavedInCatch) {
@@ -2111,15 +2237,18 @@ class HttpTransferJob {
             if (preSaveFlush != null) await preSaveFlush();
             if (writer != null) await writer.flushAll();
             await DownloadJournal.flushAllActive();
-            await StateStore.save(cmd.tempFilePath, st,
+            await StateStore.save(
+                cmd.tempFilePath, _durableStateSnapshot(st, writer),
                 durable: true, taskId: cmd.taskId);
           });
-        } catch (e) {
-          debugPrint('[DMX-Job] forced state save on cancel failed: $e');
+        } catch (e, stackTrace) {
+          StateStore.recordSaveFailure(cmd.tempFilePath, e, stackTrace);
         }
       }
       return;
     }
+
+    if (_stateSavePending) return;
 
     final st = _state;
     if (st == null) return;
@@ -2150,14 +2279,24 @@ class HttpTransferJob {
       unawaited(_stateSaveLock.synchronized(() async {
         try {
           if (preSaveFlush != null) await preSaveFlush();
-          if (writer != null) await writer.flushBuffers();
+          // C-1: fsync buffered data to disk before persisting progress, so the
+          // saved state can never claim more bytes than are durably on disk.
+          // flushAll() issues a real fsync barrier (handle.flush()); flushBuffers()
+          // only drains to the OS page cache and is lost on power failure.
+          if (writer != null) await writer.flushAll();
+          // FIX(C-2): serialize a durability-clamped clone. The live state
+          // keeps mutating during the flush awaits; saving it directly could
+          // record offsets beyond what was actually written to disk.
           await StateStore.save(
             cmd.tempFilePath,
-            st,
+            _durableStateSnapshot(st, writer),
+            durable: true,
             screenOff: PowerMonitor.screenOff,
           );
-        } catch (e) {
-          debugPrint('[DMX-Job] state save failed: $e');
+        } catch (e, stackTrace) {
+          // M-4: surface durability failures (fsync / state save) instead of
+          // swallowing them to a debugPrint that hides a stale resume offset.
+          StateStore.recordSaveFailure(cmd.tempFilePath, e, stackTrace);
         } finally {
           _stateSavePending = false;
         }
@@ -2168,6 +2307,32 @@ class HttpTransferJob {
       _lastReportMs = nowMs;
       _emitProgress(nowMs, writer: writer);
     }
+  }
+
+  /// FIX(C-2): Returns a clone of [st] whose per-chunk counters never exceed
+  /// bytes actually written to the file. `flushAll()` fsyncs, but the live
+  /// TransferState keeps mutating while we await — serializing it after the
+  /// flush could persist offsets that were never fsynced (silent corruption
+  /// window on power loss). Each chunk's durable amount is:
+  ///   baseline (previous session's durable progress)
+  //   + bytes this session whose OS write succeeded (writer high-water).
+  TransferState _durableStateSnapshot(
+      TransferState st, PositionalFileWriter? writer) {
+    final snap = st.clone();
+    if (writer == null) return snap;
+    final baselines = _chunkDurabilityBaselines;
+    if (baselines.isEmpty) return snap;
+    final highWater = writer.snapshotFlushedHighWater();
+    for (var i = 0; i < snap.chunks.length; i++) {
+      final c = snap.chunks[i];
+      final baseline = i < baselines.length ? baselines[i] : 0;
+      final absEnd = highWater[i] ?? (c.start + baseline);
+      var durable = absEnd - c.start;
+      if (durable < 0) durable = 0;
+      if (durable > c.downloaded) durable = c.downloaded;
+      c.downloaded = durable;
+    }
+    return snap;
   }
 
   List<Map<String, dynamic>>? _getChunkDetails(TransferState st) {
@@ -2289,8 +2454,10 @@ class HttpTransferJob {
 
     // FIX 11: Writer buffer adaptation - also works in single-stream via
     // checking if writer is available (it's null in single-stream, so
-    // this only applies to multi-threaded, which is correct)
-    if (writer != null) {
+    // this only applies to multi-threaded, which is correct).
+    // Skipped when batching is disabled: writes flush immediately, so buffer
+    // size is irrelevant.
+    if (writer != null && cmd.diskWriteBatching) {
       if (_currentWriterBufferSize == 256 * 1024 && speed > 60 * 1024 * 1024) {
         _currentWriterBufferSize = 512 * 1024;
         writer.setBufferSize(512 * 1024);
@@ -2420,7 +2587,17 @@ class HttpTransferJob {
         message: 'Missing Content-Range header during resume.',
       );
     }
-    final match = _contentRangeHeaderRegex.firstMatch(value.trim());
+    final trimmed = value.trim();
+    if (trimmed.toLowerCase() == 'bytes */0' ||
+        trimmed.toLowerCase() == 'bytes */*') {
+      if (expectedStart == 0 && (allowUnknown || expectedTotal == 0)) return;
+      throw DioException(
+        requestOptions: RequestOptions(path: url ?? ''),
+        type: DioExceptionType.badResponse,
+        message: 'Invalid Content-Range response for resume: $value.',
+      );
+    }
+    final match = _contentRangeHeaderRegex.firstMatch(trimmed);
     if (match == null) {
       if (allowUnknown) return;
       throw DioException(

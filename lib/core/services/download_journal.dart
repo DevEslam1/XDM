@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
@@ -6,6 +7,8 @@ import 'package:flutter/foundation.dart';
 import 'package:get_it/get_it.dart';
 import 'package:synchronized/synchronized.dart';
 import '../constants/thresholds.dart';
+import 'crash_reporting_service.dart';
+import 'diagnostic_service.dart';
 import 'download_engine.dart';
 import 'logging_service.dart';
 import 'power_monitor.dart';
@@ -190,7 +193,9 @@ class StateStoreInstance {
               );
             } catch (backupErr, st) {
               LoggingService.logger('DownloadJournal').warning(
-                'Failed to backup corrupted state file', backupErr, st,
+                'Failed to backup corrupted state file',
+                backupErr,
+                st,
               );
             }
           }
@@ -206,7 +211,9 @@ class StateStoreInstance {
           );
         } catch (backupErr, st) {
           LoggingService.logger('DownloadJournal').warning(
-            'Failed to backup unreadable state file', backupErr, st,
+            'Failed to backup unreadable state file',
+            backupErr,
+            st,
           );
         }
         state = null;
@@ -227,7 +234,8 @@ class StateStoreInstance {
         state = _stateFromChunkBytes(
           tempFilePath: tempFilePath,
           url: url,
-          threadCount: journalDetails.threadCount ?? journalDetails.chunkBytes.length,
+          threadCount:
+              journalDetails.threadCount ?? journalDetails.chunkBytes.length,
           chunkBytes: journalDetails.chunkBytes,
           totalSize: journalDetails.totalSize ?? knownFileSize,
         );
@@ -548,8 +556,7 @@ class StateStoreInstance {
           // Screen-off threshold: always write when paused or status changed or durable
           if (state.status == DmxStateStatus.paused || isDurable) {
             // Never skip when paused or durable
-          } else if (isScreenOff &&
-              bytesSinceLastWrite < 5 * 1024 * 1024) {
+          } else if (isScreenOff && bytesSinceLastWrite < 5 * 1024 * 1024) {
             return; // skip small deltas when screen off (< 5MB)
           }
 
@@ -558,6 +565,38 @@ class StateStoreInstance {
           if (!isDurable) {
             if (lastFp == fingerprint) {
               return; // Skip redundant state write without JSON serialization
+            }
+          }
+
+          // M3 (Plan 03 Task 3.5): cross-isolate stale-write guard. Durable
+          // writes are the only ones issued from the main isolate (the
+          // background_service dataSync checkpoint reconstructs a TransferState
+          // from coarse DB-derived per-chunk *fractions* — staler and less
+          // precise than the worker isolate's byte-accurate snapshot). Because
+          // the dedup caches (_lastWrittenBytes etc.) are per-isolate, they
+          // cannot observe a peer isolate's fresher write, so we consult the
+          // on-disk snapshot directly and refuse any durable write that would
+          // regress byte progress or un-complete a finished download. The pause
+          // status the main isolate wants to persist is stored on the DB row
+          // independently, so preserving the fresher snapshot loses nothing.
+          if (isDurable) {
+            final existing = await _readExistingProgress(targetPath);
+            if (existing != null) {
+              final incomingBytes = state.downloadedBytes;
+              final regressesBytes = existing.bytes > incomingBytes;
+              final unCompletes =
+                  existing.status == DmxStateStatus.complete.name &&
+                      state.status != DmxStateStatus.complete;
+              if (regressesBytes || unCompletes) {
+                DiagnosticService.instance.recordTelemetryAlert(
+                  'stale_state_write_skipped',
+                  taskId: taskId,
+                  details: 'onDisk=${existing.bytes} incoming=$incomingBytes '
+                      'onDiskStatus=${existing.status} '
+                      'incomingStatus=${state.status.name}',
+                );
+                return;
+              }
             }
           }
 
@@ -583,8 +622,7 @@ class StateStoreInstance {
             await tmp.writeAsString(payload, flush: true);
             if (!kIsWeb) {
               try {
-                final raf =
-                    await tmp.open(mode: FileMode.writeOnlyAppend);
+                final raf = await tmp.open(mode: FileMode.writeOnlyAppend);
                 try {
                   await raf.flush();
                 } finally {
@@ -628,6 +666,7 @@ class StateStoreInstance {
           _lastSaveTimes[targetPath] = now;
           _lastWrittenStatus[targetPath] = state.status;
           _lastWrittenBytes[targetPath] = state.downloadedBytes;
+          StateStore.markSaveSuccess();
 
           if (_lastFingerprints.length > _maxCachedPayloads) {
             final keysToRemove = _lastFingerprints.keys
@@ -640,14 +679,58 @@ class StateStoreInstance {
               _lastWrittenStatus.remove(key);
             }
           }
-        } catch (e) {
-          debugPrint('[DmxState] save failed for $tempFilePath: $e');
+        } catch (e, stackTrace) {
+          // M-2/M-4: don't silently swallow persistence failures. A failing
+          // disk (full / read-only / EIO) previously left resume state stale
+          // with only a debugPrint; now it is counted and surfaced.
+          StateStore.recordSaveFailure(tempFilePath, e, stackTrace);
         }
       });
     } finally {
       await _lock.synchronized(() {
         _heldPaths.remove(targetPath);
       });
+    }
+  }
+
+  /// M3 (Plan 03 Task 3.5): reads the byte progress and status recorded in the
+  /// on-disk `.dmxstate` snapshot at [targetPath]. Used by [save] to detect
+  /// whether an incoming durable write would regress a fresher snapshot written
+  /// by a peer isolate. Byte total mirrors [TransferState.downloadedBytes] (sum
+  /// of per-chunk progress, clamped to totalSize). Returns null when the file is
+  /// absent or unparseable — fail-open, so a parse failure never blocks a write.
+  Future<({int bytes, String status})?> _readExistingProgress(
+      String targetPath) async {
+    try {
+      final file = File(targetPath);
+      if (!await file.exists()) return null;
+      final raw = await file.readAsString();
+      if (raw.isEmpty) return null;
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return null;
+      final json = Map<String, dynamic>.from(decoded);
+      final totalSize = (json['totalSize'] as num?)?.toInt() ?? 0;
+      var bytes = 0;
+      final progress = json['progress'];
+      if (progress is List) {
+        for (final p in progress) {
+          if (p is num) bytes += p.toInt();
+        }
+      } else {
+        final chunks = json['chunks'];
+        if (chunks is List) {
+          for (final c in chunks) {
+            if (c is Map) {
+              bytes += (c['downloaded'] as num?)?.toInt() ?? 0;
+            }
+          }
+        }
+      }
+      if (totalSize > 0 && bytes > totalSize) bytes = totalSize;
+      final status = (json['status'] as String?) ?? '';
+      return (bytes: bytes, status: status);
+    } catch (_) {
+      return null; // fail-open: never block a legitimate write on a parse error
     }
   }
 
@@ -761,6 +844,42 @@ abstract class StateStore {
     return _fallbackStore;
   }
 
+  // ── Persistence-failure observability (Plan 01 M-4 / Plan 03 M2) ──────────
+  // save() swallows internal write errors so a live download is never torn
+  // down by a transient disk hiccup, but silent swallowing (previously just a
+  // debugPrint) hid genuine failures: on a full/read-only disk the resume
+  // state silently stopped advancing with no telemetry and no user signal.
+  // These counters make every failure observable and expose a degraded flag.
+  static int _consecutiveSaveFailures = 0;
+  static int totalSaveFailures = 0;
+  static Object? lastSaveError;
+
+  /// True after repeated consecutive persistence failures — resume state can
+  /// no longer be trusted to be current. Cleared by the next successful save.
+  /// (Per-isolate: reflects failures observed in the isolate that reads it.)
+  static bool get persistenceDegraded => _consecutiveSaveFailures >= 3;
+
+  static void recordSaveFailure(String path, Object error, StackTrace st) {
+    _consecutiveSaveFailures++;
+    totalSaveFailures++;
+    lastSaveError = error;
+    DiagnosticService.instance.record(
+      'persistence',
+      'State save failed (#$_consecutiveSaveFailures consecutive)',
+      error: error,
+      details: 'path=$path',
+    );
+    unawaited(CrashReportingService.recordError(
+      error,
+      st,
+      hint: 'StateStore.save persistence failure',
+    ));
+  }
+
+  static void markSaveSuccess() {
+    if (_consecutiveSaveFailures != 0) _consecutiveSaveFailures = 0;
+  }
+
   static bool get stateSaveStrictDedup => instance.stateSaveStrictDedup;
   static set stateSaveStrictDedup(bool val) =>
       instance.stateSaveStrictDedup = val;
@@ -847,9 +966,11 @@ class DownloadJournal {
   static final Set<DownloadJournal> _activeJournals = {};
 
   /// Flushes and fsyncs the journal corresponding to [tempFilePath].
+  // FIX P1-4: Exact match, not prefix. Previously '/a/b' matched '/a/b2.journal'
   static Future<void> flushAndSyncForFile(String tempFilePath) async {
+    final journalPath = '$tempFilePath.journal';
     final active = _activeJournals
-        .where((j) => j.path.startsWith(tempFilePath))
+        .where((j) => j.path == journalPath)
         .firstOrNull;
     if (active != null) {
       await active.flushAndSync();
@@ -973,12 +1094,11 @@ class DownloadJournal {
     // Disable chunk journal writes entirely when screen is off
     if (PowerMonitor.screenOff && !force) return;
 
-    final isBg = !DownloadEngine.appInForeground ||
-        DownloadEngine.isInBackground;
+    final isBg =
+        !DownloadEngine.appInForeground || DownloadEngine.isInBackground;
 
-    final threshold = isBg
-        ? kJournalBackgroundWriteDelta
-        : kJournalForegroundWriteDelta;
+    final threshold =
+        isBg ? kJournalBackgroundWriteDelta : kJournalForegroundWriteDelta;
 
     await _lock.synchronized(() async {
       _lastRecordedChunkBytes[index] = bytes;
@@ -986,12 +1106,15 @@ class DownloadJournal {
         _lastRecordedChunkBytes.remove(_lastRecordedChunkBytes.keys.first);
       }
 
-      final totalWritten =
-          _lastRecordedChunkBytes.values.toList().fold<int>(0, (sum, b) => sum + b);
+      final totalWritten = _lastRecordedChunkBytes.values
+          .toList()
+          .fold<int>(0, (sum, b) => sum + b);
       final totalBytesSinceLastWrite =
           (totalWritten - _lastGlobalWriteBytes).abs();
 
-      if (!force && hash == null && totalBytesSinceLastWrite < threshold) return;
+      if (!force && hash == null && totalBytesSinceLastWrite < threshold) {
+        return;
+      }
       _lastGlobalWriteBytes = totalWritten;
 
       _ensureOpen();
@@ -1061,7 +1184,8 @@ class DownloadJournal {
     return jsonEncode(payload);
   }
 
-  static Future<JournalRecoveryData?> recoverWithDetails(String journalPath) async {
+  static Future<JournalRecoveryData?> recoverWithDetails(
+      String journalPath) async {
     final file = File(journalPath);
     if (!await file.exists()) return null;
     List<int>? lastCheckpoint;
@@ -1242,8 +1366,10 @@ class DownloadJournal {
       try {
         await j.close();
       } catch (e, st) {
-        LoggingService.logger('DownloadJournal')
-            .warning('Failed to close active journal before deletion: $journalPath', e, st);
+        LoggingService.logger('DownloadJournal').warning(
+            'Failed to close active journal before deletion: $journalPath',
+            e,
+            st);
       }
     }
     try {
@@ -1254,8 +1380,8 @@ class DownloadJournal {
             .info('[Journal-J1] Deleted journal file: $journalPath');
       }
     } catch (e, st) {
-      LoggingService.logger('DownloadJournal')
-          .warning('[Journal-J1] Failed to delete journal file $journalPath: $e', e, st);
+      LoggingService.logger('DownloadJournal').warning(
+          '[Journal-J1] Failed to delete journal file $journalPath: $e', e, st);
     }
   }
 
@@ -1269,20 +1395,22 @@ class DownloadJournal {
       try {
         await j.close();
       } catch (e, st) {
-        LoggingService.logger('DownloadJournal')
-            .warning('Failed to close active journal before clearing: $journalPath', e, st);
+        LoggingService.logger('DownloadJournal').warning(
+            'Failed to close active journal before clearing: $journalPath',
+            e,
+            st);
       }
     }
     try {
       final file = File(journalPath);
       if (await file.exists()) {
         await file.delete();
-        LoggingService.logger('DownloadJournal')
-            .info('[Journal-J2] Cleared journal after state replay: $journalPath');
+        LoggingService.logger('DownloadJournal').info(
+            '[Journal-J2] Cleared journal after state replay: $journalPath');
       }
     } catch (e, st) {
-      LoggingService.logger('DownloadJournal')
-          .warning('[Journal-J2] Failed to clear journal $journalPath: $e', e, st);
+      LoggingService.logger('DownloadJournal').warning(
+          '[Journal-J2] Failed to clear journal $journalPath: $e', e, st);
     }
   }
 

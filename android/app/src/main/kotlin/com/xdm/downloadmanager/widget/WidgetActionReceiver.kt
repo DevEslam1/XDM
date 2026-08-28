@@ -2,6 +2,7 @@ package com.xdm.downloadmanager.widget
 
 import android.appwidget.AppWidgetManager
 import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -25,6 +26,15 @@ class WidgetActionReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action ?: return
+
+        if (action == ACTION_UPDATE_WIDGETS) {
+            val manager = AppWidgetManager.getInstance(context)
+            val ids = manager.getAppWidgetIds(ComponentName(context, DMXWidgetProvider::class.java))
+            for (widgetId in ids) {
+                DMXWidgetProvider.updateWidget(context, manager, widgetId)
+            }
+            return
+        }
 
         if (action == ACTION_SELECT_TAB) {
             val widgetId = intent.getIntExtra(
@@ -74,6 +84,7 @@ class WidgetActionReceiver : BroadcastReceiver() {
     }
 
     companion object {
+        const val ACTION_UPDATE_WIDGETS = "com.xdm.downloadmanager.UPDATE_WIDGETS"
         const val ACTION_PAUSE_ALL = "com.xdm.downloadmanager.PAUSE_ALL"
         const val ACTION_RESUME_ALL = "com.xdm.downloadmanager.RESUME_ALL"
         const val ACTION_TOGGLE_TASK = "com.xdm.downloadmanager.TOGGLE_TASK"
@@ -92,8 +103,8 @@ class WidgetActionReceiver : BroadcastReceiver() {
      * spoofed broadcast.
      */
     private fun isValidTaskId(taskId: String?): Boolean {
-        if (taskId.isNullOrBlank()) {
-            Log.w("DMX", "Widget action rejected: null or empty task_id")
+        if (taskId.isNullOrBlank() || taskId.length > 128) {
+            Log.w("DMX", "Widget action rejected: null, empty, or oversized task_id")
             return false
         }
         if (!taskId.matches(Regex("^[a-zA-Z0-9\\-_]+$"))) {

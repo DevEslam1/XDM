@@ -104,8 +104,7 @@ class DatabaseService {
       _db.checkpointWal(truncate: truncate);
 
   /// Performs a connection pool health check.
-  Future<bool> cleanupStaleConnections() =>
-      _db.cleanupStaleConnections();
+  Future<bool> cleanupStaleConnections() => _db.cleanupStaleConnections();
 
   @visibleForTesting
   int get maintenanceRuns => _maintenanceService.maintenanceRuns;
@@ -325,13 +324,20 @@ class DatabaseService {
   }
 
   /// Synchronously drains _pendingProgressSaves without awaiting a timer.
-  void flushPendingSavesSync() {
+  /// FIX P0-9: Previously did not await _pendingSavesLock.synchronized,
+  /// so toSave was always empty and pending saves were cleared but never
+  /// persisted (data loss on dispose/background kill). Now properly awaits.
+  Future<void> flushPendingSavesSync() async {
     _dbBatchTimer?.cancel();
     _dbBatchTimer = null;
-    if (_pendingProgressSaves.isEmpty) return;
-    final toSave = List<DownloadTask>.from(_pendingProgressSaves.values);
-    _pendingProgressSaves.clear();
-    unawaited(saveTasks(toSave));
+    List<DownloadTask> toSave = [];
+    await _pendingSavesLock.synchronized(() {
+      if (_pendingProgressSaves.isEmpty) return;
+      toSave = List<DownloadTask>.from(_pendingProgressSaves.values);
+      _pendingProgressSaves.clear();
+    });
+    if (toSave.isEmpty) return;
+    await saveTasks(toSave);
   }
 
   Future<void> saveTask(DownloadTask task) async {
@@ -508,8 +514,7 @@ class DatabaseService {
 
   Future<void> dispose() async {
     // Force flush on dispose
-    flushPendingSavesSync();
-    await flushPendingSaves();
+    await flushPendingSavesSync();
     await flushPendingHistory();
 
     _maintenanceService.dispose();

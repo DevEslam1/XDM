@@ -19,7 +19,8 @@ void main() {
 
   setUp(() async {
     HttpOverrides.global = null;
-    tempDir = await Directory.systemTemp.createTemp('http_resume_correctness_test_');
+    tempDir =
+        await Directory.systemTemp.createTemp('http_resume_correctness_test_');
     testPayload = Uint8List.fromList(
       List.generate(fileSize, (i) => (i * 43 + 17) % 256),
     );
@@ -38,7 +39,8 @@ void main() {
   });
 
   group('Phase 1 — HTTP Resume Correctness & Corruption Hardening', () {
-    test('1. HTTP 200 (Range Ignored) forces clean restart and emits telemetry', () async {
+    test('1. HTTP 200 (Range Ignored) forces clean restart and emits telemetry',
+        () async {
       final targetPath = '${tempDir.path}/range_ignored.bin';
       final tempPath = '${tempDir.path}/range_ignored.bin.tmp';
       final serverUrl = server.urlFor('/range_ignored.bin');
@@ -56,7 +58,8 @@ void main() {
         ],
       );
       await StateStore.save(tempPath, partState, durable: true);
-      await File(tempPath).writeAsBytes(testPayload.sublist(0, 100000), flush: true);
+      await File(tempPath)
+          .writeAsBytes(testPayload.sublist(0, 100000), flush: true);
 
       final cmd = DownloadCommand(
         taskId: 'range-ignored-1',
@@ -83,14 +86,18 @@ void main() {
       final finalFile = File(targetPath);
       expect(await finalFile.exists(), isTrue);
       expect(await finalFile.length(), equals(fileSize));
-      expect(sha256.convert(await finalFile.readAsBytes()).toString(), equals(expectedSha256));
+      expect(sha256.convert(await finalFile.readAsBytes()).toString(),
+          equals(expectedSha256));
 
       // Verify telemetry event emitted
       final hasTelemetry = messages.any((m) {
         if (m is! Map) return false;
         final map = Map<String, dynamic>.from(m);
-        final data = map['data'] is Map ? Map<String, dynamic>.from(map['data'] as Map) : null;
-        return map['type'] == 'telemetry' && data?['event'] == 'resume_range_ignored';
+        final data = map['data'] is Map
+            ? Map<String, dynamic>.from(map['data'] as Map)
+            : null;
+        return map['type'] == 'telemetry' &&
+            data?['event'] == 'resume_range_ignored';
       });
       expect(hasTelemetry, isTrue);
     });
@@ -106,7 +113,9 @@ void main() {
       expect(pastReconciled.downloaded, equals(0));
     });
 
-    test('3. Simulated Kill -9 at 10%, 50%, 90% progresses with byte-identical checksum', () async {
+    test(
+        '3. Simulated Kill -9 at 10%, 50%, 90% progresses with byte-identical checksum',
+        () async {
       const checkpoints = [0.10, 0.50, 0.90];
 
       for (var i = 0; i < checkpoints.length; i++) {
@@ -169,17 +178,20 @@ void main() {
         final finalFile = File(testTarget);
         expect(await finalFile.exists(), isTrue);
         expect(await finalFile.length(), equals(fileSize));
-        expect(sha256.convert(await finalFile.readAsBytes()).toString(), equals(expectedSha256));
+        expect(sha256.convert(await finalFile.readAsBytes()).toString(),
+            equals(expectedSha256));
       }
     });
 
-    test('4. Redirect chain preserves Range headers across 302/307 redirects', () async {
+    test('4. Redirect chain preserves Range headers across 302/307 redirects',
+        () async {
       final targetPath = '${tempDir.path}/redirect_test.bin';
       final tempPath = '${tempDir.path}/redirect_test.bin.tmp';
       final startUrl = server.urlFor('/start_redirect');
 
       // Setup 302 -> 307 -> final payload redirect chain
-      server.setRedirectChain([HttpStatus.found, HttpStatus.temporaryRedirect], '/final_dest.bin');
+      server.setRedirectChain(
+          [HttpStatus.found, HttpStatus.temporaryRedirect], '/final_dest.bin');
 
       final cmd = DownloadCommand(
         taskId: 'redirect-matrix-1',
@@ -203,7 +215,8 @@ void main() {
       final finalFile = File(targetPath);
       expect(await finalFile.exists(), isTrue);
       expect(await finalFile.length(), equals(fileSize));
-      expect(sha256.convert(await finalFile.readAsBytes()).toString(), equals(expectedSha256));
+      expect(sha256.convert(await finalFile.readAsBytes()).toString(),
+          equals(expectedSha256));
     });
   });
 }

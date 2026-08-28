@@ -96,21 +96,24 @@ class _DownloadCardState extends State<DownloadCard>
         '${(effectiveProgress * 100).toStringAsFixed(0)}% downloaded, '
         '${task.speedFormatted}';
 
-    final Widget cardWidget = RepaintBoundary(
-      child: task.isTorrent
-          ? _TorrentCard(
-              task: task,
-              compact: compact,
-            )
-          : (task.youtubeQualityPreset != null || task.mergedAudioUrl != null)
-              ? _MediaCard(
-                  task: task,
-                  compact: compact,
-                )
-              : _FileCard(
-                  task: task,
-                  compact: compact,
-                ),
+    final Widget cardWidget = Semantics(
+      label: semanticLabel,
+      child: RepaintBoundary(
+        child: task.isTorrent
+            ? _TorrentCard(
+                task: task,
+                compact: compact,
+              )
+            : (task.youtubeQualityPreset != null || task.mergedAudioUrl != null)
+                ? _MediaCard(
+                    task: task,
+                    compact: compact,
+                  )
+                : _FileCard(
+                    task: task,
+                    compact: compact,
+                  ),
+      ),
     );
 
     final Widget interactiveCard = isSelectionMode
@@ -191,7 +194,8 @@ class _DownloadCardState extends State<DownloadCard>
 
                 // User confirmed → delete immediately (dialog acts as gate)
                 try {
-                  await capturedProvider.deleteTask(task.id, deleteFiles: deleteFiles);
+                  await capturedProvider.deleteTask(task.id,
+                      deleteFiles: deleteFiles);
                   return true;
                 } catch (e) {
                   if (context.mounted) {
@@ -271,12 +275,15 @@ Color getEffectiveCardAccent(
 }
 
 IconData _categoryIcon(String category) {
-  return switch (category) {
+  // FIX(H-20): Normalize empty category to "Auto" for consistent display.
+  final c = category.isEmpty ? 'Auto' : category;
+  return switch (c) {
     'Video' => Icons.movie_outlined,
     'Audio' => Icons.audiotrack_outlined,
     'Document' => Icons.description_outlined,
     'Archive' => Icons.folder_zip_outlined,
     'APK' => Icons.android_outlined,
+    'Auto' => Icons.auto_awesome_outlined,
     _ => Icons.insert_drive_file_outlined,
   };
 }
@@ -508,9 +515,11 @@ class _StatusChipState extends State<_StatusChip> {
     _syncDebounce = Timer(const Duration(milliseconds: 100), () {
       if (!mounted) return;
       final provider = context.read<DownloadProvider>();
-      final isTabVisible = provider.activeTabIndex == 0 || provider.activeTabIndex == 1;
-      final needsPulse =
-          _shouldPulse(widget.task) && isTabVisible && modernAnimationsAllowed(context);
+      final isTabVisible =
+          provider.activeTabIndex == 0 || provider.activeTabIndex == 1;
+      final needsPulse = _shouldPulse(widget.task) &&
+          isTabVisible &&
+          modernAnimationsAllowed(context);
       if (needsPulse && !_hasActiveRef) {
         _StatusChipPulseDriver().addRef();
         _hasActiveRef = true;
@@ -777,11 +786,13 @@ class _TelemetryStrip extends StatelessWidget {
       protoLabel = 'DASH';
       badgeClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
     } else {
+      // FIX(M-4): Show "—" when protocol not yet measured instead of
+      // fabricating "H1.1". H3 branch removed — no code path ever records it.
       final proto = ProtocolCache.get(task.url);
       protoLabel = switch (proto) {
-        ProtocolSupport.http3 => 'H3',
         ProtocolSupport.http2 => 'H2',
-        _ => 'H1.1',
+        ProtocolSupport.http11 => 'H1.1',
+        _ => '—',
       };
       badgeClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     }
@@ -805,7 +816,9 @@ class _TelemetryStrip extends StatelessWidget {
 
     final effectiveSeedingSpeed = seedingUploadSpeed > 0
         ? seedingUploadSpeed
-        : (seeding ? context.read<DownloadProvider>().getTorrentUploadSpeed(task.id) : 0.0);
+        : (seeding
+            ? context.read<DownloadProvider>().getTorrentUploadSpeed(task.id)
+            : 0.0);
 
     // Completed downloads: clean single metadata line
     if (isCompleted) {
@@ -885,8 +898,9 @@ class _TelemetryStrip extends StatelessWidget {
                       final history = provider.getSpeedHistory(task.id);
                       if (history.length >= 2) {
                         final screenW = MediaQuery.sizeOf(context).width;
-                        final sparkWidth =
-                            screenW < 340 ? 45.0 : (screenW < 400 ? 60.0 : 80.0);
+                        final sparkWidth = screenW < 340
+                            ? 45.0
+                            : (screenW < 400 ? 60.0 : 80.0);
                         return _CardSparklineGraph(
                           history: history,
                           color: accent,
@@ -906,8 +920,13 @@ class _TelemetryStrip extends StatelessWidget {
                   Expanded(
                     child: Text(
                       sizeProgressLabel(
-                        received: task.downloadedBytes,
-                        total: task.resolvedFileSize,
+                        // FIX(M-2): Use combinedDownloadedBytes/combinedTotalSize
+                        // consistently for both active and inactive states.
+                        // For DASH tasks, downloadedBytes is video-only and
+                        // resolvedFileSize is video-only, causing a size jump
+                        // when transitioning to paused (which uses combined).
+                        received: task.combinedDownloadedBytes,
+                        total: task.combinedTotalSize,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -997,7 +1016,7 @@ class _ChunkedProgressBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (task.progress < 0 || task.hasUnknownSize) {
+    if (task.hasUnknownSize || task.isIndeterminate) {
       final trackColor = (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
           .withValues(alpha: isDark ? 0.15 : 0.12);
       return ClipRRect(
@@ -1146,7 +1165,7 @@ class _ProgressRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDownloading = task.status == DownloadStatus.downloading;
     final showIndeterminate =
-        (task.hasUnknownSize || task.progress == -1.0) && isDownloading;
+        (task.hasUnknownSize || task.isIndeterminate) && isDownloading;
 
     return RepaintBoundary(
       child: Column(
@@ -1505,7 +1524,8 @@ class _ControlCluster extends StatelessWidget with HapticHelper {
           const SizedBox(width: 6),
           _ControlButton(
             icon: Icons.more_vert_rounded,
-            color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+            color:
+                isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
             tooltip: L10n.of(context, 'options_btn'),
             onPressed: () => _showAdvancedControls(context, task, settings),
           ),
@@ -2082,380 +2102,366 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
         0;
 
     final isSmallScreen = MediaQuery.sizeOf(context).width < 360;
-    final horizPadding =
-        isSmallScreen ? 10.0 : (widget.compact ? 12.0 : 14.0);
-    final vertPadding =
-        isSmallScreen ? 10.0 : (widget.compact ? 10.0 : 14.0);
+    final horizPadding = isSmallScreen ? 10.0 : (widget.compact ? 12.0 : 14.0);
+    final vertPadding = isSmallScreen ? 10.0 : (widget.compact ? 10.0 : 14.0);
     final itemGap = isSmallScreen ? 8.0 : 12.0;
 
     return _CardShell(
-          accent: statusColor,
-          isDark: isDark,
-          onTap: () {
-            triggerHaptic(settings);
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => DetailsScreen(taskId: currentTask.id),
-              ),
-            );
-          },
-          onLongPress: () =>
-              _showAdvancedControls(context, currentTask, settings),
-          child: ClipRect(
-            child: Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: horizPadding,
-                vertical: vertPadding,
-              ),
-              child: SingleChildScrollView(
-                physics: const NeverScrollableScrollPhysics(),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Header
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: widget.compact ? 38 : 44,
-                          height: widget.compact ? 38 : 44,
-                          decoration: BoxDecoration(
-                            color: statusColor.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: statusColor.withValues(alpha: 0.15),
-                              width: 0.8,
-                            ),
-                          ),
-                          child: Icon(
-                            isMagnet
-                                ? Icons.link_rounded
-                                : Icons.cloud_download_rounded,
-                            color: statusColor,
-                            size: widget.compact ? 18 : 21,
-                          ),
-                        ),
-                        SizedBox(width: itemGap),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Tooltip(
-                                      message: currentTask.fileName,
-                                      child: Text(
-                                        currentTask.fileName,
-                                        textDirection: TextDirection.ltr,
-                                        style: AppTheme.dataStyle(
-                                          isDark: isDark,
-                                          size: widget.compact ? 13 : 14,
-                                          weight: FontWeight.w700,
-                                        ),
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ),
-                                  if (currentTask.siteDisplayName != null) ...[
-                                    const SizedBox(width: 4),
-                                    _SiteBadge(
-                                      name: currentTask.siteDisplayName!,
-                                      isDark: isDark,
-                                    ),
-                                  ],
-                                ],
-                              ),
-                              const SizedBox(height: 5),
-                              Wrap(
-                                spacing: 6,
-                                runSpacing: 4,
-                                children: [
-                                  // FIX-UI-04: Show "Fetching metadata…" for magnets with fileSize == 0 and 0 downloaded bytes
-                                  _StatusChip(
-                                    task: currentTask,
-                                    isDark: isDark,
-                                    overrideLabel: (currentTask.isTorrent &&
-                                            (currentTask.torrentFiles == null ||
-                                                currentTask
-                                                    .torrentFiles!.isEmpty) &&
-                                            currentTask.resolvedFileSize == 0 &&
-                                            currentTask.downloadedBytes == 0 &&
-                                            currentTask.status ==
-                                                DownloadStatus.downloading)
-                                        ? (isRtl
-                                            ? 'جاري جلب البيانات…'
-                                            : 'Fetching metadata…')
-                                        : (seeding
-                                            ? (isRtl ? 'مشاركة' : 'SEEDING')
-                                            : null),
-                                  ),
-
-                                  _PeerChip(
-                                    icon: Icons.arrow_upward_rounded,
-                                    label: seedsLabel(
-                                      connected: stats.seeds,
-                                    ),
-                                    color: greenClr,
-                                    isDark: isDark,
-                                  ),
-                                  _PeerChip(
-                                    icon: Icons.arrow_downward_rounded,
-                                    label: peersLabel(
-                                      connected: stats.peers,
-                                      
-                                    ),
-                                    color: violetClr,
-                                    isDark: isDark,
-                                  ),
-                                  if (fileCount > 0)
-                                    _PeerChip(
-                                      icon: Icons.folder_outlined,
-                                      label: '$selectedCount/$fileCount',
-                                      color: mutedClr,
-                                      isDark: isDark,
-                                    ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                        Column(children: [_ControlCluster(task: currentTask)]),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    // Telemetry: downloaded / total / elapsed / remain / speed
-                    _TelemetryStrip(
-                      task: currentTask,
-                      isDark: isDark,
-                      accent: statusColor,
-                      seedingUploadSpeed: stats.uploadSpeed,
-                    ),
-                    const SizedBox(height: 8),
-                    // Total progress + total percentage
-                    Builder(builder: (context) {
-                      final files = currentTask.torrentFiles ?? [];
-                      final isChecking = currentTask.statusMessage
-                              ?.toLowerCase()
-                              .contains('checking') ==
-                          true; // FIX-B10: case-insensitive
-                      final displayFiles = files.map((f) {
-                        final selected = isTorrentFileSelected(f);
-                        final length = (f['length'] as num?)?.toInt() ?? 0;
-                        final rawDownloaded =
-                            (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-                        // -1 = engine has no data; keep 0 but mark as estimated
-                        final downloaded =
-                            rawDownloaded < 0 ? 0 : rawDownloaded;
-                        final isEstimated =
-                            (f['progressEstimated'] as bool?) ?? false;
-                        final effectiveDownloaded = isChecking
-                            ? downloaded
-                            : (currentTask.status == DownloadStatus.completed &&
-                                    selected
-                                ? length
-                                : downloaded);
-                        return {
-                          ...f,
-                          'downloadedBytes': effectiveDownloaded,
-                          'progressEstimated': isEstimated,
-                        };
-                      }).toList();
-                      final selectedFiles = displayFiles
-                          .where((f) => isTorrentFileSelected(f))
-                          .toList();
-                      final totalLen = selectedFiles.fold<int>(
-                        0,
-                        (s, f) {
-                          final len = (f['length'] as num?)?.toInt() ?? 0;
-                          return s + (len < 0 ? 0 : len);
-                        },
-                      );
-                      final totalDl = selectedFiles.fold<int>(
-                        0,
-                        (s, f) {
-                          final dl =
-                              (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-                          return s + (dl < 0 ? 0 : dl);
-                        },
-                      );
-                      // FIX-CLAMP: guard against totalDl > totalLen (stale per-file data)
-                      // Fall back to the provider's known totalFileBytes when the local
-                      // file list is empty (e.g. first tick after a session restore).
-                      final hasTorrentFiles =
-                          currentTask.torrentFiles != null &&
-                              currentTask.torrentFiles!.isNotEmpty;
-                      final effectiveTotalLen = totalLen > 0
-                          ? totalLen
-                          : (!hasTorrentFiles && currentTask.fileSize > 0
-                              ? currentTask.fileSize
-                              : 0);
-                      final overallProgress =
-                          (effectiveTotalLen > 0 || currentTask.fileSize > 0)
-                              ? currentTask.torrentOverallPercent
-                              : -1.0;
-                      final pctLabel = overallProgress < 0
-                          ? (totalDl > 0
-                              ? formatBytes(totalDl.toDouble())
-                              : '0.0%')
-                          : '${(overallProgress * 100).toStringAsFixed(1)}%';
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Expanded(
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(4),
-                                  child: overallProgress < 0
-                                      ? const SizedBox(
-                                          height: 8,
-                                          child: LinearProgressIndicator(
-                                              minHeight: 8),
-                                        )
-                                      : Stack(
-                                          children: [
-                                            Container(
-                                              height: 8,
-                                              decoration:
-                                                  AppTheme.progressTrack(
-                                                isDark: isDark,
-                                              ),
-                                            ),
-                                            AnimatedFractionallySizedBox(
-                                              widthFactor: overallProgress
-                                                  .clamp(0.0, 1.0),
-                                              duration: const Duration(
-                                                  milliseconds: 400),
-                                              curve: Curves.easeOut,
-                                              child: Container(
-                                                height: 8,
-                                                decoration: BoxDecoration(
-                                                  color: statusColor,
-                                                  borderRadius:
-                                                      BorderRadius.circular(4),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              SizedBox(
-                                width: 48,
-                                child: FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  alignment: Alignment.centerRight,
-                                  child: Text(
-                                    pctLabel,
-                                    textAlign: TextAlign.end,
-                                    style: AppTheme.dataStyle(
-                                      isDark: isDark,
-                                      size: 13,
-                                      weight: FontWeight.w800,
-                                      color: statusColor,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      );
-                    }),
-                    // Per-file percentages (isolated rebuild via dedicated StatefulWidget)
-                    if (fileCount > 0 ||
-                        (isMagnet &&
-                            currentTask.status ==
-                                DownloadStatus.downloading)) ...[
-                      const SizedBox(height: 12),
-                      _TorrentFileListSection(
-                        task: currentTask,
-                        isDark: isDark,
-                        accent: statusColor,
-                      ),
-                    ],
-                    // Seeding toggle once completed
-                    if (currentTask.status == DownloadStatus.completed) ...[
-                      const SizedBox(height: 10),
-                      Divider(
-                        color: isDark
-                            ? AppTheme.borderSubtle
-                            : AppTheme.lightBorderSubtle,
-                        height: 1,
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.cloud_upload_outlined,
-                            size: 14,
-                            color: violetClr,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            isRtl ? 'مشاركة التورنت' : 'Seed this torrent',
-                            style: AppTheme.dataStyle(
-                              isDark: isDark,
-                              size: 11,
-                              weight: FontWeight.w600,
-                            ),
-                          ),
-                          if (currentTask.seedingEnabled) ...[
-                            const SizedBox(width: 8),
-                            Text(
-                              'Ratio: ${currentTask.seedingRatio.toStringAsFixed(2)}',
-                              style: AppTheme.dataStyle(
-                                isDark: isDark,
-                                size: 10,
-                                color: violetClr,
-                                weight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                          const Spacer(),
-                          Switch(
-                            value: currentTask.seedingEnabled,
-                            onChanged: (val) {
-                              triggerHaptic(settings);
-                              context
-                                  .read<DownloadProvider>()
-                                  .updateTaskSeeding(
-                                    currentTask.id,
-                                    enabled: val,
-                                  );
-                            },
-                            activeThumbColor: violetClr,
-                          ),
-                        ],
-                      ),
-                    ],
-                    if (currentTask.status == DownloadStatus.failed &&
-                        currentTask.errorMessage != null)
-                      _NoticeRow(
-                        text: currentTask.errorMessage!,
-                        color: statusColor,
-                        icon: Icons.error_outline,
-                        isDark: isDark,
-                      ),
-                    if (currentTask.status == DownloadStatus.failed &&
-                        currentTask.recoveryHint != null &&
-                        currentTask.recoveryHint!.isNotEmpty)
-                      _RecoveryHintRow(
-                        text: currentTask.recoveryHint!,
-                        isDark: isDark,
-                      ),
-                  ],
-                ),
-              ),
-            ),
+      accent: statusColor,
+      isDark: isDark,
+      onTap: () {
+        triggerHaptic(settings);
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => DetailsScreen(taskId: currentTask.id),
           ),
         );
+      },
+      onLongPress: () => _showAdvancedControls(context, currentTask, settings),
+      child: ClipRect(
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: horizPadding,
+            vertical: vertPadding,
+          ),
+          child: SingleChildScrollView(
+            physics: const NeverScrollableScrollPhysics(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: widget.compact ? 38 : 44,
+                      height: widget.compact ? 38 : 44,
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: statusColor.withValues(alpha: 0.15),
+                          width: 0.8,
+                        ),
+                      ),
+                      child: Icon(
+                        isMagnet
+                            ? Icons.link_rounded
+                            : Icons.cloud_download_rounded,
+                        color: statusColor,
+                        size: widget.compact ? 18 : 21,
+                      ),
+                    ),
+                    SizedBox(width: itemGap),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Tooltip(
+                                  message: currentTask.fileName,
+                                  child: Text(
+                                    currentTask.fileName,
+                                    textDirection: TextDirection.ltr,
+                                    style: AppTheme.dataStyle(
+                                      isDark: isDark,
+                                      size: widget.compact ? 13 : 14,
+                                      weight: FontWeight.w700,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ),
+                              if (currentTask.siteDisplayName != null) ...[
+                                const SizedBox(width: 4),
+                                _SiteBadge(
+                                  name: currentTask.siteDisplayName!,
+                                  isDark: isDark,
+                                ),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 5),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 4,
+                            children: [
+                              // FIX-UI-04: Show "Fetching metadata…" for magnets with fileSize == 0 and 0 downloaded bytes
+                              _StatusChip(
+                                task: currentTask,
+                                isDark: isDark,
+                                overrideLabel: (currentTask.isTorrent &&
+                                        (currentTask.torrentFiles?.isEmpty ??
+                                            true) &&
+                                        currentTask.resolvedFileSize == 0 &&
+                                        currentTask.downloadedBytes == 0 &&
+                                        currentTask.status ==
+                                            DownloadStatus.downloading)
+                                    ? (isRtl
+                                        ? 'جاري جلب البيانات…'
+                                        : 'Fetching metadata…')
+                                    : (seeding
+                                        ? (isRtl ? 'مشاركة' : 'SEEDING')
+                                        : null),
+                              ),
+
+                              _PeerChip(
+                                icon: Icons.arrow_upward_rounded,
+                                label: seedsLabel(
+                                  connected: stats.seeds,
+                                ),
+                                color: greenClr,
+                                isDark: isDark,
+                              ),
+                              _PeerChip(
+                                icon: Icons.arrow_downward_rounded,
+                                label: peersLabel(
+                                  connected: stats.peers,
+                                ),
+                                color: violetClr,
+                                isDark: isDark,
+                              ),
+                              if (fileCount > 0)
+                                _PeerChip(
+                                  icon: Icons.folder_outlined,
+                                  label: '$selectedCount/$fileCount',
+                                  color: mutedClr,
+                                  isDark: isDark,
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    Column(children: [_ControlCluster(task: currentTask)]),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                // Telemetry: downloaded / total / elapsed / remain / speed
+                _TelemetryStrip(
+                  task: currentTask,
+                  isDark: isDark,
+                  accent: statusColor,
+                  seedingUploadSpeed: stats.uploadSpeed,
+                ),
+                const SizedBox(height: 8),
+                // Total progress + total percentage
+                Builder(builder: (context) {
+                  final files = currentTask.torrentFiles ?? [];
+                  final isChecking = currentTask.statusMessage
+                          ?.toLowerCase()
+                          .contains('checking') ==
+                      true; // FIX-B10: case-insensitive
+                  final displayFiles = files.map((f) {
+                    final selected = isTorrentFileSelected(f);
+                    final length = (f['length'] as num?)?.toInt() ?? 0;
+                    final rawDownloaded =
+                        (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+                    // -1 = engine has no data; keep 0 but mark as estimated
+                    final downloaded = rawDownloaded < 0 ? 0 : rawDownloaded;
+                    final isEstimated =
+                        (f['progressEstimated'] as bool?) ?? false;
+                    final effectiveDownloaded = isChecking
+                        ? downloaded
+                        : (currentTask.status == DownloadStatus.completed &&
+                                selected
+                            ? length
+                            : downloaded);
+                    return {
+                      ...f,
+                      'downloadedBytes': effectiveDownloaded,
+                      'progressEstimated': isEstimated,
+                    };
+                  }).toList();
+                  final selectedFiles = displayFiles
+                      .where((f) => isTorrentFileSelected(f))
+                      .toList();
+                  final totalLen = selectedFiles.fold<int>(
+                    0,
+                    (s, f) {
+                      final len = (f['length'] as num?)?.toInt() ?? 0;
+                      return s + (len < 0 ? 0 : len);
+                    },
+                  );
+                  final totalDl = selectedFiles.fold<int>(
+                    0,
+                    (s, f) {
+                      final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+                      return s + (dl < 0 ? 0 : dl);
+                    },
+                  );
+                  // FIX-CLAMP: guard against totalDl > totalLen (stale per-file data)
+                  // Fall back to the provider's known totalFileBytes when the local
+                  // file list is empty (e.g. first tick after a session restore).
+                  final hasTorrentFiles = currentTask.torrentFiles != null &&
+                      currentTask.torrentFiles!.isNotEmpty;
+                  final effectiveTotalLen = totalLen > 0
+                      ? totalLen
+                      : (!hasTorrentFiles && currentTask.fileSize > 0
+                          ? currentTask.fileSize
+                          : 0);
+                  final overallProgress =
+                      (effectiveTotalLen > 0 || currentTask.fileSize > 0)
+                          ? currentTask.torrentOverallPercent
+                          : -1.0;
+                  final pctLabel = overallProgress < 0
+                      ? (totalDl > 0 ? formatBytes(totalDl.toDouble()) : '0.0%')
+                      : '${(overallProgress * 100).toStringAsFixed(1)}%';
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: overallProgress < 0
+                                  ? const SizedBox(
+                                      height: 8,
+                                      child:
+                                          LinearProgressIndicator(minHeight: 8),
+                                    )
+                                  : Stack(
+                                      children: [
+                                        Container(
+                                          height: 8,
+                                          decoration: AppTheme.progressTrack(
+                                            isDark: isDark,
+                                          ),
+                                        ),
+                                        AnimatedFractionallySizedBox(
+                                          widthFactor:
+                                              overallProgress.clamp(0.0, 1.0),
+                                          duration:
+                                              const Duration(milliseconds: 400),
+                                          curve: Curves.easeOut,
+                                          child: Container(
+                                            height: 8,
+                                            decoration: BoxDecoration(
+                                              color: statusColor,
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          SizedBox(
+                            width: 48,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                pctLabel,
+                                textAlign: TextAlign.end,
+                                style: AppTheme.dataStyle(
+                                  isDark: isDark,
+                                  size: 13,
+                                  weight: FontWeight.w800,
+                                  color: statusColor,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  );
+                }),
+                // Per-file percentages (isolated rebuild via dedicated StatefulWidget)
+                if (fileCount > 0 ||
+                    (isMagnet &&
+                        currentTask.status == DownloadStatus.downloading)) ...[
+                  const SizedBox(height: 12),
+                  _TorrentFileListSection(
+                    task: currentTask,
+                    isDark: isDark,
+                    accent: statusColor,
+                  ),
+                ],
+                // Seeding toggle once completed
+                if (currentTask.status == DownloadStatus.completed) ...[
+                  const SizedBox(height: 10),
+                  Divider(
+                    color: isDark
+                        ? AppTheme.borderSubtle
+                        : AppTheme.lightBorderSubtle,
+                    height: 1,
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.cloud_upload_outlined,
+                        size: 14,
+                        color: violetClr,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        isRtl ? 'مشاركة التورنت' : 'Seed this torrent',
+                        style: AppTheme.dataStyle(
+                          isDark: isDark,
+                          size: 11,
+                          weight: FontWeight.w600,
+                        ),
+                      ),
+                      if (currentTask.seedingEnabled) ...[
+                        const SizedBox(width: 8),
+                        Text(
+                          'Ratio: ${currentTask.seedingRatio.toStringAsFixed(2)}',
+                          style: AppTheme.dataStyle(
+                            isDark: isDark,
+                            size: 10,
+                            color: violetClr,
+                            weight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                      const Spacer(),
+                      Switch(
+                        value: currentTask.seedingEnabled,
+                        onChanged: (val) {
+                          triggerHaptic(settings);
+                          context.read<DownloadProvider>().updateTaskSeeding(
+                                currentTask.id,
+                                enabled: val,
+                              );
+                        },
+                        activeThumbColor: violetClr,
+                      ),
+                    ],
+                  ),
+                ],
+                if (currentTask.status == DownloadStatus.failed &&
+                    currentTask.errorMessage != null)
+                  _NoticeRow(
+                    text: currentTask.errorMessage!,
+                    color: statusColor,
+                    icon: Icons.error_outline,
+                    isDark: isDark,
+                  ),
+                if (currentTask.status == DownloadStatus.failed &&
+                    currentTask.recoveryHint != null &&
+                    currentTask.recoveryHint!.isNotEmpty)
+                  _RecoveryHintRow(
+                    text: currentTask.recoveryHint!,
+                    isDark: isDark,
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -3503,7 +3509,7 @@ void _showTorrentProperties(
 
                 _propRow(
                   isRtl ? 'الفئة' : 'Category',
-                  task.category.isNotEmpty ? task.category : '—',
+                  task.category.isEmpty ? 'Auto' : task.category,
                   textClr,
                   secClr,
                   isRtl,
@@ -3555,38 +3561,29 @@ void _showTorrentProperties(
                 if (stats != null) ...[
                   if (stats.piecesTotal > 0)
                     _propRow(
-                      isRtl ? 'القطع المكتملة' : 'Pieces',
-                      '${stats.piecesHave} / ${stats.piecesTotal}',
+                      isRtl ? 'القطع (تقديري)' : 'Pieces (est.)',
+                      '~${stats.piecesHave} / ${stats.piecesTotal}',
                       textClr,
                       secClr,
                       isRtl,
                     ),
-                  _propRow(
-                    isRtl ? 'المُتتبع' : 'Current Tracker',
-                    stats.currentTracker.isNotEmpty
-                        ? stats.currentTracker
-                        : '—',
-                    textClr,
-                    secClr,
-                    isRtl,
-                    mono: true,
-                  ),
-                  _propRow(
-                    isRtl ? 'النسخ الموزعة' : 'Distributed Copies',
-                    stats.distributedCopies.toStringAsFixed(2),
-                    textClr,
-                    secClr,
-                    isRtl,
-                  ),
-                  _propRow(
-                    isRtl ? 'الإعلان التالي' : 'Next Announce',
-                    stats.nextAnnounceSeconds > 0
-                        ? '${stats.nextAnnounceSeconds}s'
-                        : '—',
-                    textClr,
-                    secClr,
-                    isRtl,
-                  ),
+                  if (stats.currentTracker.isNotEmpty)
+                    _propRow(
+                      isRtl ? 'المُتتبع' : 'Current Tracker',
+                      stats.currentTracker,
+                      textClr,
+                      secClr,
+                      isRtl,
+                      mono: true,
+                    ),
+                  if (stats.nextAnnounceSeconds > 0)
+                    _propRow(
+                      isRtl ? 'الإعلان التالي' : 'Next Announce',
+                      '${stats.nextAnnounceSeconds}s',
+                      textClr,
+                      secClr,
+                      isRtl,
+                    ),
                 ] else
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),

@@ -303,6 +303,7 @@ class DownloadInterceptor {
   }
 
   final Set<String> _pendingInterceptions = {};
+  final Map<String, Timer> _pendingTimers = {};
 
   Future<InterceptDownloadResult> startDirectDownload(
     String url, {
@@ -322,8 +323,10 @@ class DownloadInterceptor {
           InterceptDownloadStatus.alreadyInProgress);
     }
     _pendingInterceptions.add(url);
-    Timer(const Duration(seconds: 2), () {
+    _pendingTimers[url]?.cancel();
+    _pendingTimers[url] = Timer(const Duration(seconds: 2), () {
       _pendingInterceptions.remove(url);
+      _pendingTimers.remove(url);
     });
 
     final downloadProvider = resolveDownloadProvider();

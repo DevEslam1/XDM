@@ -91,7 +91,8 @@ class TransferResult {
         return TransferResult.paused(message: message ?? 'Paused');
       case TransferResultStatus.failed:
         return TransferResult.failure(
-          taxonomyCode: taxonomyCode ?? map['errorType'] as String? ?? 'unknown',
+          taxonomyCode:
+              taxonomyCode ?? map['errorType'] as String? ?? 'unknown',
           retryable: retryable,
           message: message ?? 'Transfer failed',
           httpStatus: httpStatus,

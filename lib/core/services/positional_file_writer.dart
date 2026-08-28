@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:logging/logging.dart';
 import 'package:synchronized/synchronized.dart';
 import 'download_engine.dart';
+import 'engine/engine_exceptions.dart';
 import 'service_registry.dart';
 
 final _log = Logger('PositionalFileWriter');
@@ -55,6 +56,7 @@ class PositionalFileWriter
     required this.threadCount,
     int? bufferSize,
     int? maxPendingBytes,
+    this.diskWriteBatching = true,
   })  : _bufferSize = bufferSize ?? 256 * 1024,
         maxPendingBytes = maxPendingBytes ?? defaultMaxPendingBytes,
         _highWater = List<int>.filled(threadCount < 1 ? 1 : threadCount, 0) {
@@ -67,6 +69,11 @@ class PositionalFileWriter
   final int totalSize;
   final int threadCount;
   final int maxPendingBytes;
+
+  /// When false, each [write] is flushed to the OS immediately instead of being
+  /// accumulated in the per-chunk buffer. Trades throughput for a smaller
+  /// in-memory footprint and a tighter crash-durability window.
+  final bool diskWriteBatching;
   int _bufferSize;
   int _pendingBytes = 0;
   final Lock _metaLock = Lock();
@@ -93,6 +100,7 @@ class PositionalFileWriter
     required int threadCount,
     int? bufferSize,
     int? maxPendingBytes,
+    bool diskWriteBatching = true,
   }) async {
     try {
       final file = File(path);
@@ -109,6 +117,7 @@ class PositionalFileWriter
         threadCount: threadCount,
         bufferSize: bufferSize,
         maxPendingBytes: maxPendingBytes,
+        diskWriteBatching: diskWriteBatching,
       );
       return writer;
     } catch (e) {
@@ -122,6 +131,7 @@ class PositionalFileWriter
     int? totalSize,
     int? bufferSize,
     int? maxPendingBytes,
+    bool diskWriteBatching = true,
   }) async {
     try {
       final file = File(path);
@@ -133,7 +143,7 @@ class PositionalFileWriter
         }
         await raf.close();
       } else {
-        final raf = await file.open(mode: FileMode.append);
+        final raf = await file.open(mode: FileMode.writeOnly);
         try {
           if (totalSize != null && totalSize > 0) {
             final len = await raf.length();
@@ -152,6 +162,7 @@ class PositionalFileWriter
         threadCount: threadCount,
         bufferSize: bufferSize,
         maxPendingBytes: maxPendingBytes,
+        diskWriteBatching: diskWriteBatching,
       );
     } on PositionalFileWriterException {
       rethrow;
@@ -174,17 +185,33 @@ class PositionalFileWriter
         if (!_handles.containsKey(handleKey)) {
           try {
             final file = File(path);
-            final raf = await file.open(mode: FileMode.append);
+            // FIX P0-1: Use writeOnly (O_WRONLY|O_CREAT, no O_APPEND/O_TRUNC)
+            // so setPosition+writeFrom respects absolutePosition.
+            // FileMode.append (O_APPEND) forces every write to EOF on POSIX,
+            // corrupting multi-threaded positional writes.
+            final raf = await file.open(mode: FileMode.writeOnly);
             _handles[handleKey] = raf;
             _handleLocks[handleKey] = Lock();
           } catch (e) {
-            throw PositionalFileWriterException('failed to open thread handle: $e');
+            throw PositionalFileWriterException(
+                'failed to open thread handle: $e');
           }
         }
       });
     }
     return _handles[handleKey]!;
   }
+
+  /// FIX(C-2): Highest absolute file offset durably written per buffer key
+  /// (chunk index), updated ONLY after the OS write inside
+  /// [_flushBufferInternal] succeeds. Lets callers clamp persisted progress
+  /// so saved state can never claim more bytes than actually reached the
+  /// file (the fsync-then-serialize TOCTOU window).
+  final Map<int, int> _flushedHighWater = {};
+
+  /// Point-in-time copy of per-key flushed high-water offsets.
+  Map<int, int> snapshotFlushedHighWater() =>
+      Map<int, int>.from(_flushedHighWater);
 
   /// Writes [data] at [absolutePosition].
   Future<void> write(
@@ -227,15 +254,17 @@ class PositionalFileWriter
         // Check if write is non-sequential with buffer start
         if (buffer.isNotEmpty &&
             buffer.startPos + buffer.length != absolutePosition) {
-          await _flushBufferInternal(raf, buffer);
+          await _flushBufferInternal(raf, buffer, bufferKey: key);
         }
 
         buffer.add(absolutePosition, data);
         _pendingBytes += data.length;
         _bytesSinceLastFlush += data.length;
 
-        if (buffer.length >= _bufferSize) {
-          await _flushBufferInternal(raf, buffer);
+        // With batching disabled, push each write straight to the OS instead of
+        // waiting for the buffer to reach [_bufferSize].
+        if (!diskWriteBatching || buffer.length >= _bufferSize) {
+          await _flushBufferInternal(raf, buffer, bufferKey: key);
         }
 
         if (threadIndex >= 0 && threadIndex < _highWater.length) {
@@ -253,8 +282,8 @@ class PositionalFileWriter
     }
   }
 
-  Future<void> _flushBufferInternal(
-      RandomAccessFile raf, _ChunkBuffer buffer) async {
+  Future<void> _flushBufferInternal(RandomAccessFile raf, _ChunkBuffer buffer,
+      {int? bufferKey}) async {
     if (buffer.isEmpty) return;
     final pos = buffer.startPos;
     final bytes = buffer.takeBytes();
@@ -268,6 +297,12 @@ class PositionalFileWriter
     try {
       await raf.setPosition(pos);
       await raf.writeFrom(bytes);
+      // FIX(C-2): record durable progress only after the write succeeded.
+      if (bufferKey != null) {
+        final end = pos + bytes.length;
+        final existing = _flushedHighWater[bufferKey] ?? 0;
+        if (end > existing) _flushedHighWater[bufferKey] = end;
+      }
     } on FileSystemException catch (e) {
       // Detect disk-full specifically
       final osError = e.osError;
@@ -296,7 +331,7 @@ class PositionalFileWriter
       if (handle != null && lock != null && buffer != null) {
         await lock.synchronized(() async {
           _checkOpen();
-          await _flushBufferInternal(handle, buffer);
+          await _flushBufferInternal(handle, buffer, bufferKey: threadIndex);
           await handle.flush();
         });
       }
@@ -307,15 +342,27 @@ class PositionalFileWriter
 
   Future<void> flushAll() async {
     _checkOpen();
-    for (final entry in _handles.entries) {
+    // FIX(C-1): Take _metaLock while iterating _handles/_buffers. _getHandle
+    // can structurally mutate both maps while we await inside per-handle
+    // locks, which previously crashed with "Concurrent modification during
+    // iteration" mid-download. Callers that already hold _metaLock
+    // (readRange/length/close) use _flushAllInternal directly.
+    await _metaLock.synchronized(_flushAllInternal);
+  }
+
+  /// Must be called while holding [_metaLock] (or when no other mutation can
+  /// race us) so map iteration cannot observe concurrent insertion.
+  Future<void> _flushAllInternal() async {
+    for (final entry in _handles.entries.toList(growable: false)) {
       final handleKey = entry.key;
       final handle = entry.value;
       final lock = _handleLocks[handleKey]!;
       await lock.synchronized(() async {
         if (!_closed) {
-          for (final bufferEntry in _buffers.entries) {
+          for (final bufferEntry in _buffers.entries.toList(growable: false)) {
             if (bufferEntry.key % _maxHandles == handleKey) {
-              await _flushBufferInternal(handle, bufferEntry.value);
+              await _flushBufferInternal(handle, bufferEntry.value,
+                  bufferKey: bufferEntry.key);
             }
           }
           await handle.flush();
@@ -346,15 +393,22 @@ class PositionalFileWriter
   /// [flushAll] at pause/stop/completion to force durability.
   Future<void> flushBuffers() async {
     _checkOpen();
-    for (final entry in _handles.entries) {
+    // FIX(C-1): Same _metaLock discipline as flushAll.
+    await _metaLock.synchronized(_flushBuffersInternal);
+  }
+
+  /// Must be called while holding [_metaLock] — see [_flushAllInternal].
+  Future<void> _flushBuffersInternal() async {
+    for (final entry in _handles.entries.toList(growable: false)) {
       final handleKey = entry.key;
       final handle = entry.value;
       final lock = _handleLocks[handleKey]!;
       await lock.synchronized(() async {
         if (!_closed) {
-          for (final bufferEntry in _buffers.entries) {
+          for (final bufferEntry in _buffers.entries.toList(growable: false)) {
             if (bufferEntry.key % _maxHandles == handleKey) {
-              await _flushBufferInternal(handle, bufferEntry.value);
+              await _flushBufferInternal(handle, bufferEntry.value,
+                  bufferKey: bufferEntry.key);
             }
           }
         }
@@ -366,7 +420,7 @@ class PositionalFileWriter
   Future<Uint8List> readRange(int start, int length) async {
     return _metaLock.synchronized(() async {
       _checkOpen();
-      await flushAll();
+      await _flushAllInternal();
       RandomAccessFile? tempRaf;
       try {
         final file = File(path);
@@ -385,7 +439,7 @@ class PositionalFileWriter
   Future<int> length() async {
     return _metaLock.synchronized(() async {
       _checkOpen();
-      await flushAll();
+      await _flushAllInternal();
       final file = File(path);
       if (await file.exists()) {
         return file.length();
@@ -408,10 +462,21 @@ class PositionalFileWriter
 
   Future<void> close() async {
     ServiceRegistry.unregisterMemoryPressureListener(this);
+    if (_drainCompleter != null && !_drainCompleter!.isCompleted) {
+      try {
+        await _drainCompleter!.future.timeout(const Duration(seconds: 5));
+      } catch (_) {}
+    }
     await _metaLock.synchronized(() async {
       if (_closed) return;
       try {
-        await flushAll(); // let errors propagate
+        await _flushAllInternal(); // let errors propagate
+      } on InsufficientStorageException {
+        // FIX(C-4): Disk-full must not be swallowed. InsufficientStorageException
+        // implements Exception directly (not PositionalFileWriterException), so
+        // the previous catch clause silently converted ENOSPC during the final
+        // close-flush into a short/holey "complete" file.
+        rethrow;
       } on PositionalFileWriterException {
         rethrow; // disk-full must not be swallowed
       } catch (e, st) {
@@ -425,10 +490,12 @@ class PositionalFileWriter
           try {
             if (lock != null) {
               await lock.synchronized(() async {
-                for (final bufferEntry in _buffers.entries) {
+                for (final bufferEntry
+                    in _buffers.entries.toList(growable: false)) {
                   if (bufferEntry.key % _maxHandles == handleKey) {
                     try {
-                      await _flushBufferInternal(handle, bufferEntry.value);
+                      await _flushBufferInternal(handle, bufferEntry.value,
+                          bufferKey: bufferEntry.key);
                     } catch (e, st) {
                       _log.finest('Flush buffer during close failed', e, st);
                     }
@@ -472,5 +539,198 @@ class PositionalFileWriter
     if (_closed) {
       throw const PositionalFileWriterException('writer is closed');
     }
+  }
+}
+
+/// A write batch task in the async write pipeline.
+class _WriteBatch {
+  final int position;
+  final Uint8List data;
+  final int? chunkKey;
+  _WriteBatch(this.position, this.data, [this.chunkKey]);
+}
+
+/// High-throughput write-behind queue for asynchronous disk I/O with backpressure.
+class AsyncWritePipeline {
+  AsyncWritePipeline(this._raf, {int? maxQueueBytes})
+      : maxQueueBytes = maxQueueBytes ?? 8 * 1024 * 1024;
+
+  final RandomAccessFile _raf;
+  final int maxQueueBytes;
+  final List<_WriteBatch> _queue = [];
+  final Lock _drainLock = Lock();
+  Completer<void>? _drainCompleter;
+  int _queueBytes = 0;
+  bool _draining = false;
+  bool _closed = false;
+
+  int get queueBytes => _queueBytes;
+  bool get isDraining => _draining;
+
+  /// Enqueues [data] to be written at [position]. Suspends if queue exceeds [maxQueueBytes].
+  Future<void> enqueue(int position, Uint8List data, [int? chunkKey]) async {
+    if (_closed) {
+      throw const PositionalFileWriterException('Pipeline is closed');
+    }
+    _queue.add(_WriteBatch(position, data, chunkKey));
+    _queueBytes += data.length;
+
+    // Backpressure enforcement
+    if (_queueBytes > maxQueueBytes) {
+      _drainCompleter ??= Completer<void>();
+      await _drainCompleter!.future.timeout(
+        const Duration(milliseconds: 200),
+        onTimeout: () => null,
+      );
+    }
+
+    _triggerDrain();
+  }
+
+  void _triggerDrain() {
+    if (!_draining && _queue.isNotEmpty && !_closed) {
+      unawaited(_drainQueue());
+    }
+  }
+
+  Future<void> _drainQueue() async {
+    await _drainLock.synchronized(() async {
+      _draining = true;
+      try {
+        while (_queue.isNotEmpty && !_closed) {
+          final batch = _queue.removeAt(0);
+          try {
+            await _raf.setPosition(batch.position);
+            await _raf.writeFrom(batch.data);
+          } finally {
+            _queueBytes = math.max(0, _queueBytes - batch.data.length);
+          }
+        }
+      } finally {
+        _draining = false;
+        if (_queueBytes <= maxQueueBytes / 2 &&
+            _drainCompleter != null &&
+            !_drainCompleter!.isCompleted) {
+          _drainCompleter!.complete();
+          _drainCompleter = null;
+        }
+      }
+    });
+  }
+
+  /// Flushes all enqueued batches to disk and waits for full drain.
+  Future<void> flush() async {
+    while (_queue.isNotEmpty && !_closed) {
+      await _drainQueue();
+    }
+    await _raf.flush();
+  }
+
+  /// Flushes remaining writes and closes the pipeline.
+  Future<void> close() async {
+    _closed = true;
+    await flush();
+    if (_drainCompleter != null && !_drainCompleter!.isCompleted) {
+      _drainCompleter!.complete();
+      _drainCompleter = null;
+    }
+  }
+}
+
+/// Windowed memory-mapped / windowed buffer writer for large files (> 1 GB).
+class MappedFileWriter {
+  MappedFileWriter._(this._raf, this._fileSize, this._windowSize);
+
+  final RandomAccessFile _raf;
+  final int _fileSize;
+  final int _windowSize;
+  Uint8List? _windowBuffer;
+  int _windowOffset = -1;
+  bool _isDirty = false;
+
+  static const int defaultWindowSize = 32 * 1024 * 1024; // 32MB window
+
+  static Future<MappedFileWriter> open(
+    String path, {
+    required int fileSize,
+    int windowSize = defaultWindowSize,
+  }) async {
+    final file = File(path);
+    if (!await file.exists()) {
+      await file.parent.create(recursive: true);
+    }
+    // FIX P0-1: writeOnly not append — see _getHandle fix.
+    final raf = await file.open(mode: FileMode.writeOnly);
+    if (fileSize > 0) {
+      final len = await raf.length();
+      if (len != fileSize) {
+        await raf.truncate(fileSize);
+      }
+    }
+    return MappedFileWriter._(raf, fileSize, windowSize);
+  }
+
+  /// Writes [data] at [position] utilizing windowed buffering.
+  Future<void> write(int position, Uint8List data) async {
+    if (data.isEmpty) return;
+
+    // Check if write is completely contained in current active window
+    if (_windowBuffer != null &&
+        position >= _windowOffset &&
+        position + data.length <= _windowOffset + _windowBuffer!.length) {
+      _windowBuffer!.setRange(
+        position - _windowOffset,
+        position - _windowOffset + data.length,
+        data,
+      );
+      _isDirty = true;
+      return;
+    }
+
+    // Flush existing window if dirty
+    await flushWindow();
+
+    // If data size exceeds window size, write directly
+    if (data.length >= _windowSize) {
+      await _raf.setPosition(position);
+      await _raf.writeFrom(data);
+      return;
+    }
+
+    // Initialize new window around write position
+    _windowOffset = (position ~/ _windowSize) * _windowSize;
+    final currentWindowLen = math.min(
+        _windowSize, _fileSize > 0 ? _fileSize - _windowOffset : _windowSize);
+    _windowBuffer = Uint8List(math.max(data.length, currentWindowLen));
+
+    // Read existing file content for this window if present
+    await _raf.setPosition(_windowOffset);
+    final readBytes = await _raf.read(currentWindowLen);
+    if (readBytes.isNotEmpty) {
+      _windowBuffer!.setRange(0, readBytes.length, readBytes);
+    }
+
+    // Apply write to window buffer
+    _windowBuffer!.setRange(
+      position - _windowOffset,
+      position - _windowOffset + data.length,
+      data,
+    );
+    _isDirty = true;
+  }
+
+  Future<void> flushWindow() async {
+    if (_isDirty && _windowBuffer != null && _windowOffset >= 0) {
+      await _raf.setPosition(_windowOffset);
+      await _raf.writeFrom(_windowBuffer!);
+      await _raf.flush();
+      _isDirty = false;
+    }
+  }
+
+  Future<void> close() async {
+    await flushWindow();
+    await _raf.close();
+    _windowBuffer = null;
   }
 }

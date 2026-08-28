@@ -13,8 +13,11 @@ void main() {
       fakeNative = FakeTorrentNative();
     });
 
-    test('Graceful pauseTorrent saves resume data before pausing handle', () async {
-      final tid = fakeNative.addMagnet('magnet:?xt=urn:btih:c12fe1c06bba254a9dc9f519b335de7ece74fedd', '/tmp');
+    test('Graceful pauseTorrent saves resume data before pausing handle',
+        () async {
+      final tid = fakeNative.addMagnet(
+          'magnet:?xt=urn:btih:c12fe1c06bba254a9dc9f519b335de7ece74fedd',
+          '/tmp');
       expect(tid, isNonNegative);
 
       // Verify torrent starts active
@@ -29,18 +32,25 @@ void main() {
       expect(fakeNative.saveResumeDataCallCount, greaterThanOrEqualTo(1));
     });
 
-    test('pauseTorrent records telemetry if save resume data fails or times out', () async {
+    test(
+        'pauseTorrent records telemetry if save resume data fails or times out',
+        () async {
       fakeNative.simulateGracefulPauseTimeout = true;
       final initialAlerts = DiagnosticService.instance.resumeDataMissingCount;
 
-      final tid = fakeNative.addMagnet('magnet:?xt=urn:btih:c12fe1c06bba254a9dc9f519b335de7ece74fedd', '/tmp');
+      final tid = fakeNative.addMagnet(
+          'magnet:?xt=urn:btih:c12fe1c06bba254a9dc9f519b335de7ece74fedd',
+          '/tmp');
       await fakeNative.pauseTorrent(tid, graceful: true);
 
-      expect(DiagnosticService.instance.resumeDataMissingCount, greaterThan(initialAlerts));
+      expect(DiagnosticService.instance.resumeDataMissingCount,
+          greaterThan(initialAlerts));
     });
 
     test('resumeTorrent transitions state and emits resumed alert', () async {
-      final tid = fakeNative.addMagnet('magnet:?xt=urn:btih:c12fe1c06bba254a9dc9f519b335de7ece74fedd', '/tmp');
+      final tid = fakeNative.addMagnet(
+          'magnet:?xt=urn:btih:c12fe1c06bba254a9dc9f519b335de7ece74fedd',
+          '/tmp');
       await fakeNative.pauseTorrent(tid, graceful: false);
       expect(fakeNative.getTorrentStatus(tid)?.isPaused, isTrue);
 
@@ -48,7 +58,9 @@ void main() {
       expect(fakeNative.getTorrentStatus(tid)?.isPaused, isFalse);
     });
 
-    test('Displayed downloadedBytes equals totalWantedDone (tolerance: 1 piece)', () {
+    test(
+        'Displayed downloadedBytes equals totalWantedDone (tolerance: 1 piece)',
+        () {
       const pieceLength = 256 * 1024;
       const totalWanted = 100 * pieceLength;
       const totalWantedDone = 40 * pieceLength; // 40 pieces completed
@@ -82,18 +94,27 @@ void main() {
 
       expect(rawDownloaded, equals(totalWantedDone));
       expect(totalSize, equals(totalWanted));
-      expect((rawDownloaded - totalWantedDone).abs(), lessThanOrEqualTo(pieceLength));
+      expect((rawDownloaded - totalWantedDone).abs(),
+          lessThanOrEqualTo(pieceLength));
     });
 
-    test('Pause a torrent, simulate engine restart, and verify progress continues', () async {
-      const magnetUri = 'magnet:?xt=urn:btih:c12fe1c06bba254a9dc9f519b335de7ece74fedd';
+    test(
+        'Pause a torrent, simulate engine restart, and verify progress continues',
+        () async {
+      const magnetUri =
+          'magnet:?xt=urn:btih:c12fe1c06bba254a9dc9f519b335de7ece74fedd';
       final tid1 = fakeNative.addMagnet(magnetUri, '/tmp');
 
       fakeNative.seedTorrent(
         id: tid1,
         name: 'movie.mp4',
         files: [
-          const NativeFileInfo(index: 0, name: 'movie.mp4', path: 'movie.mp4', size: 10000000, isStreamable: true),
+          const NativeFileInfo(
+              index: 0,
+              name: 'movie.mp4',
+              path: 'movie.mp4',
+              size: 10000000,
+              isStreamable: true),
         ],
       );
 
@@ -114,7 +135,12 @@ void main() {
         id: tid2,
         name: 'movie.mp4',
         files: [
-          const NativeFileInfo(index: 0, name: 'movie.mp4', path: 'movie.mp4', size: 10000000, isStreamable: true),
+          const NativeFileInfo(
+              index: 0,
+              name: 'movie.mp4',
+              path: 'movie.mp4',
+              size: 10000000,
+              isStreamable: true),
         ],
       );
       fakeNative.simulateProgress(id: tid2, perFileDownloadedBytes: [4500000]);

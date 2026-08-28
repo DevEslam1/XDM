@@ -90,7 +90,8 @@ void main() {
       expect(monitor.isListening, isTrue);
 
       // Verify health summary formatting
-      expect(monitor.healthSummary, contains('60fps'));
+      expect(monitor.healthSummary, contains('fps |'));
+      expect(monitor.healthSummary, contains('% jank'));
     });
 
     test(

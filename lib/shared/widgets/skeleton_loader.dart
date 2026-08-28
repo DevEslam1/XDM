@@ -56,21 +56,23 @@ class _SkeletonCardState extends State<SkeletonCard>
   @override
   void initState() {
     super.initState();
+    _localController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+    _localAnimation = Tween<double>(begin: 0.3, end: 0.7).animate(
+      CurvedAnimation(parent: _localController!, curve: Curves.easeInOut),
+    );
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final parentAnimation = SkeletonShimmerScope.maybeOf(context);
-    if (parentAnimation == null && _localController == null) {
-      _localController = AnimationController(
-        vsync: this,
-        duration: const Duration(milliseconds: 1200),
-      );
-      _localAnimation = Tween<double>(begin: 0.3, end: 0.7).animate(
-        CurvedAnimation(parent: _localController!, curve: Curves.easeInOut),
-      );
+    if (parentAnimation == null) {
       startPausableLoop();
+    } else {
+      stopPausableLoop();
     }
   }
 

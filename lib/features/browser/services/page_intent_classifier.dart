@@ -214,9 +214,13 @@ class PageIntentClassifier {
   Future<void> init() async {
     if (_initialized) return;
     if (_initFuture != null) return _initFuture!;
-    _initFuture = _doInit();
-    await _initFuture;
-    _initFuture = null;
+    final future = _doInit();
+    _initFuture = future;
+    try {
+      await future;
+    } finally {
+      _initFuture = null;
+    }
   }
 
   Future<void> _doInit() async {

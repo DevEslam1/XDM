@@ -191,20 +191,26 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
   }
 
   bool _isShowingClipboardDialog = false;
+  bool _isCheckingClipboard = false;
 
   Future<void> _checkClipboard() async {
-    if (_isShowingClipboardDialog) return;
-    final now = DateTime.now();
-    if (now.difference(_lastClipboardCheckTime).inSeconds < 2) return;
-    _lastClipboardCheckTime = now;
-    final url = await ClipboardService().checkClipboardForUrl();
-    if (url != null && mounted && url != _lastClipboardUrl) {
-      _isShowingClipboardDialog = true;
-      _lastClipboardUrl = url;
-      _showClipboardSnackbar(url);
-      Future.delayed(const Duration(seconds: 3), () {
-        _isShowingClipboardDialog = false;
-      });
+    if (_isCheckingClipboard || _isShowingClipboardDialog) return;
+    _isCheckingClipboard = true;
+    try {
+      final now = DateTime.now();
+      if (now.difference(_lastClipboardCheckTime).inSeconds < 2) return;
+      _lastClipboardCheckTime = now;
+      final url = await ClipboardService().checkClipboardForUrl();
+      if (url != null && mounted && url != _lastClipboardUrl) {
+        _isShowingClipboardDialog = true;
+        _lastClipboardUrl = url;
+        _showClipboardSnackbar(url);
+        Future.delayed(const Duration(seconds: 3), () {
+          _isShowingClipboardDialog = false;
+        });
+      }
+    } finally {
+      _isCheckingClipboard = false;
     }
   }
 
@@ -219,7 +225,8 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
         preview = uri.replace(userInfo: '').toString();
       }
     } catch (_) {}
-    final safePreview = preview.length > 40 ? '${preview.substring(0, 40)}…' : preview;
+    final safePreview =
+        preview.length > 40 ? '${preview.substring(0, 40)}…' : preview;
     ThemedSnackbar.show(
       context,
       message: L10n.of(context, 'clipboard_link_detected'),
@@ -432,8 +439,10 @@ class _FadeIndexedStackState extends State<_FadeIndexedStack>
         children: List.generate(widget.itemCount, (i) {
           final isCurrent = i == widget.index;
           final isActivated = _activatedIndices.contains(i);
-          if (isActivated) {
-            _cachedWidgets.putIfAbsent(i, () => widget.itemBuilder(context, i));
+          if (isActivated && !_cachedWidgets.containsKey(i)) {
+            _cachedWidgets[i] = Builder(
+              builder: (ctx) => widget.itemBuilder(ctx, i),
+            );
           }
           return TickerMode(
             enabled: isCurrent,

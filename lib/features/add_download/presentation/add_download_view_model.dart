@@ -28,6 +28,14 @@ class AddDownloadViewModel extends ChangeNotifier {
   bool _showAdvanced = false;
   bool _userEditedName = false;
 
+  // HTTP Basic auth + arbitrary custom request headers (Plan 06 Task 6.2).
+  // Custom headers are held as an ordered list of key/value pairs so the
+  // dialog can render one editable row per header; empty rows are dropped
+  // when building the persisted map.
+  String _authUsername = '';
+  String _authPassword = '';
+  final List<MapEntry<String, String>> _customHeaders = [];
+
   bool _isResolvingLink = false;
   bool _isMetadataResolved = false;
   bool _isSubmitting = false;
@@ -67,6 +75,34 @@ class AddDownloadViewModel extends ChangeNotifier {
   DateTime? get scheduledDateTime => _scheduledDateTime;
   bool get showAdvanced => _showAdvanced;
   bool get userEditedName => _userEditedName;
+
+  String get authUsername => _authUsername;
+  String get authPassword => _authPassword;
+  List<MapEntry<String, String>> get customHeaders =>
+      List.unmodifiable(_customHeaders);
+
+  /// Basic-auth credentials to persist on the task, or null when neither
+  /// username nor password was supplied.
+  ({String? username, String? password})? get resolvedAuth {
+    final user = _authUsername.trim();
+    final pass = _authPassword; // passwords may legitimately contain spaces
+    if (user.isEmpty && pass.isEmpty) return null;
+    return (
+      username: user.isEmpty ? null : user,
+      password: pass.isEmpty ? null : pass,
+    );
+  }
+
+  /// Custom headers as a map with blank rows removed, or null when empty.
+  Map<String, String>? get resolvedCustomHeaders {
+    final map = <String, String>{};
+    for (final entry in _customHeaders) {
+      final key = entry.key.trim();
+      if (key.isEmpty) continue;
+      map[key] = entry.value;
+    }
+    return map.isEmpty ? null : map;
+  }
 
   bool get isResolvingLink => _isResolvingLink;
   bool get isMetadataResolved => _isMetadataResolved;
@@ -147,6 +183,39 @@ class AddDownloadViewModel extends ChangeNotifier {
 
   void setUserEditedName(bool value) {
     _userEditedName = value;
+  }
+
+  void setAuthUsername(String value) {
+    _authUsername = value;
+    notifyListeners();
+  }
+
+  void setAuthPassword(String value) {
+    _authPassword = value;
+    notifyListeners();
+  }
+
+  void addCustomHeader([String key = '', String value = '']) {
+    _customHeaders.add(MapEntry(key, value));
+    notifyListeners();
+  }
+
+  void updateCustomHeaderKey(int index, String key) {
+    if (index < 0 || index >= _customHeaders.length) return;
+    _customHeaders[index] = MapEntry(key, _customHeaders[index].value);
+    // No notifyListeners: the row's own TextField already holds the text and
+    // rebuilding here would fight the user's cursor. State stays in sync.
+  }
+
+  void updateCustomHeaderValue(int index, String value) {
+    if (index < 0 || index >= _customHeaders.length) return;
+    _customHeaders[index] = MapEntry(_customHeaders[index].key, value);
+  }
+
+  void removeCustomHeader(int index) {
+    if (index < 0 || index >= _customHeaders.length) return;
+    _customHeaders.removeAt(index);
+    notifyListeners();
   }
 
   void updateNameAndExt(String newName, String newExt) {

@@ -109,9 +109,17 @@ class AmbientProgress with WidgetsBindingObserver {
     _timer = null;
   }
 
+  void dispose() {
+    _stopTimer();
+    WidgetsBinding.instance.removeObserver(this);
+    PowerMonitor.throttleFactorNotifier.removeListener(_onPowerThrottleChanged);
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
+    if (state == AppLifecycleState.detached) {
+      dispose();
+    } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive ||
         state == AppLifecycleState.hidden) {
       _isBackgrounded = true;

@@ -85,10 +85,32 @@ class BrowserController extends ChangeNotifier {
   final Map<String, bool> navigatingBackForwardTabIds = {};
 
   // Favicon HTTP client & cache
+  /// Shared HttpClient with pooling config. [idleTimeout] is 15s to recycle
+  /// idle sockets; [maxConnectionsPerHost] caps per-host sockets (6) to avoid
+  /// FD exhaustion. Both are HttpClient properties when available (Dart SDK).
+  /// If a platform embedding strips these setters, document fallback to default
+  /// pooling and rely on [connectionTimeout] alone.
   HttpClient? _sharedHttpClient;
   HttpClient get _faviconHttpClient => _sharedHttpClient ??= HttpClient()
-    ..connectionTimeout = const Duration(seconds: 4);
+    ..connectionTimeout = const Duration(seconds: 4)
+    ..idleTimeout = const Duration(seconds: 15)
+    ..maxConnectionsPerHost = 6;
+  /// LRU favicon fetch cache: domain -> lastFetch. Bounded to 200 entries to
+  /// prevent unbounded memory growth. Insertion order is used for LRU eviction;
+  /// hits are re-inserted to mark recently used.
   final Map<String, DateTime> _faviconCache = {};
+  static const int _maxFaviconCacheSize = 200;
+
+  /// Trims [_faviconCache] to [_maxFaviconCacheSize] LRU entries.
+  /// Removes oldest entries first (insertion order). Called after each insert.
+  void _trimFaviconCache() {
+    if (_faviconCache.length <= _maxFaviconCacheSize) return;
+    final overflow = _faviconCache.length - _maxFaviconCacheSize;
+    final keysToRemove = _faviconCache.keys.take(overflow).toList();
+    for (final k in keysToRemove) {
+      _faviconCache.remove(k);
+    }
+  }
 
   // Find in page state
   final TextEditingController findTextController = TextEditingController();
@@ -115,22 +137,33 @@ class BrowserController extends ChangeNotifier {
 
   void setReaderControlsVisible(bool visible) {
     _readerControlsVisible = visible;
+    if (!visible) closeReaderMode();
     notifyListeners();
   }
 
   void setReaderFontSize(double size) {
-    _readerFontSize = size;
+    _readerFontSize = size.clamp(12.0, 28.0);
     notifyListeners();
+    _rebuildReaderForActiveTab();
   }
 
   void setReaderTheme(String theme) {
     _readerTheme = theme;
     notifyListeners();
+    _rebuildReaderForActiveTab();
   }
 
   void setReaderFontFamily(String family) {
     _readerFontFamily = family;
     notifyListeners();
+    _rebuildReaderForActiveTab();
+  }
+
+  void _rebuildReaderForActiveTab() {
+    final ctrl = activeTab?.controller;
+    if (ctrl != null) {
+      unawaited(_rebuildAndLoadReader(ctrl));
+    }
   }
 
   // Sniffer state proxy
@@ -558,17 +591,52 @@ class BrowserController extends ChangeNotifier {
         tabManager.saveTabsImmediately();
         break;
       case AppLifecycleState.resumed:
+        // FIX: Re-arm inactivity watchdog if it was disarmed due to
+        // isMounted==false during resetTimer. Without this, the watchdog
+        // stays permanently idle after backgrounding.
+        try {
+          inactivityWatchdog.onResumed();
+        } catch (_) {}
+        // Also resume media that was paused by hibernation if needed.
+        for (final tab in tabs) {
+          inactivityWatchdog.resumeTabMedia(tab);
+        }
         break;
       default:
         break;
     }
   }
 
+  // FIX P0-10: Proper incognito purge — delete ALL cookies/storage, not just per-tab URL.
   Future<void> quitBrowser({BuildContext? context}) async {
     await tabManager.saveTabsImmediately();
 
+    bool hasIncognito = false;
     for (final tab in tabs) {
       if (tab.isIncognito) {
+        hasIncognito = true;
+        break;
+      }
+    }
+    if (hasIncognito || settingsProvider.incognitoEnabled) {
+      try {
+        // Delete all cookies (covers subdomains, HttpOnly, redirects).
+        await CookieManager.instance().deleteAllCookies();
+      } catch (_) {}
+      for (final tab in tabs.where((t) => t.isIncognito)) {
+        try {
+          await tab.controller?.evaluateJavascript(
+            source: 'localStorage.clear(); sessionStorage.clear(); indexedDB.deleteDatabase("_");',
+          );
+        } catch (_) {}
+      }
+      try {
+        // Also clear general WebView storages via platform manager.
+        await InAppWebViewController.clearAllCache();
+      } catch (_) {}
+    } else {
+      // No incognito tabs but still clear per-tab cookies as fallback.
+      for (final tab in tabs.where((t) => t.isIncognito)) {
         try {
           if (tab.url.isNotEmpty && tab.url != BrowserTab.canonicalBlankUrl) {
             await CookieManager.instance().deleteCookies(url: WebUri(tab.url));
@@ -783,11 +851,19 @@ class BrowserController extends ChangeNotifier {
     final domain = uri.host.toLowerCase();
 
     final lastFetch = _faviconCache[domain];
-    if (lastFetch != null &&
-        DateTime.now().difference(lastFetch).inMinutes < 60) {
-      return;
+    if (lastFetch != null) {
+      if (DateTime.now().difference(lastFetch).inMinutes < 60) {
+        // LRU touch: move to end to mark recently used even on cache-hit.
+        _faviconCache.remove(domain);
+        _faviconCache[domain] = lastFetch;
+        return;
+      } else {
+        // Stale entry — remove so re-insert refreshes LRU order.
+        _faviconCache.remove(domain);
+      }
     }
     _faviconCache[domain] = DateTime.now();
+    _trimFaviconCache();
 
     final faviconUrl = '${uri.scheme}://${uri.host}/favicon.ico';
     try {
@@ -867,6 +943,9 @@ class BrowserController extends ChangeNotifier {
         _readerControlsVisible = true;
         _readerTheme = settingsProvider.isDarkMode ? 'dark' : 'light';
         notifyListeners();
+        // FIX(P1.6): Actually load the reader view — previously extraction ran
+        // but the WebView was never navigated to the reader HTML.
+        await _rebuildAndLoadReader(target.controller!);
       }
     } catch (e, st) {
       _log.warning('Failed to activate reader mode: $e', e, st);
@@ -878,6 +957,21 @@ class BrowserController extends ChangeNotifier {
     _readerTabId = null;
     _readerControlsVisible = false;
     notifyListeners();
+  }
+
+  // FIX(P1.6): Centralized reader HTML rebuild + load.
+  Future<void> _rebuildAndLoadReader(InAppWebViewController controller) async {
+    final article = _readerArticle;
+    if (article == null) return;
+    await ReaderModeService.rebuildReaderHtml(
+      article,
+      (dataUri) {
+        controller.loadUrl(urlRequest: URLRequest(url: WebUri(dataUri)));
+      },
+      fontSize: _readerFontSize,
+      theme: _readerTheme,
+      fontFamily: _readerFontFamily,
+    );
   }
 
   // ── Form Autofill ──
@@ -902,7 +996,13 @@ class BrowserController extends ChangeNotifier {
   }
 
   void queueAutofill(String host, Map<String, String> formData) {
-    if (host.isEmpty || formData.isEmpty || settingsProvider.incognitoEnabled) {
+    // FIX P0-10: Check per-tab incognito, not just global flag. Incognito tab
+    // form data must never be persisted to siteSettingsStore.
+    final isIncognitoTab = tabManager.activeTab?.isIncognito ?? false;
+    if (host.isEmpty ||
+        formData.isEmpty ||
+        settingsProvider.incognitoEnabled ||
+        isIncognitoTab) {
       return;
     }
     _pendingAutofillData = Map.from(formData);
@@ -919,7 +1019,7 @@ class BrowserController extends ChangeNotifier {
             settings.copyWith(
               customJs: [
                 ...settings.customJs ?? [],
-                '/* autofill */ window.__autofill = ${jsonEncode(_pendingAutofillData)};',
+                '/* autofill */ window.__autofill = JSON.parse(${jsonEncode(jsonEncode(_pendingAutofillData))});',
               ],
             ),
           );
@@ -932,6 +1032,8 @@ class BrowserController extends ChangeNotifier {
   // ── Offline Page Saving ──
 
   Future<void> savePageOffline(BrowserTab tab, {BuildContext? context}) async {
+    // FIX P0-10: Do not persist incognito pages to disk.
+    if (tab.isIncognito) return;
     if (tab.controller == null || tab.url.isEmpty) return;
     try {
       final html = await tab.controller?.getHtml();

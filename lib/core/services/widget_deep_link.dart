@@ -140,11 +140,9 @@ class WidgetDeepLinkHandler {
         break;
       case 'add':
       case 'share':
-        final target = uri.queryParameters['url'];
+        final target = uri.queryParameters['url'] ?? '';
         final name = uri.queryParameters['name'];
-        if (target != null && target.isNotEmpty) {
-          _handleAddUrl(target, name: name);
-        }
+        _handleAddUrl(target, name: name);
         break;
       case 'pause_all':
       case 'pause-all':

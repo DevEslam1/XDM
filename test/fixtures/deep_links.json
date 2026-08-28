@@ -1,0 +1,29 @@
+{
+  "supportedSchemes": ["dmx", "xdm"],
+  "routes": [
+    "dmx://downloads",
+    "dmx://download/task_123",
+    "dmx://add",
+    "dmx://pause_all",
+    "dmx://pause-all",
+    "dmx://resume_all",
+    "dmx://resume-all",
+    "dmx://toggle/task_123",
+    "dmx://pause/task_123",
+    "dmx://cancel/task_123",
+    "dmx://resume/task_123",
+    "dmx://open/task_123",
+    "dmx://settings",
+    "dmx://settings/network",
+    "dmx://category/Video",
+    "dmx://share?url=https%3A%2F%2Fexample.com%2Ffile.zip",
+    "xdm://downloads",
+    "xdm://download/task_456"
+  ],
+  "invalidRoutes": [
+    "",
+    "http://example.com",
+    "dmx://unknown_route_xyz",
+    "random://downloads"
+  ]
+}

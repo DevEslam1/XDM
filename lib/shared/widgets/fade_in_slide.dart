@@ -116,6 +116,7 @@ class FadeInSlideState extends State<FadeInSlide>
     super.didChangeDependencies();
     final scope = FadeInSlideScope.maybeOf(context);
     if (scope != null) {
+      _localController?.stop();
       _localController?.dispose();
       _localController = null;
       _fade = Tween<double>(

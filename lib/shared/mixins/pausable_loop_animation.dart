@@ -107,8 +107,8 @@ mixin PausableLoopAnimation<T extends StatefulWidget>
 
   void _sync() {
     if (!mounted) return;
-    bool batterySaver = false;
-    bool glowEnabled = true;
+    bool batterySaver = true;
+    bool glowEnabled = false;
     try {
       batterySaver = SettingsProvider.instance.batterySaverMode;
       // FIX(B11): Only loop continuously when the user wants glow effects.

@@ -195,8 +195,12 @@ class _SwarmSummary extends StatelessWidget {
     }
 
     if (s.availability > 0) {
-      rows.add(_row('Availability', '${s.availability.toStringAsFixed(2)} copies',
-          AppTheme.neonOrange, Icons.layers_outlined, textMuted));
+      rows.add(_row(
+          'Availability',
+          '${s.availability.toStringAsFixed(2)} copies',
+          AppTheme.neonOrange,
+          Icons.layers_outlined,
+          textMuted));
     }
 
     return Column(

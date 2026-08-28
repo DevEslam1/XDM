@@ -7,10 +7,13 @@ import 'package:sqlite3/sqlite3.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('Drift Schema Migration Matrix (v1 through v27)', () {
-    test('Fresh database initializes at latest schemaVersion 27 with all views and tables', () async {
+  group('Drift Schema Migration Matrix (v1 through v28)', () {
+    test(
+        'Fresh database initializes at latest schemaVersion 28 with all views and tables',
+        () async {
       final db = AppDatabase.forTesting(NativeDatabase.memory());
-      expect(db.schemaVersion, equals(27));
+      // Keep in sync with AppDatabase.schemaVersion (v28: auth/headers).
+      expect(db.schemaVersion, equals(28));
 
       // Verify all tables exist and can be queried
       final tasks = await db.select(db.downloadTasks).get();
@@ -29,17 +32,20 @@ void main() {
       expect(mirrorHealth, isEmpty);
 
       // Verify task summary view
-      final summary = await db.customSelect('SELECT * FROM v_download_task_summary').get();
+      final summary =
+          await db.customSelect('SELECT * FROM v_download_task_summary').get();
       expect(summary, isEmpty);
 
       await db.close();
     });
 
-    test('Full historical migration: v1 -> v27 with pre-populated data and schema verification', () async {
+    test(
+        'Full historical migration: v1 -> v27 with pre-populated data and schema verification',
+        () async {
       // 1. Create a raw SQLite in-memory database with v1 schema directly in sqlite3
       final rawSqlite = sqlite3.openInMemory();
       rawSqlite.execute('PRAGMA user_version = 1;');
-      
+
       // Create v1 raw tables
       rawSqlite.execute('''
         CREATE TABLE download_tasks (
@@ -125,17 +131,22 @@ void main() {
       final appDb = AppDatabase.forTesting(NativeDatabase.opened(rawSqlite));
 
       // Force database open and migration
-      final rows = await appDb.customSelect('SELECT * FROM download_tasks').get();
+      final rows =
+          await appDb.customSelect('SELECT * FROM download_tasks').get();
       expect(rows.length, equals(1));
       expect(rows.first.read<String>('id'), equals('task-v1-1'));
 
       // Verify v1 -> v2 (notes added)
-      final taskCols = await appDb.customSelect('PRAGMA table_info(download_tasks)').get();
+      final taskCols =
+          await appDb.customSelect('PRAGMA table_info(download_tasks)').get();
       final colNames = taskCols.map((r) => r.read<String>('name')).toSet();
       expect(colNames.contains('notes'), isTrue);
 
       // Verify v2 -> v3 (date migration to epoch integer)
-      final taskRow = await appDb.customSelect("SELECT id, created_at, updated_at, is_cancelled FROM download_tasks WHERE id = 'task-v1-1'").getSingle();
+      final taskRow = await appDb
+          .customSelect(
+              "SELECT id, created_at, updated_at, is_cancelled FROM download_tasks WHERE id = 'task-v1-1'")
+          .getSingle();
       expect(taskRow.read<int>('created_at'), isA<int>());
       expect(taskRow.read<int>('created_at'), isPositive);
 
@@ -158,11 +169,16 @@ void main() {
       expect(colNames.contains('thumbnail_url'), isTrue);
 
       // Verify v11 (bookmarks and browser_history date conversion to integer)
-      final bmRow = await appDb.customSelect("SELECT id, created_at FROM bookmarks WHERE id = 'bm-1'").getSingle();
+      final bmRow = await appDb
+          .customSelect(
+              "SELECT id, created_at FROM bookmarks WHERE id = 'bm-1'")
+          .getSingle();
       expect(bmRow.read<int>('created_at'), isA<int>());
       expect(bmRow.read<int>('created_at'), isPositive);
 
-      final histRow = await appDb.customSelect('SELECT id, visited_at FROM browser_history LIMIT 1').getSingle();
+      final histRow = await appDb
+          .customSelect('SELECT id, visited_at FROM browser_history LIMIT 1')
+          .getSingle();
       expect(histRow.read<int>('visited_at'), isA<int>());
       expect(histRow.read<int>('visited_at'), isPositive);
 
@@ -209,14 +225,18 @@ void main() {
       expect(colNames.contains('is_cancelled'), isTrue);
 
       // Verify summary view works on migrated data
-      final summaries = await appDb.customSelect('SELECT * FROM v_download_task_summary').get();
+      final summaries = await appDb
+          .customSelect('SELECT * FROM v_download_task_summary')
+          .get();
       expect(summaries.length, equals(1));
       expect(summaries.first.read<String>('id'), equals('task-v1-1'));
 
       await appDb.close();
     });
 
-    test('Sequential step migrations: iteratively upgrading v1 -> v2 -> v3 -> ... -> v27', () async {
+    test(
+        'Sequential step migrations: iteratively upgrading v1 -> v2 -> v3 -> ... -> v28',
+        () async {
       final raw = sqlite3.openInMemory();
       raw.execute('PRAGMA user_version = 1;');
       raw.execute('''
@@ -267,11 +287,12 @@ void main() {
       final migrator = appDb.createMigrator();
 
       // Step through every version upgrade individually
-      for (int v = 1; v < 27; v++) {
+      for (int v = 1; v < 28; v++) {
         await appDb.migration.onUpgrade(migrator, v, v + 1);
       }
 
-      final cols = await appDb.customSelect('PRAGMA table_info(download_tasks)').get();
+      final cols =
+          await appDb.customSelect('PRAGMA table_info(download_tasks)').get();
       final names = cols.map((r) => r.read<String>('name')).toSet();
       expect(names.contains('is_cancelled'), isTrue);
       expect(names.contains('info_hash'), isTrue);

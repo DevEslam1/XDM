@@ -17,7 +17,9 @@ void main() {
     }
   });
 
-  test('Unified WAL Checkpoint: simulated 1GB transfer journal file stays bounded (< 64KB)', () async {
+  test(
+      'Unified WAL Checkpoint: simulated 1GB transfer journal file stays bounded (< 64KB)',
+      () async {
     final tempFilePath = '${tempDir.path}/large_1gb_file.bin';
     final journalPath = '$tempFilePath.journal';
     const totalSize = 1024 * 1024 * 1024; // 1 GB

@@ -187,7 +187,8 @@ void main() {
 
   // Regression: C2
   group('C2: Cancellation and Handle Leak Prevention', () {
-    test('cancel before start throws cancel and does not add torrent', () async {
+    test('cancel before start throws cancel and does not add torrent',
+        () async {
       final cancelToken = CancelToken()..cancel('Immediate cancellation');
 
       expect(
@@ -201,8 +202,8 @@ void main() {
           clientBuilder: (u) => Dio(),
           clientReleaser: (d) => d.close(),
         ),
-        throwsA(isA<DioException>().having(
-            (e) => e.type, 'type', equals(DioExceptionType.cancel))),
+        throwsA(isA<DioException>()
+            .having((e) => e.type, 'type', equals(DioExceptionType.cancel))),
       );
     });
 
@@ -263,10 +264,18 @@ void main() {
 
   // Regression: C5
   group('C5: TorrentFileSnapshot Mutability Contract', () {
-    test('mutating source list after construction preserves snapshot hash and equality',
+    test(
+        'mutating source list after construction preserves snapshot hash and equality',
         () {
       final source = [
-        {'name': 'video.mp4', 'length': 1000, 'downloadedBytes': 0, 'selected': true, 'priority': 4, 'isComplete': false}
+        {
+          'name': 'video.mp4',
+          'length': 1000,
+          'downloadedBytes': 0,
+          'selected': true,
+          'priority': 4,
+          'isComplete': false
+        }
       ];
 
       final snapshot = TorrentFileSnapshot(source);

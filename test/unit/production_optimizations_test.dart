@@ -6,7 +6,9 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('Production Optimizations Tests', () {
-    test('DownloadProgress equality compares torrentFiles and chunkDetails correctly', () {
+    test(
+        'DownloadProgress equality compares torrentFiles and chunkDetails correctly',
+        () {
       const p1 = DownloadProgress(
         downloadedBytes: 100,
         fileSize: 1000,
@@ -17,7 +19,13 @@ void main() {
           {'name': 'file1.mp4', 'length': 500, 'selected': true},
         ],
         chunkDetails: [
-          ChunkDetail(index: 0, start: 0, end: 499, downloaded: 100, size: 500, ratio: 0.2),
+          ChunkDetail(
+              index: 0,
+              start: 0,
+              end: 499,
+              downloaded: 100,
+              size: 500,
+              ratio: 0.2),
         ],
       );
 
@@ -31,7 +39,13 @@ void main() {
           {'name': 'file1.mp4', 'length': 500, 'selected': true},
         ],
         chunkDetails: [
-          ChunkDetail(index: 0, start: 0, end: 499, downloaded: 100, size: 500, ratio: 0.2),
+          ChunkDetail(
+              index: 0,
+              start: 0,
+              end: 499,
+              downloaded: 100,
+              size: 500,
+              ratio: 0.2),
         ],
       );
 
@@ -41,7 +55,13 @@ void main() {
       // Change chunkDetails
       final p3 = p1.copyWith(
         chunkDetails: [
-          const ChunkDetail(index: 0, start: 0, end: 499, downloaded: 200, size: 500, ratio: 0.4),
+          const ChunkDetail(
+              index: 0,
+              start: 0,
+              end: 499,
+              downloaded: 200,
+              size: 500,
+              ratio: 0.4),
         ],
       );
       expect(p1 == p3, isFalse);
@@ -55,7 +75,9 @@ void main() {
       expect(p1 == p4, isFalse);
     });
 
-    test('Chunked stream copy and length check verifies integrity without full sha256', () async {
+    test(
+        'Chunked stream copy and length check verifies integrity without full sha256',
+        () async {
       final tempDir = await Directory.systemTemp.createTemp('dmx_copy_test_');
       try {
         final srcFile = File('${tempDir.path}/src.bin');

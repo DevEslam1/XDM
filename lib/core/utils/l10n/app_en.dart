@@ -609,4 +609,42 @@ const Map<String, String> enTranslations = {
   'torrent_meta_retry': 'Retry Fetching Metadata',
   'torrent_peers_label': 'Peers',
   'torrent_dht_nodes': 'DHT Nodes',
+  // Subscription (Sub Club)
+  'subscription_title': 'Subscription',
+  'subscription_subtitle': 'Unlock the full XDM experience',
+  'subscription_free_tier': 'Free Tier',
+  'subscription_free_description': 'Limited features — upgrade for full access',
+  'subscription_premium': 'Premium',
+  'subscription_premium_feature': 'Premium Feature',
+  'subscription_upgrade_to_unlock': 'Upgrade to Premium to unlock this feature',
+  'subscription_upgrade_now': 'Upgrade Now',
+  'subscription_view_plans': 'View Plans',
+  'subscription_choose_plan': 'Choose Your Plan',
+  'subscription_subscribe': 'Subscribe',
+  'subscription_subscribe_now': 'Subscribe Now',
+  'subscription_manage': 'Manage',
+  'subscription_manage_description':
+      'Manage your subscription in the App Store or Play Store.',
+  'subscription_restore': 'Restore Purchases',
+  'subscription_restore_success': 'Purchases restored successfully',
+  'subscription_restore_failed': 'No purchases found to restore',
+  'subscription_status_active': 'Premium Active',
+  'subscription_status_expired': 'Subscription Expired',
+  'subscription_expires': 'Expires',
+  'subscription_grace_period':
+      'Your downloads will continue until the grace period ends.',
+  'subscription_free_limit': 'Free tier allows up to {0} concurrent downloads',
+  'subscription_max_downloads_reached': 'Download Limit Reached',
+  'subscription_compare_plans': 'Compare Plans',
+  'subscription_feature': 'Feature',
+  'subscription_free': 'Free',
+  'subscription_go_premium': 'Go Premium',
+  'subscription_paywall_subtitle':
+      'Unlock unlimited downloads, torrent support, and more',
+  'subscription_unlock_feature': 'Unlock This Feature',
+  'subscription_terms':
+      'Subscription automatically renews unless cancelled at least 24 hours before the end of the current period.',
+  'subscription_welcome_premium':
+      'Welcome to Premium! Enjoy unlimited downloads.',
+  'maybe_later': 'Maybe Later',
 };

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:dmx/core/services/logging_service.dart';
+import 'package:flutter/widgets.dart' show WidgetsFlutterBinding;
 import 'package:workmanager/workmanager.dart';
 
 import '../../../core/services/database_service.dart';
@@ -11,6 +12,40 @@ import '../models/download_task.dart';
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
+    // FIX(C-5): The dispatcher previously ignored every task name and
+    // returned true, so 'downloadScheduledTask' one-off alarms fired into a
+    // black hole — scheduled downloads never started on Android when the app
+    // was killed. Promote the task to `queued` directly in the DB; the next
+    // provider load / service heartbeat reconciles and pumps it.
+    if (task == 'downloadScheduledTask') {
+      final taskId = inputData?['taskId'] as String?;
+      if (taskId == null || taskId.isEmpty) return true;
+      try {
+        WidgetsFlutterBinding.ensureInitialized();
+        final db = DatabaseService();
+        final t = await db.getTask(taskId);
+        if (t == null) return true;
+        final due = t.scheduledAt == null ||
+            !t.scheduledAt!.toUtc().isAfter(DateTime.now().toUtc());
+        final stillWaiting = t.status == DownloadStatus.paused &&
+            !t.pausedByUser &&
+            t.scheduledAt != null;
+        if (due && stillWaiting && t.wasScheduledAt == null) {
+          await db.saveTask(t.copyWith(
+            status: DownloadStatus.queued,
+            clearScheduledAt: true,
+            wasScheduledAt: t.scheduledAt,
+            clearError: true,
+          ));
+          LoggingService.logger('ScheduleManager')
+              .info('Workmanager promoted scheduled task $taskId');
+        }
+      } catch (e, st) {
+        LoggingService.logger('ScheduleManager').warning(
+            'Workmanager schedule promotion failed for $taskId', e, st);
+      }
+      return true;
+    }
     return Future.value(true);
   });
 }
@@ -85,9 +120,11 @@ class ScheduleManager {
         await Workmanager().initialize(
           callbackDispatcher,
         );
-        LoggingService.logger('ScheduleManager').info('Workmanager initialized for download scheduling');
+        LoggingService.logger('ScheduleManager')
+            .info('Workmanager initialized for download scheduling');
       } catch (e, st) {
-        LoggingService.logger('ScheduleManager').warning('Failed to initialize Workmanager for scheduling', e, st);
+        LoggingService.logger('ScheduleManager')
+            .warning('Failed to initialize Workmanager for scheduling', e, st);
       }
     }
   }
@@ -107,9 +144,11 @@ class ScheduleManager {
           constraints: Constraints(
             networkType: NetworkType.connected,
           ),
+          inputData: {'taskId': taskId},
         );
       } catch (e, st) {
-        LoggingService.logger('ScheduleManager').warning('Failed to schedule Workmanager task for $taskId', e, st);
+        LoggingService.logger('ScheduleManager')
+            .warning('Failed to schedule Workmanager task for $taskId', e, st);
       }
     }
   }
@@ -120,7 +159,8 @@ class ScheduleManager {
       try {
         await Workmanager().cancelByUniqueName('download_sched_$taskId');
       } catch (e, st) {
-        LoggingService.logger('ScheduleManager').warning('Failed to cancel Workmanager task for $taskId', e, st);
+        LoggingService.logger('ScheduleManager')
+            .warning('Failed to cancel Workmanager task for $taskId', e, st);
       }
     }
   }
@@ -163,8 +203,11 @@ class ScheduleManager {
 
   void start() {
     _schedulingTimer?.cancel();
-    if (Platform.isAndroid || isAndroidForTesting) return;
-    // Use dynamic tick scheduling for efficiency (SCHED-FIX-3)
+    // FIX(C-5): Always run the in-app dynamic tick. Previously this returned
+    // early on Android "relying" on OS alarms — but the Workmanager
+    // dispatcher ignored them entirely, so scheduled downloads only ever got
+    // a single evaluation at provider load. The in-app tick covers the
+    // foreground / foreground-service cases; the dispatcher covers killed-app.
     scheduleNextDynamicTick();
   }
 

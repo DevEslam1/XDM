@@ -87,6 +87,12 @@ class _SystemMonitorsCardState extends State<SystemMonitorsCard>
     super.dispose();
   }
 
+  String _formatBytes(int bytes) {
+    final mb = bytes / (1024 * 1024);
+    if (mb >= 1024) return '${(mb / 1024).toStringAsFixed(2)} GB';
+    return '${mb.toStringAsFixed(0)} MB';
+  }
+
   Color _getThermalColor(ThermalStatus status) {
     return switch (status) {
       ThermalStatus.none => Colors.greenAccent,
@@ -129,6 +135,11 @@ class _SystemMonitorsCardState extends State<SystemMonitorsCard>
     final jankPct = (perf.jankRatio * 100).toStringAsFixed(1);
     final avgBuildMs = perf.averageBuildMillis?.toStringAsFixed(1) ?? '0.0';
     final avgRasterMs = perf.averageRasterMillis?.toStringAsFixed(1) ?? '0.0';
+    // Plan 07 §7.5: real process memory. Hidden when the platform can't report
+    // it (never fabricated). CPU% is intentionally omitted — Dart has no
+    // portable API for it, so we don't show a fake number.
+    final rssBytes = perf.currentRssBytes;
+    final peakRssBytes = perf.maxRssBytes;
 
     final cardBg = widget.isDark
         ? AppTheme.cardBg.withAlpha(220)
@@ -290,6 +301,19 @@ class _SystemMonitorsCardState extends State<SystemMonitorsCard>
                         ? (isRtl ? 'الشاشة مغلقة' : 'Screen Off')
                         : (isRtl ? 'الشاشة تعمل' : 'Screen On'),
                   ),
+
+                  // Process Memory (RSS) — only when the platform reports it
+                  if (rssBytes != null)
+                    _buildMonitorPill(
+                      width: width,
+                      icon: Icons.memory,
+                      iconColor: widget.accentColor,
+                      label: isRtl ? 'ذاكرة العملية' : 'Process RAM',
+                      value: _formatBytes(rssBytes),
+                      subValue: peakRssBytes != null
+                          ? '${isRtl ? 'ذروة' : 'Peak'} ${_formatBytes(peakRssBytes)}'
+                          : (isRtl ? 'مقيم' : 'Resident'),
+                    ),
                 ],
               );
             },

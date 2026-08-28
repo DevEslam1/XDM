@@ -38,12 +38,13 @@ class TickManager {
   static final _log = Logger('TickManager');
   static final TickManager instance = TickManager._();
   TickManager._() {
-    PowerMonitor.screenStateStream.listen((screenOn) {
+    _screenSub = PowerMonitor.screenStateStream.listen((screenOn) {
       _onPowerStateChanged();
     });
     DownloadEngine.appInForegroundNotifier.addListener(_onPowerStateChanged);
   }
 
+  StreamSubscription<bool>? _screenSub;
   final Map<String, _TickSubscriber> _subscribers = {};
   Timer? _heartbeatTimer;
 
@@ -57,9 +58,8 @@ class TickManager {
     }
     _heartbeatTimer?.cancel();
     final isBg = DownloadEngine.isInBackground || PowerMonitor.screenOff;
-    final resolution = isBg
-        ? const Duration(seconds: 5)
-        : const Duration(seconds: 1);
+    final resolution =
+        isBg ? const Duration(seconds: 5) : const Duration(seconds: 1);
     _heartbeatTimer = Timer.periodic(resolution, _onHeartbeat);
   }
 
@@ -145,6 +145,9 @@ class TickManager {
   void dispose() {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = null;
+    _screenSub?.cancel();
+    _screenSub = null;
+    DownloadEngine.appInForegroundNotifier.removeListener(_onPowerStateChanged);
     _subscribers.clear();
   }
 }

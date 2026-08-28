@@ -56,13 +56,15 @@ class BoundedLruCache<K, V> {
   void operator []=(K key, V value) => put(key, value);
 
   bool containsKey(K key) {
-    if (!_map.containsKey(key)) return false;
     final entry = _map[key];
     if (entry == null) return false;
     if (ttl != null && DateTime.now().difference(entry.createdAt) > ttl!) {
       _map.remove(key);
       return false;
     }
+    // Update access time for LRU ordering
+    _map.remove(key);
+    _map[key] = _CacheEntry(entry.value, DateTime.now());
     return true;
   }
 

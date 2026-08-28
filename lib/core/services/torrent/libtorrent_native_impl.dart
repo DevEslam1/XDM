@@ -86,9 +86,11 @@ class LibtorrentNativeImpl implements ITorrentNative {
 
   NativeTorrentStatus _mapStatus(lt.TorrentInfo info) {
     // Estimate pieces based on totalWanted and progress.
-    final int estimatedNumPieces = max(1, info.totalWanted ~/ _estimatedPieceSize);
-    final int estimatedPiecesDone = (estimatedNumPieces * info.progress).floor();
-    
+    final int estimatedNumPieces =
+        max(1, info.totalWanted ~/ _estimatedPieceSize);
+    final int estimatedPiecesDone =
+        (estimatedNumPieces * info.progress).floor();
+
     // Generate a synthetic boolean bitfield for UI compatibility
     final pieces = List<bool>.generate(
       estimatedNumPieces,
@@ -168,7 +170,8 @@ class LibtorrentNativeImpl implements ITorrentNative {
           ));
         }
 
-        if (newInfo.errorMsg.isNotEmpty && newInfo.errorMsg != oldInfo.errorMsg) {
+        if (newInfo.errorMsg.isNotEmpty &&
+            newInfo.errorMsg != oldInfo.errorMsg) {
           _alertStreamCtrl.add(NativeAlertEvent(
             type: TorrentAlertType.torrentError,
             alertCode: 64,
@@ -428,6 +431,16 @@ class LibtorrentNativeImpl implements ITorrentNative {
       peersListenPort: config.peersListenPort,
       responsiveMode: config.responsiveMode,
     ));
+    // FIX P0-6: Attempt to inject DHT bootstrap nodes if native supports it.
+    // On 1.9.2 this is a no-op (bridge stub), so we also enrich magnet URIs
+    // with default trackers as fallback (see TorrentService._enrichMagnet).
+    if (!config.disableDht && config.dhtBootstrapNodes.isNotEmpty) {
+      DiagnosticService.instance.record(
+        'diagnostic',
+        'dht_bootstrap_configured',
+        details: 'nodes=${config.dhtBootstrapNodes.length} (stub may ignore)',
+      );
+    }
   }
 
   @override

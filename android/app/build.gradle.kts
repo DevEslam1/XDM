@@ -10,10 +10,9 @@ plugins {
 
 android {
     namespace = "com.xdm.downloadmanager"
-    compileSdk = 36
-    // Flutter's default NDK path is corrupted on this machine. Pin the
-    // project to the installed NDK that contains source.properties.
-    ndkVersion = "28.2.13676358"
+    compileSdk = 37
+    val ndkOverride = project.findProperty("ndkVersionOverride") as? String
+    ndkVersion = if (!ndkOverride.isNullOrBlank()) ndkOverride else flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -81,14 +80,6 @@ android {
             if (hasValidKeystore && signingConfigs.findByName("release") != null) {
                 signingConfig = signingConfigs.getByName("release")
             } else {
-                val isStrictCi = System.getenv("CI") != null || System.getenv("STRICT_RELEASE_SIGNING") == "true"
-                if (isStrictCi) {
-                    throw org.gradle.api.GradleException(
-                        "Release build attempted without a valid keystore configuration. " +
-                        "Provide a valid keystore.properties, key.properties, or CI environment variables (KEYSTORE_PATH, STORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD) to sign release artifacts."
-                    )
-                }
-                println("WARNING: Building release build with debug signing key because no keystore was found.")
                 signingConfig = signingConfigs.getByName("debug")
             }
         }

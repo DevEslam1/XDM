@@ -344,8 +344,9 @@ void main() {
       });
     });
 
-    group('platform scheduling (BG-09)', () {
-      test('no Timer.periodic created when running on Android', () {
+    group('platform scheduling (BG-09 / C-5)', () {
+      test('dynamic in-app tick created on Android and cancelled on dispose',
+          () {
         ScheduleManager.isAndroidForTesting = true;
         try {
           final androidManager = ScheduleManager(
@@ -358,7 +359,7 @@ void main() {
             pumpQueue: () => pumpQueueCalls++,
           );
           androidManager.start();
-          expect(androidManager.schedulingTimer, isNull);
+          expect(androidManager.schedulingTimer, isNotNull);
           androidManager.dispose();
         } finally {
           ScheduleManager.isAndroidForTesting = false;

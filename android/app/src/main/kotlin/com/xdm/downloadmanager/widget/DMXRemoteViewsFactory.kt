@@ -19,12 +19,7 @@ object DMXRemoteViewsFactory {
     const val SIZE_LIST = "list"
     const val SIZE_DASHBOARD = "dashboard"
 
-    private val requestCodeMap = ConcurrentHashMap<String, Int>()
-    private val nextRequestCode = AtomicInteger(1000)
-
-    private fun getOrCreateRequestCode(key: String): Int {
-        return requestCodeMap.computeIfAbsent(key) { nextRequestCode.getAndIncrement() }
-    }
+    fun requestCodeFor(key: String): Int = key.hashCode() and 0x7FFFFFFF
 
     // ── Enhanced palette ──
     const val COLOR_BG = 0xFF0F1117.toInt()
@@ -38,12 +33,7 @@ object DMXRemoteViewsFactory {
     const val COLOR_TEXT_SECONDARY = 0xFF9AA3B5.toInt()
     const val COLOR_TEXT_MUTED = 0xFF5F6B82.toInt()
 
-    fun sizeClassFromWidth(minWidthDp: Int): String = when {
-        minWidthDp < 250 -> SIZE_MINI
-        minWidthDp < 400 -> SIZE_WIDE
-        minWidthDp < 550 -> SIZE_LIST
-        else -> SIZE_DASHBOARD
-    }
+    fun sizeClassFromWidth(minWidthDp: Int): String = WidgetFormatters.sizeClassFromWidth(minWidthDp)
 
     fun build(context: Context, widgetId: Int, dashboard: WidgetDashboard?): RemoteViews {
         val size = WidgetDataRepository.sizeClass(context, widgetId)
@@ -158,6 +148,57 @@ object DMXRemoteViewsFactory {
         tasks: List<WidgetTaskSummary>,
         selectedTab: String,
     ) {
+        if (tasks.isEmpty()) {
+            views.setViewVisibility(R.id.widget_dash_clear, View.VISIBLE)
+            val emptyText = if (selectedTab == WidgetDataRepository.TAB_COMPLETED) {
+                "No completed downloads yet"
+            } else {
+                "All clear — nothing downloading"
+            }
+            views.setTextViewText(R.id.widget_dash_clear, emptyText)
+            views.setViewVisibility(R.id.widget_dash_rows, View.GONE)
+            views.setViewVisibility(R.id.widget_dash_actions, View.VISIBLE)
+            bindTabsHeader(context, widgetId, views, dashboard, selectedTab, SIZE_DASHBOARD)
+            when {
+                dashboard.isStorageCritical -> {
+                    views.setViewVisibility(R.id.widget_dash_storage, View.VISIBLE)
+                    views.setTextViewText(
+                        R.id.widget_dash_storage,
+                        "⚠ CRITICAL: ${formatBytes(dashboard.availableStorageBytes)} free",
+                    )
+                    views.setInt(R.id.widget_dash_storage, "setBackgroundColor", COLOR_NEON_RED)
+                }
+                dashboard.isStorageLow -> {
+                    views.setViewVisibility(R.id.widget_dash_storage, View.VISIBLE)
+                    views.setTextViewText(
+                        R.id.widget_dash_storage,
+                        "⚠ Low storage: ${formatBytes(dashboard.availableStorageBytes)} free",
+                    )
+                    views.setInt(R.id.widget_dash_storage, "setBackgroundColor", COLOR_NEON_AMBER)
+                }
+                else -> views.setViewVisibility(R.id.widget_dash_storage, View.GONE)
+            }
+            if (dashboard.hasFailures && selectedTab == WidgetDataRepository.TAB_DOWNLOADING) {
+                views.setViewVisibility(R.id.widget_dash_failures, View.VISIBLE)
+                views.setTextViewText(
+                    R.id.widget_dash_failures,
+                    "${dashboard.failedCount} download${if (dashboard.failedCount == 1) "" else "s"} failed",
+                )
+                views.setInt(R.id.widget_dash_failures, "setBackgroundColor", COLOR_NEON_RED)
+            } else {
+                views.setViewVisibility(R.id.widget_dash_failures, View.GONE)
+            }
+            views.setOnClickPendingIntent(
+                R.id.widget_dash_pause,
+                broadcastIntent(context, WidgetActionReceiver.ACTION_PAUSE_ALL)
+            )
+            views.setOnClickPendingIntent(
+                R.id.widget_dash_resume,
+                broadcastIntent(context, WidgetActionReceiver.ACTION_RESUME_ALL)
+            )
+            return
+        }
+
         views.setViewVisibility(R.id.widget_dash_clear, View.GONE)
         views.setViewVisibility(R.id.widget_dash_rows, View.VISIBLE)
         views.setViewVisibility(R.id.widget_dash_actions, View.VISIBLE)
@@ -273,27 +314,8 @@ object DMXRemoteViewsFactory {
     // ─────────────────────────────────────────────────────────────────────
 
     /// Smart ETA formatting based on remaining time
-    private fun formatSmartEta(task: WidgetTaskSummary): String {
-        if (task.status != "downloading" || task.speedBytesPerSec <= 0) return "--"
-        val remaining = task.fileSizeBytes - task.downloadedBytes
-        if (remaining <= 0) return "Almost done"
-        val etaSeconds = (remaining / task.speedBytesPerSec).toInt()
-        return when {
-            etaSeconds < 10 -> "Almost done"
-            etaSeconds < 60 -> "${etaSeconds}s left"
-            etaSeconds < 300 -> "~${etaSeconds / 60}m left"
-            etaSeconds < 3600 -> {
-                val m = etaSeconds / 60
-                val s = etaSeconds % 60
-                "~${m}m ${s}s"
-            }
-            else -> {
-                val h = etaSeconds / 3600
-                val m = (etaSeconds % 3600) / 60
-                if (m == 0) "~${h}h" else "~${h}h ${m}m"
-            }
-        }
-    }
+    private fun formatSmartEta(task: WidgetTaskSummary): String =
+        WidgetFormatters.formatSmartEta(task.status, task.speedBytesPerSec, task.fileSizeBytes, task.downloadedBytes)
 
     private fun bindTabsHeader(
         context: Context,
@@ -457,31 +479,9 @@ object DMXRemoteViewsFactory {
         )
     }
 
-    fun formatSpeed(bytesPerSec: Long): String {
-        if (bytesPerSec <= 0) return "0 B/s"
-        val units = arrayOf("B/s", "KB/s", "MB/s", "GB/s")
-        var value = bytesPerSec.toDouble()
-        var unit = 0
-        while (value >= 1024 && unit < units.size - 1) {
-            value /= 1024
-            unit++
-        }
-        return if (unit == 0) "${value.toInt()} ${units[unit]}"
-        else String.format(Locale.US, "%.1f %s", value, units[unit])
-    }
+    fun formatSpeed(bytesPerSec: Long): String = WidgetFormatters.formatSpeed(bytesPerSec)
 
-    fun formatBytes(bytes: Long): String {
-        if (bytes <= 0) return "0 B"
-        val units = arrayOf("B", "KB", "MB", "GB", "TB")
-        var value = bytes.toDouble()
-        var unit = 0
-        while (value >= 1024 && unit < units.size - 1) {
-            value /= 1024
-            unit++
-        }
-        return if (unit == 0) "${value.toInt()} ${units[unit]}"
-        else String.format(Locale.US, "%.1f %s", value, units[unit])
-    }
+    fun formatBytes(bytes: Long): String = WidgetFormatters.formatBytes(bytes)
 
     // ── Row ID helpers (dashboard) ──
     private fun dashRowVisibleId(index: Int) = when (index) {
@@ -561,7 +561,7 @@ object DMXRemoteViewsFactory {
             data = Uri.parse(uri)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
-        val reqCode = getOrCreateRequestCode("act_$uri")
+        val reqCode = requestCodeFor("act_$uri")
         return PendingIntent.getActivity(
             context,
             reqCode,
@@ -572,7 +572,7 @@ object DMXRemoteViewsFactory {
 
     private fun broadcastIntent(context: Context, action: String): PendingIntent {
         val intent = Intent(context, WidgetActionReceiver::class.java).setAction(action)
-        val reqCode = getOrCreateRequestCode("bcast_$action")
+        val reqCode = requestCodeFor("bcast_$action")
         return PendingIntent.getBroadcast(
             context,
             reqCode,
@@ -587,7 +587,7 @@ object DMXRemoteViewsFactory {
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
             putExtra(WidgetActionReceiver.EXTRA_TAB, tab)
         }
-        val reqCode = getOrCreateRequestCode("tab_${widgetId}_$tab")
+        val reqCode = requestCodeFor("tab_${widgetId}_$tab")
         return PendingIntent.getBroadcast(
             context,
             reqCode,
@@ -601,7 +601,7 @@ object DMXRemoteViewsFactory {
             this.action = action
             putExtra(WidgetActionReceiver.EXTRA_TASK_ID, taskId)
         }
-        val reqCode = getOrCreateRequestCode("action_${action}_$taskId")
+        val reqCode = requestCodeFor("action_${action}_$taskId")
         return PendingIntent.getBroadcast(
             context,
             reqCode,
@@ -660,6 +660,22 @@ object DMXRemoteViewsFactory {
         tasks: List<WidgetTaskSummary>,
         selectedTab: String,
     ) {
+        if (tasks.isEmpty()) {
+            views.setViewVisibility(R.id.widget_list_clear, View.VISIBLE)
+            val emptyText = if (selectedTab == WidgetDataRepository.TAB_COMPLETED) {
+                "No completed downloads yet"
+            } else {
+                "All clear — nothing downloading"
+            }
+            views.setTextViewText(R.id.widget_list_clear, emptyText)
+            views.setViewVisibility(R.id.widget_list_rows, View.GONE)
+            views.setViewVisibility(R.id.widget_list_footer, View.VISIBLE)
+            bindTabsHeader(context, widgetId, views, dashboard, selectedTab, SIZE_LIST)
+            val footer = buildFooter(dashboard, selectedTab, 0)
+            views.setTextViewText(R.id.widget_list_footer, footer)
+            return
+        }
+
         views.setViewVisibility(R.id.widget_list_clear, View.GONE)
         views.setViewVisibility(R.id.widget_list_rows, View.VISIBLE)
         views.setViewVisibility(R.id.widget_list_footer, View.VISIBLE)

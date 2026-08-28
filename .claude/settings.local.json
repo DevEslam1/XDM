@@ -36,7 +36,30 @@
       "Bash(echo \"EXIT=$?\")",
       "Read(//tmp/**)",
       "Bash(grep -nE \"^\\\\s{0,4}\\(Future<[^>]*>|void|bool|String|int|double\\)\\\\s+_?[a-zA-Z]+\\\\\\(|^\\\\s{0,4}Future<void>\\\\s\" lib/features/downloads/provider/download_orchestrator.dart)",
-      "Bash(timeout 300 flutter test test/core/services/state_store_test.dart)"
+      "Bash(timeout 300 flutter test test/core/services/state_store_test.dart)",
+      "Bash(flutter --version)",
+      "Bash(dart --version)",
+      "Bash(dart analyze *)",
+      "Bash(grep -oE \"test[\\\\\\\\/][^ ]+\\\\.dart:[0-9]+:[0-9]+\")",
+      "Bash(dart run *)",
+      "Bash(rm -f tool/lock_probe.dart)",
+      "Bash(rmdir tool *)",
+      "Bash(git stash *)",
+      "Bash(sed -n '3540,3600p' lib/features/downloads/widgets/download_card.dart)",
+      "Bash(sed -n '85,125p' lib/features/details/widgets/torrent_stats_dashboard.dart)",
+      "Bash(sed -n '75,160p' lib/features/details/widgets/tracker_panel.dart)",
+      "Bash(sed -n '2580,2610p' lib/features/details/screens/details_screen.dart)",
+      "Bash(sed -n '200,240p' lib/features/details/widgets/torrent_advanced_settings_sheet.dart)",
+      "Bash(sed -n '300,360p' lib/features/details/widgets/torrent_advanced_settings_sheet.dart)",
+      "Bash(sed -n '110,135p' lib/features/settings/screens/torrent_settings_page.dart)",
+      "Bash(sed -n '355,395p' lib/features/settings/screens/torrent_settings_page.dart)",
+      "Bash(sed -n '140,175p' lib/features/torrent_create/screens/create_torrent_screen.dart)",
+      "Bash(sed -n '490,505p' lib/features/settings/provider/settings_provider.dart)",
+      "Bash(sed -n '118,132p' lib/core/services/download_isolate_pool.dart)",
+      "Bash(sed -n '205,218p' lib/features/downloads/domain/orchestrators/http_download_orchestrator.dart)",
+      "Bash(sed -n '1578,1600p' lib/core/services/torrent_service_ffi.dart)",
+      "Bash(awk '/class BtConfig/,/^}/' lib/src/models.dart)",
+      "Bash(dart format *)"
     ]
   }
 }

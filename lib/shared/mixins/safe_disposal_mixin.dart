@@ -39,28 +39,48 @@ mixin SafeDisposalMixin<T extends StatefulWidget> on State<T> {
     for (final sub in _safeSubscriptions) {
       try {
         sub.cancel();
-      } catch (_) {}
+      } catch (e) {
+        assert(() {
+          debugPrint('[SafeDisposalMixin] subscription cancel failed: $e');
+          return true;
+        }());
+      }
     }
     _safeSubscriptions.clear();
 
     for (final timer in _safeTimers) {
       try {
         timer.cancel();
-      } catch (_) {}
+      } catch (e) {
+        assert(() {
+          debugPrint('[SafeDisposalMixin] timer cancel failed: $e');
+          return true;
+        }());
+      }
     }
     _safeTimers.clear();
 
     for (final controller in _safeControllers) {
       try {
         controller.dispose();
-      } catch (_) {}
+      } catch (e) {
+        assert(() {
+          debugPrint('[SafeDisposalMixin] controller dispose failed: $e');
+          return true;
+        }());
+      }
     }
     _safeControllers.clear();
 
     for (final notifier in _safeNotifiers) {
       try {
         notifier.dispose();
-      } catch (_) {}
+      } catch (e) {
+        assert(() {
+          debugPrint('[SafeDisposalMixin] notifier dispose failed: $e');
+          return true;
+        }());
+      }
     }
     _safeNotifiers.clear();
 

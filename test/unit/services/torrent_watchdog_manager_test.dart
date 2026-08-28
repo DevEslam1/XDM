@@ -43,7 +43,8 @@ void main() {
       expect(watchdog.isActive, isFalse);
     });
 
-    test('watchdog test proves no auto-resume of user-paused torrents', () async {
+    test('watchdog test proves no auto-resume of user-paused torrents',
+        () async {
       final fakeService = _FakeTorrentService()..isAlive = false;
       var stallCount = 0;
       var alivenessLostCount = 0;
@@ -68,4 +69,3 @@ void main() {
     });
   });
 }
-

@@ -78,7 +78,7 @@ class SectionHeader extends StatelessWidget {
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 0.4,
-                        fontFamily: 'Space Grotesk',
+                        fontFamily: AppTheme.fontDisplay,
                       ),
                     ),
                     if (subtitle != null) ...[

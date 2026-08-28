@@ -4,7 +4,8 @@ abstract class TaskEnginePort {
   Future<void> startEngineTask(String taskId, {bool ignoreQueueLimit = false});
 
   /// Pauses active download execution for [taskId].
-  Future<void> pauseEngineTask(String taskId, {String? reason, bool userInitiated = true});
+  Future<void> pauseEngineTask(String taskId,
+      {String? reason, bool userInitiated = true});
 
   /// Cancels active download execution for [taskId].
   Future<void> cancelEngineTask(String taskId, {bool deleteFiles = false});
@@ -19,7 +20,8 @@ abstract class TaskEnginePort {
   Future<void> pumpQueue();
 
   /// Handles network state changes across active engine tasks.
-  Future<void> handleNetworkChanged({required bool isConnected, required bool isWifi});
+  Future<void> handleNetworkChanged(
+      {required bool isConnected, required bool isWifi});
 
   /// Handles app lifecycle state changes.
   Future<void> handleAppLifecycleChanged(dynamic state);

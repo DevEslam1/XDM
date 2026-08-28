@@ -18,6 +18,7 @@ abstract final class DownloadStatusMessages {
   static const merging = 'Merging video and audio...';
   static const waitingWifi = 'Waiting for WiFi connection';
   static const waitingNetwork = 'Waiting for network connection...';
+  static const waitingCharging = 'Waiting for charger connection';
   static const pausedOrphaned =
       'Paused because XDM was closed during a foreground download.';
   static const ffmpegMergeFailed = 'FFmpeg merge failed: ';
@@ -251,6 +252,10 @@ class DownloadTask {
   final bool isCancelled;
   final String? youtubeQualityPreset;
   final String? notes;
+  // HTTP auth + custom headers per download (Plan 06 Task 6.2).
+  final String? authUsername;
+  final String? authPassword;
+  final Map<String, String>? customHeaders;
   final bool isAppUpdate;
   final int priority; // 0 = normal, 1 = high, 2 = urgent
   final int queueOrder; // FIX(13): Lower values = higher priority
@@ -325,6 +330,9 @@ class DownloadTask {
     this.isCancelled = false,
     this.youtubeQualityPreset,
     this.notes,
+    this.authUsername,
+    this.authPassword,
+    this.customHeaders,
     this.isAppUpdate = false,
     this.priority = 0,
     this.queueOrder = 0, // FIX(13)
@@ -455,6 +463,10 @@ class DownloadTask {
   bool get waitingNetwork =>
       errorMessage == DownloadStatusMessages.waitingNetwork ||
       statusMessage == DownloadStatusMessages.waitingNetwork;
+
+  bool get waitingCharging =>
+      errorMessage == DownloadStatusMessages.waitingCharging ||
+      statusMessage == DownloadStatusMessages.waitingCharging;
 
   bool get hasTorrentFiles => torrentFiles != null && torrentFiles!.isNotEmpty;
 
@@ -598,13 +610,17 @@ class DownloadTask {
   double get progress {
     if (status == DownloadStatus.completed) return 1.0;
     if (isTorrent) return torrentOverallPercent;
-    if (hasUnknownSize) return -1.0;
+    if (hasUnknownSize) return 0.0;
     final total = combinedTotalSize;
-    if (total <= 0) return -1.0;
+    if (total <= 0) return 0.0;
     final ratio = displayDownloadedBytes / total;
-    if (ratio.isNaN || ratio.isInfinite) return -1.0;
+    if (ratio.isNaN || ratio.isInfinite) return 0.0;
     return ratio.clamp(0.0, 1.0);
   }
+
+  bool get isIndeterminate =>
+      (hasUnknownSize || combinedTotalSize <= 0) &&
+      status == DownloadStatus.downloading;
 
   /// Transient unified progress for YouTube audio/video pair downloads.
   double? get ytCombinedProgress {
@@ -771,7 +787,8 @@ class DownloadTask {
   }) {
     DownloadStatus targetStatus = newStatus;
     if (status != newStatus) {
-      final isValid = DownloadStateMachine.canTransitionStatus(status, newStatus);
+      final isValid =
+          DownloadStateMachine.canTransitionStatus(status, newStatus);
       if (!isValid) {
         debugPrint(
           '[DownloadTask] Illegal state transition rejected for task $id: $status -> $newStatus (reason: $reason)',
@@ -831,9 +848,11 @@ class DownloadTask {
     bool clearWasScheduledAt = false,
     bool? supportsResume,
     int? speedLimitKbps,
+    bool clearSpeedLimit = false,
     bool? seedingEnabled,
     bool? seedingLimited,
     int? seedingLimitKbps,
+    bool clearSeedingLimit = false,
     int? uploadedBytes,
     List<Map<String, dynamic>>? torrentFiles,
     bool clearTorrentFiles = false,
@@ -851,6 +870,9 @@ class DownloadTask {
     String? youtubeQualityPreset,
     bool clearYoutubeQualityPreset = false,
     String? notes,
+    String? authUsername,
+    String? authPassword,
+    Map<String, String>? customHeaders,
     bool? isAppUpdate,
     int? priority,
     int? queueOrder,
@@ -939,10 +961,12 @@ class DownloadTask {
       wasScheduledAt:
           clearWasScheduledAt ? null : (wasScheduledAt ?? this.wasScheduledAt),
       supportsResume: supportsResume ?? this.supportsResume,
-      speedLimitKbps: speedLimitKbps ?? this.speedLimitKbps,
+      speedLimitKbps:
+          clearSpeedLimit ? 0 : (speedLimitKbps ?? this.speedLimitKbps),
       seedingEnabled: seedingEnabled ?? this.seedingEnabled,
       seedingLimited: seedingLimited ?? this.seedingLimited,
-      seedingLimitKbps: seedingLimitKbps ?? this.seedingLimitKbps,
+      seedingLimitKbps:
+          clearSeedingLimit ? 0 : (seedingLimitKbps ?? this.seedingLimitKbps),
       uploadedBytes: uploadedBytes ?? this.uploadedBytes,
       torrentFiles: clearTorrentFiles
           ? null
@@ -976,6 +1000,9 @@ class DownloadTask {
           ? null
           : (youtubeQualityPreset ?? this.youtubeQualityPreset),
       notes: notes ?? this.notes,
+      authUsername: authUsername ?? this.authUsername,
+      authPassword: authPassword ?? this.authPassword,
+      customHeaders: customHeaders ?? this.customHeaders,
       isAppUpdate: isAppUpdate ?? this.isAppUpdate,
       priority: priority ?? this.priority,
       queueOrder: queueOrder ?? this.queueOrder,
@@ -1060,6 +1087,9 @@ class DownloadTask {
       'isCancelled': isCancelled,
       'youtubeQualityPreset': youtubeQualityPreset,
       'notes': notes,
+      'authUsername': authUsername,
+      'authPassword': authPassword,
+      'customHeaders': customHeaders,
       'isAppUpdate': isAppUpdate,
       'priority': priority,
       'queueOrder': queueOrder,
@@ -1126,8 +1156,11 @@ class DownloadTask {
 
     final threadCount =
         (map['threadCount'] as num?)?.toInt() ?? rawChunks.length;
-    final downloadedBytes = (map['downloadedBytes'] as num?)?.toInt() ?? 0;
+    final rawDownloadedBytes = (map['downloadedBytes'] as num?)?.toInt() ?? 0;
     final fileSize = (map['fileSize'] as num?)?.toInt() ?? 0;
+    final downloadedBytes = (fileSize > 0 && rawDownloadedBytes > fileSize)
+        ? fileSize
+        : (rawDownloadedBytes < 0 ? 0 : rawDownloadedBytes);
 
     List<double> chunks;
     if (rawChunks.length == threadCount) {
@@ -1248,6 +1281,10 @@ class DownloadTask {
       isCancelled: map['isCancelled'] as bool? ?? false,
       youtubeQualityPreset: map['youtubeQualityPreset'] as String?,
       notes: map['notes'] as String?,
+      authUsername: map['authUsername'] as String?,
+      authPassword: map['authPassword'] as String?,
+      customHeaders: (map['customHeaders'] as Map?)
+          ?.map((k, v) => MapEntry(k.toString(), v.toString())),
       isAppUpdate: map['isAppUpdate'] as bool? ?? false,
       priority: (map['priority'] as num?)?.toInt() ?? 0,
       queueOrder: (map['queueOrder'] as num?)?.toInt() ?? 0,
@@ -1323,7 +1360,8 @@ class DownloadTask {
           other.status == status &&
           other.downloadedBytes == downloadedBytes &&
           other.fileSize == fileSize &&
-          other.speed == speed &&
+          (identical(other.speed, speed) ||
+              (other.speed - speed).abs() < 0.5) &&
           other.eta == eta &&
           other.updatedAt == updatedAt &&
           other.errorMessage == errorMessage &&
@@ -1355,7 +1393,7 @@ class DownloadTask {
         status,
         downloadedBytes,
         fileSize,
-        speed,
+        (speed * 2).round(),
         eta,
         updatedAt,
         errorMessage,
@@ -1414,6 +1452,9 @@ class DownloadTaskBuilder {
   bool isCancelled;
   String? youtubeQualityPreset;
   String? notes;
+  String? authUsername;
+  String? authPassword;
+  Map<String, String>? customHeaders;
   bool isAppUpdate;
   int priority;
   int queueOrder;
@@ -1485,6 +1526,11 @@ class DownloadTaskBuilder {
         isCancelled = task.isCancelled,
         youtubeQualityPreset = task.youtubeQualityPreset,
         notes = task.notes,
+        authUsername = task.authUsername,
+        authPassword = task.authPassword,
+        customHeaders = task.customHeaders != null
+            ? Map<String, String>.from(task.customHeaders!)
+            : null,
         isAppUpdate = task.isAppUpdate,
         priority = task.priority,
         queueOrder = task.queueOrder,
@@ -1555,6 +1601,9 @@ class DownloadTaskBuilder {
       isCancelled: isCancelled,
       youtubeQualityPreset: youtubeQualityPreset,
       notes: notes,
+      authUsername: authUsername,
+      authPassword: authPassword,
+      customHeaders: customHeaders,
       isAppUpdate: isAppUpdate,
       priority: priority,
       queueOrder: queueOrder,

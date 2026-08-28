@@ -17,7 +17,9 @@ void main() {
     }
   });
 
-  test('Unified WAL: snapshot-only rebuild loads valid transfer state without journal', () async {
+  test(
+      'Unified WAL: snapshot-only rebuild loads valid transfer state without journal',
+      () async {
     final tempFilePath = '${tempDir.path}/test_file.bin';
     await File(tempFilePath).writeAsBytes(List.filled(1000, 0));
 
@@ -47,7 +49,9 @@ void main() {
     expect(loadResult.state.chunks[1].downloaded, equals(100));
   });
 
-  test('Unified WAL: journal-only rebuild reconstructs state from journal when snapshot is missing', () async {
+  test(
+      'Unified WAL: journal-only rebuild reconstructs state from journal when snapshot is missing',
+      () async {
     final tempFilePath = '${tempDir.path}/journal_only.bin';
     await File(tempFilePath).writeAsBytes(List.filled(2000, 0));
 
@@ -73,13 +77,15 @@ void main() {
     expect(loadResult.state.chunks[1].downloaded, equals(350));
   });
 
-  test('Unified WAL: both-corrupt produces clean restart (0 progress)', () async {
+  test('Unified WAL: both-corrupt produces clean restart (0 progress)',
+      () async {
     final tempFilePath = '${tempDir.path}/both_corrupt.bin';
     final stateFile = File(StateStore.pathFor(tempFilePath));
     final journalFile = File('$tempFilePath.journal');
 
     await stateFile.writeAsString('{not valid json!!!');
-    await journalFile.writeAsString('{not valid json either!!!\n{invalid crc\n');
+    await journalFile
+        .writeAsString('{not valid json either!!!\n{invalid crc\n');
 
     final loadResult = await StateStore.loadOrCreate(
       tempFilePath,
@@ -93,7 +99,9 @@ void main() {
     expect(loadResult.state.downloadedBytes, equals(0));
   });
 
-  test('Unified WAL: journal with newer events than snapshot updates chunk progress', () async {
+  test(
+      'Unified WAL: journal with newer events than snapshot updates chunk progress',
+      () async {
     final tempFilePath = '${tempDir.path}/newer_journal.bin';
     await File(tempFilePath).writeAsBytes(List.filled(4000, 0));
 
@@ -128,7 +136,9 @@ void main() {
     expect(loadResult.state.chunks[1].downloaded, equals(850));
   });
 
-  test('Unified WAL: resetTransferState atomically wipes snapshot, journal, and state (J1)', () async {
+  test(
+      'Unified WAL: resetTransferState atomically wipes snapshot, journal, and state (J1)',
+      () async {
     final tempFilePath = '${tempDir.path}/reset_test.bin';
     final stateFile = File(StateStore.pathFor(tempFilePath));
     final journalFile = File('$tempFilePath.journal');

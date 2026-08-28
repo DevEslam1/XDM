@@ -19,7 +19,9 @@ void main() {
     }
   });
 
-  test('Integrity Pipeline: verifies chunk SHA-256 on disk against WAL recorded hashes', () async {
+  test(
+      'Integrity Pipeline: verifies chunk SHA-256 on disk against WAL recorded hashes',
+      () async {
     final tempFilePath = '${tempDir.path}/integrity_file.bin';
     final payloadFile = File(tempFilePath);
 
@@ -71,7 +73,9 @@ void main() {
     }
   });
 
-  test('Integrity Pipeline: corrupted chunk on disk is detected and only that chunk is reset', () async {
+  test(
+      'Integrity Pipeline: corrupted chunk on disk is detected and only that chunk is reset',
+      () async {
     final tempFilePath = '${tempDir.path}/corrupt_detect_file.bin';
     final payloadFile = File(tempFilePath);
 

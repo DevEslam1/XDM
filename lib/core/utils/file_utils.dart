@@ -362,18 +362,63 @@ String sanitizeFileName(String fileName) {
       name.replaceAll('_', '').trim().isEmpty) {
     return 'download_${DateTime.now().millisecondsSinceEpoch}';
   }
+  final base = p.basenameWithoutExtension(name);
+  const windowsReserved = {
+    'CON',
+    'PRN',
+    'AUX',
+    'NUL',
+    'COM1',
+    'COM2',
+    'COM3',
+    'COM4',
+    'COM5',
+    'COM6',
+    'COM7',
+    'COM8',
+    'COM9',
+    'LPT1',
+    'LPT2',
+    'LPT3',
+    'LPT4',
+    'LPT5',
+    'LPT6',
+    'LPT7',
+    'LPT8',
+    'LPT9',
+  };
+  if (windowsReserved.contains(base.toUpperCase())) {
+    name = '_$name';
+  }
   if (name.length > 255) {
-    final ext = p.extension(name);
-    final base = p.basenameWithoutExtension(name);
-    name = '${base.substring(0, (255 - ext.length).clamp(1, 255))}$ext';
+    final finalExt = p.extension(name);
+    final finalBase = p.basenameWithoutExtension(name);
+    name =
+        '${finalBase.substring(0, (255 - finalExt.length).clamp(1, 255))}$finalExt';
   }
   return name;
 }
 
 /// Validates that [targetPath] resolves safely within [rootDirectory] to prevent directory traversal.
 bool isSafeSubpath(String rootDirectory, String targetPath) {
-  final canonicalRoot = p.canonicalize(rootDirectory);
-  final canonicalTarget = p.canonicalize(targetPath);
-  return p.isWithin(canonicalRoot, canonicalTarget) ||
-      canonicalRoot == canonicalTarget;
+  try {
+    final rootDir = Directory(rootDirectory);
+    final targetDir = Directory(targetPath);
+    final targetFile = File(targetPath);
+    final canonicalRoot = rootDir.existsSync()
+        ? rootDir.resolveSymbolicLinksSync()
+        : p.canonicalize(rootDirectory);
+    final canonicalTarget = targetFile.existsSync()
+        ? targetFile.resolveSymbolicLinksSync()
+        : (targetDir.existsSync()
+            ? targetDir.resolveSymbolicLinksSync()
+            : p.canonicalize(targetPath));
+    return p.isWithin(canonicalRoot, canonicalTarget) ||
+        canonicalRoot == canonicalTarget;
+  } catch (_) {
+    final canonicalRoot = p.canonicalize(rootDirectory);
+    final canonicalTarget = p.canonicalize(targetPath);
+    return p.isWithin(canonicalRoot, canonicalTarget) ||
+        canonicalRoot == canonicalTarget;
+  }
 }

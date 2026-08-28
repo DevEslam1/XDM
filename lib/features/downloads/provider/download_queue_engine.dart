@@ -7,6 +7,9 @@ class DownloadQueueEngine {
 
   DownloadQueueEngine({this.maxConcurrent = 3});
 
+  /// Tracks tasks currently being started (not yet reflected in status).
+  final Set<String> _inflightStarts = {};
+
   /// Returns tasks that are currently waiting in the queued state.
   List<DownloadTask> getQueuedTasks(List<DownloadTask> tasks) {
     return tasks.where((t) => t.status == DownloadStatus.queued).toList();
@@ -39,6 +42,11 @@ class DownloadQueueEngine {
     return tasks;
   }
 
+  /// Marks a task as no longer in-flight (called after onStart completes or fails).
+  void markStartComplete(String taskId) {
+    _inflightStarts.remove(taskId);
+  }
+
   /// Evaluates queued tasks against active slots and invokes [onStart] for admitted tasks.
   void pumpQueue(
     List<DownloadTask> tasks,
@@ -47,12 +55,14 @@ class DownloadQueueEngine {
   }) {
     final activeCount =
         tasks.where((t) => t.status == DownloadStatus.downloading).length;
-    final availableSlots = maxConcurrent - activeCount;
+    final availableSlots =
+        maxConcurrent - (activeCount + _inflightStarts.length);
     if (availableSlots <= 0) return;
 
     final queued = tasks
         .where((t) =>
             t.status == DownloadStatus.queued &&
+            !_inflightStarts.contains(t.id) &&
             !(excludedTaskIds?.contains(t.id) ?? false))
         .toList()
       ..sort((a, b) {
@@ -66,7 +76,9 @@ class DownloadQueueEngine {
 
     final toStart = queued.take(availableSlots);
     for (final task in toStart) {
-      unawaited(onStart(task));
+      _inflightStarts.add(task.id);
+      unawaited(
+          onStart(task).whenComplete(() => _inflightStarts.remove(task.id)));
     }
   }
 }

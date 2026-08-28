@@ -30,7 +30,8 @@ void main() {
       } catch (_) {}
     });
 
-    test('Simulate FGS 6-hour timeout checkpoints tasks, journals, and state', () async {
+    test('Simulate FGS 6-hour timeout checkpoints tasks, journals, and state',
+        () async {
       final taskPath = '${tempDir.path}/test_video.mp4';
       final tempPartPath = '$taskPath.dmxpart';
 
@@ -57,6 +58,9 @@ void main() {
       final journal = DownloadJournal(tempPartPath);
       await journal.open();
       await journal.writeInit(2, 10000);
+
+      // Register task as active in background service
+      await BackgroundService.setDownloadActive(true, 'fgs_task_1');
 
       // Trigger timeout sequence
       await BackgroundService.triggerDataSyncTimeoutForTesting();

@@ -56,7 +56,9 @@ void main() {
       expect(manager.totalActiveTimers, equals(4));
     });
 
-    test('CriticalEngine timers maintain unthrottled base interval regardless of power mode', () {
+    test(
+        'CriticalEngine timers maintain unthrottled base interval regardless of power mode',
+        () {
       const base = Duration(milliseconds: 500);
 
       PowerMonitor.setScreenOn(false);
@@ -82,7 +84,9 @@ void main() {
           reason: 'Persistence timers must scale by 20x when screen is off');
     });
 
-    test('UI and Widget timers are suspended when app is backgrounded or screen is off', () {
+    test(
+        'UI and Widget timers are suspended when app is backgrounded or screen is off',
+        () {
       DownloadEngine.markBackground();
 
       var uiFired = false;
@@ -96,7 +100,8 @@ void main() {
       );
 
       expect(timer, isNull,
-          reason: 'UI timers must not be registered/scheduled when app is in background');
+          reason:
+              'UI timers must not be registered/scheduled when app is in background');
       expect(uiFired, isFalse);
     });
   });

@@ -262,228 +262,232 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                      if (widget.onFileToggle != null) ...[
-                        SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: Checkbox(
-                            value: selected,
-                            activeColor: blueClr,
-                            side: BorderSide(
-                              color: isDark
-                                  ? AppTheme.border
-                                  : AppTheme.lightBorder,
-                              width: 1.0,
+                        if (widget.onFileToggle != null) ...[
+                          SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: Checkbox(
+                              value: selected,
+                              activeColor: blueClr,
+                              side: BorderSide(
+                                color: isDark
+                                    ? AppTheme.border
+                                    : AppTheme.lightBorder,
+                                width: 1.0,
+                              ),
+                              onChanged: (val) {
+                                if (val != null) {
+                                  widget.onFileToggle!(index, val);
+                                }
+                              },
                             ),
-                            onChanged: (val) {
-                              if (val != null) {
-                                widget.onFileToggle!(index, val);
-                              }
-                            },
                           ),
+                          const SizedBox(width: 8),
+                        ],
+                        Icon(
+                          isComplete
+                              ? Icons.check_circle_outline_rounded
+                              : (selected
+                                  ? Icons.insert_drive_file_outlined
+                                  : Icons.block_rounded),
+                          size: 16,
+                          color: isComplete
+                              ? greenClr
+                              : (selected ? textClr : mutedClr),
                         ),
                         const SizedBox(width: 8),
-                      ],
-                      Icon(
-                        isComplete
-                            ? Icons.check_circle_outline_rounded
-                            : (selected
-                                ? Icons.insert_drive_file_outlined
-                                : Icons.block_rounded),
-                        size: 16,
-                        color: isComplete
-                            ? greenClr
-                            : (selected ? textClr : mutedClr),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    name,
-                                    style: TextStyle(
-                                      color: selected ? textClr : mutedClr,
-                                      fontSize: 12,
-                                      fontWeight: selected
-                                          ? FontWeight.bold
-                                          : FontWeight.normal,
-                                      decoration: selected
-                                          ? null
-                                          : TextDecoration.lineThrough,
-                                    ),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                 if (widget.cycleState == CycleState.verifying) ...[
-                                   const SizedBox(width: 6),
-                                   Container(
-                                     padding: const EdgeInsets.symmetric(
-                                       horizontal: 5,
-                                       vertical: 1.5,
-                                     ),
-                                     decoration: BoxDecoration(
-                                       color: amberClr.withValues(alpha: 0.15),
-                                       borderRadius: BorderRadius.circular(4),
-                                       border: Border.all(
-                                         color: amberClr.withValues(alpha: 0.4),
-                                         width: 0.6,
-                                       ),
-                                     ),
-                                     child: Text(
-                                       isRtl ? 'إعادة الفحص' : 'Re-checking',
-                                       style: TextStyle(
-                                         fontSize: 8,
-                                         fontWeight: FontWeight.bold,
-                                         color: amberClr,
-                                       ),
-                                     ),
-                                   ),
-                                 ],
-                                 if (isEstimated) ...[
-                                  const SizedBox(width: 6),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 5,
-                                      vertical: 1.5,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: amberClr.withValues(alpha: 0.15),
-                                      borderRadius: BorderRadius.circular(4),
-                                      border: Border.all(
-                                        color: amberClr.withValues(alpha: 0.4),
-                                        width: 0.6,
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      name,
+                                      style: TextStyle(
+                                        color: selected ? textClr : mutedClr,
+                                        fontSize: 12,
+                                        fontWeight: selected
+                                            ? FontWeight.bold
+                                            : FontWeight.normal,
+                                        decoration: selected
+                                            ? null
+                                            : TextDecoration.lineThrough,
                                       ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.auto_awesome_outlined,
-                                          size: 9,
+                                  ),
+                                  if (widget.cycleState ==
+                                      CycleState.verifying) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 5,
+                                        vertical: 1.5,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: amberClr.withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(
+                                          color:
+                                              amberClr.withValues(alpha: 0.4),
+                                          width: 0.6,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        isRtl ? 'إعادة الفحص' : 'Re-checking',
+                                        style: TextStyle(
+                                          fontSize: 8,
+                                          fontWeight: FontWeight.bold,
                                           color: amberClr,
                                         ),
-                                        const SizedBox(width: 2),
-                                        Text(
-                                          isRtl ? 'تقديري' : 'ESTIMATED',
-                                          style: TextStyle(
-                                            fontSize: 8,
-                                            fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                  if (isEstimated) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 5,
+                                        vertical: 1.5,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: amberClr.withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(
+                                          color:
+                                              amberClr.withValues(alpha: 0.4),
+                                          width: 0.6,
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.auto_awesome_outlined,
+                                            size: 9,
                                             color: amberClr,
                                           ),
+                                          const SizedBox(width: 2),
+                                          Text(
+                                            isRtl ? 'تقديري' : 'ESTIMATED',
+                                            style: TextStyle(
+                                              fontSize: 8,
+                                              fontWeight: FontWeight.bold,
+                                              color: amberClr,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                  if (widget.onPriorityChanged != null &&
+                                      selected) ...[
+                                    const SizedBox(width: 6),
+                                    _PriorityBadge(
+                                      priority: (f['priority'] as int?) ?? 4,
+                                      isDark: isDark,
+                                      isRtl: isRtl,
+                                      isCompleted: isComplete,
+                                      onChanged: (newPriority) =>
+                                          widget.onPriorityChanged!(
+                                              index, newPriority),
+                                    ),
+                                  ],
+                                  if (widget.onDeleteFile != null) ...[
+                                    const SizedBox(width: 4),
+                                    InkWell(
+                                      onTap: () =>
+                                          widget.onDeleteFile!(index, name),
+                                      borderRadius: BorderRadius.circular(6),
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(2.0),
+                                        child: Icon(
+                                          Icons.delete_outline_rounded,
+                                          size: 16,
+                                          color: isDark
+                                              ? AppTheme.neonRed
+                                              : AppTheme.lightNeonRed,
                                         ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                                if (widget.onPriorityChanged != null &&
-                                    selected) ...[
-                                  const SizedBox(width: 6),
-                                  _PriorityBadge(
-                                    priority: (f['priority'] as int?) ?? 4,
-                                    isDark: isDark,
-                                    isRtl: isRtl,
-                                    isCompleted: isComplete,
-                                    onChanged: (newPriority) => widget
-                                        .onPriorityChanged!(index, newPriority),
-                                  ),
-                                ],
-                                if (widget.onDeleteFile != null) ...[
-                                  const SizedBox(width: 4),
-                                  InkWell(
-                                    onTap: () =>
-                                        widget.onDeleteFile!(index, name),
-                                    borderRadius: BorderRadius.circular(6),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(2.0),
-                                      child: Icon(
-                                        Icons.delete_outline_rounded,
-                                        size: 16,
-                                        color: isDark
-                                            ? AppTheme.neonRed
-                                            : AppTheme.lightNeonRed,
                                       ),
                                     ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            if (selected) ...[
-                              // Linear Progress Bar
-                              Stack(
-                                children: [
-                                  Container(
-                                    height: 4,
-                                    width: double.infinity,
-                                    decoration:
-                                        AppTheme.progressTrack(isDark: isDark),
-                                  ),
-                                  FractionallySizedBox(
-                                    widthFactor: progress,
-                                    child: Container(
-                                      height: 4,
-                                      decoration: AppTheme.progressFill(
-                                        isComplete
-                                            ? greenClr
-                                            : (widget.isDownloading
-                                                ? blueClr
-                                                : mutedClr),
-                                      ),
-                                    ),
-                                  ),
+                                  ],
                                 ],
                               ),
                               const SizedBox(height: 6),
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    '${formatBytes(displayDownloadedBytes)} / ${lengthKnown ? formatBytes(length) : '—'}',
-                                    style: AppTheme.dataStyle(
-                                      isDark: isDark,
-                                      size: 10,
-                                      weight: FontWeight.w500,
-                                      color: mutedClr,
+                              if (selected) ...[
+                                // Linear Progress Bar
+                                Stack(
+                                  children: [
+                                    Container(
+                                      height: 4,
+                                      width: double.infinity,
+                                      decoration: AppTheme.progressTrack(
+                                          isDark: isDark),
                                     ),
-                                  ),
-                                  Text(
-                                    progressText,
-                                    style: AppTheme.dataStyle(
-                                      isDark: isDark,
-                                      size: 10,
-                                      color: isComplete
-                                          ? greenClr
-                                          : (isEstimated
-                                              ? textClr.withValues(alpha: 0.6)
-                                              : textClr),
+                                    FractionallySizedBox(
+                                      widthFactor: progress,
+                                      child: Container(
+                                        height: 4,
+                                        decoration: AppTheme.progressFill(
+                                          isComplete
+                                              ? greenClr
+                                              : (widget.isDownloading
+                                                  ? blueClr
+                                                  : mutedClr),
+                                        ),
+                                      ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                            ] else ...[
-                              Text(
-                                isRtl ? 'تم تخطيه' : 'Skipped',
-                                style: TextStyle(
-                                  color: mutedClr,
-                                  fontSize: 10,
-                                  fontStyle: FontStyle.italic,
+                                  ],
                                 ),
-                              ),
+                                const SizedBox(height: 6),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      '${formatBytes(displayDownloadedBytes)} / ${lengthKnown ? formatBytes(length) : '—'}',
+                                      style: AppTheme.dataStyle(
+                                        isDark: isDark,
+                                        size: 10,
+                                        weight: FontWeight.w500,
+                                        color: mutedClr,
+                                      ),
+                                    ),
+                                    Text(
+                                      progressText,
+                                      style: AppTheme.dataStyle(
+                                        isDark: isDark,
+                                        size: 10,
+                                        color: isComplete
+                                            ? greenClr
+                                            : (isEstimated
+                                                ? textClr.withValues(alpha: 0.6)
+                                                : textClr),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ] else ...[
+                                Text(
+                                  isRtl ? 'تم تخطيه' : 'Skipped',
+                                  style: TextStyle(
+                                    color: mutedClr,
+                                    fontSize: 10,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                );
-              },
+                      ],
+                    ),
+                  );
+                },
               ),
             ],
           ],

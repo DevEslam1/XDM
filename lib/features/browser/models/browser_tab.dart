@@ -115,32 +115,58 @@ class BrowserTab {
   set isLoading(bool val) => webViewState.isLoading = val;
 
   bool get canGoBack => webViewState.canGoBack;
-  set canGoBack(bool val) => webViewState.canGoBack = val;
+  set canGoBack(bool val) {
+    if (webViewState.isDisposed) return;
+    webViewState.canGoBack = val;
+  }
 
   bool get canGoForward => webViewState.canGoForward;
-  set canGoForward(bool val) => webViewState.canGoForward = val;
+  set canGoForward(bool val) {
+    if (webViewState.isDisposed) return;
+    webViewState.canGoForward = val;
+  }
 
   bool get hasCrashed => webViewState.hasCrashed;
-  set hasCrashed(bool val) => webViewState.hasCrashed = val;
+  set hasCrashed(bool val) {
+    if (webViewState.isDisposed) return;
+    webViewState.hasCrashed = val;
+  }
 
   bool get isTimedOut => webViewState.isTimedOut;
-  set isTimedOut(bool val) => webViewState.isTimedOut = val;
+  set isTimedOut(bool val) {
+    if (webViewState.isDisposed) return;
+    webViewState.isTimedOut = val;
+  }
 
   bool get isSuspended => webViewState.isSuspended;
-  set isSuspended(bool val) => webViewState.isSuspended = val;
+  set isSuspended(bool val) {
+    if (webViewState.isDisposed) return;
+    webViewState.isSuspended = val;
+  }
 
   bool get hasError => webViewState.hasError;
-  set hasError(bool val) => webViewState.hasError = val;
+  set hasError(bool val) {
+    if (webViewState.isDisposed) return;
+    webViewState.hasError = val;
+  }
 
   String? get errorDescription => webViewState.errorDescription;
-  set errorDescription(String? val) => webViewState.errorDescription = val;
+  set errorDescription(String? val) {
+    if (webViewState.isDisposed) return;
+    webViewState.errorDescription = val;
+  }
 
   bool get hasAttemptedSilentReload => webViewState.hasAttemptedSilentReload;
-  set hasAttemptedSilentReload(bool val) =>
-      webViewState.hasAttemptedSilentReload = val;
+  set hasAttemptedSilentReload(bool val) {
+    if (webViewState.isDisposed) return;
+    webViewState.hasAttemptedSilentReload = val;
+  }
 
   int get lastRenderedProgress => webViewState.lastRenderedProgress;
-  set lastRenderedProgress(int val) => webViewState.lastRenderedProgress = val;
+  set lastRenderedProgress(int val) {
+    if (webViewState.isDisposed) return;
+    webViewState.lastRenderedProgress = val;
+  }
 
   // ── UiState Delegate Getters/Setters ──────────────────────────────────────
   String get title => uiState.title;

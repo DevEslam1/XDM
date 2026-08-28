@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 
-import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:logging/logging.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
@@ -18,7 +18,9 @@ import 'core/services/app_lifecycle_coordinator.dart';
 import 'core/services/background_service.dart';
 import 'core/services/crash_reporting_service.dart';
 import 'core/services/database_service.dart';
+import 'core/services/device_tier.dart';
 import 'core/services/diagnostic_service.dart';
+import 'core/services/dio_client_pool.dart' show DioNetworkPolicy;
 import 'core/services/download_engine.dart';
 import 'core/services/frame_watchdog.dart';
 import 'core/services/logging_service.dart';
@@ -38,10 +40,7 @@ import 'core/services/xdm_backend_client.dart';
 import 'core/services/youtube_service.dart';
 import 'core/utils/constants.dart';
 import 'core/utils/url_utils.dart';
-import 'features/downloads/provider/download_filter_provider.dart';
-import 'features/downloads/provider/download_list_provider.dart';
 import 'features/downloads/provider/download_provider.dart';
-import 'features/downloads/provider/download_queue_provider.dart';
 import 'features/downloads/provider/torrent_provider.dart';
 import 'features/onboarding/screens/onboarding_screen.dart';
 import 'features/onboarding/screens/permission_request_screen.dart';
@@ -51,66 +50,28 @@ import 'shared/animation/ambient_animation_coordinator.dart';
 import 'shared/animation/composite_ambient_animation_controller.dart';
 import 'shared/widgets/main_navigation_container.dart';
 
-class _ScreenObserver with WidgetsBindingObserver {
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    final isResumed = state == AppLifecycleState.resumed;
-    if (isResumed) {
-      DownloadEngine.markForeground();
-    } else {
-      DownloadEngine.markBackground();
-    }
-    PowerMonitor.setScreenOn(isResumed);
-    // FIX MISC-4: Lifecycle management for watchdog, performance monitor, and pulse driver
-    if (isResumed) {
-      FrameWatchdog.resume();
-      PerformanceMonitor.instance.resume();
-      if (getIt.isRegistered<AmbientAnimationController>()) {
-        getIt<AmbientAnimationController>().restartIfActive();
-      }
-    } else if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive ||
-        state == AppLifecycleState.hidden ||
-        state == AppLifecycleState.detached) {
-      FrameWatchdog.pause();
-      PerformanceMonitor.instance.pause();
-      if (getIt.isRegistered<AmbientAnimationController>()) {
-        getIt<AmbientAnimationController>().stopAll();
-      }
-    }
-  }
-
-  @override
-  void didHaveMemoryPressure() {
-    ServiceRegistry.broadcastMemoryPressure();
-    PaintingBinding.instance.imageCache.clear();
-    PaintingBinding.instance.imageCache.clearLiveImages();
-    debugPrint(
-        '[MemoryPressure] Cleared non-essential caches and image memory');
-  }
-}
-
-Future<double> _getDeviceMemoryGB() async {
+/// Applies the image-cache byte/entry budget to Flutter's [PaintingBinding].
+/// Uses the user's explicit override (Performance & Resources → Image cache)
+/// when set (>0), otherwise the [DeviceTier] recommendation. Safe to call
+/// repeatedly (e.g. from a SettingsProvider listener) so the slider takes
+/// effect live without a restart. (Plan 07 §7.2/§7.7)
+void _applyImageCacheBudget() {
+  final caps = DeviceTierService.current;
+  var mb = caps.recommendedImageCacheMb;
   try {
-    if (kIsWeb) return 4.0;
-    final deviceInfo = DeviceInfoPlugin();
-    if (Platform.isAndroid) {
-      final androidInfo = await deviceInfo.androidInfo;
-      if (androidInfo.isLowRamDevice) return 2.0;
-      return 4.0;
-    } else if (Platform.isIOS) {
-      return 4.0;
-    }
+    final override = SettingsProvider.instance.imageCacheSizeMb;
+    if (override > 0) mb = override;
   } catch (e, st) {
     LoggingService.logger('main')
-        .warning('Failed to detect device memory', e, st);
+        .fine('image cache override unavailable, using tier default', e, st);
   }
-  return 4.0;
+  PaintingBinding.instance.imageCache
+    ..maximumSizeBytes = mb * 1024 * 1024
+    ..maximumSize = caps.recommendedImageCacheEntries;
 }
 
 final _mainLog = LoggingService.logger('main');
-// FIX H-4/H-5: Store observer instances so they can be removed on app shutdown
-_ScreenObserver? _screenObserver;
+// FIX H-4/H-5: Store observer instance so it can be removed on app shutdown
 _AppLifecycleObserver? _appLifecycleObserver;
 
 Future<void> main(List<String> args) async {
@@ -124,46 +85,53 @@ Future<void> main(List<String> args) async {
 
     WidgetsFlutterBinding.ensureInitialized();
 
-    // FIX-0.4: Adaptive ImageCache sizing based on device RAM
-    final deviceMemory = await _getDeviceMemoryGB();
-    final cacheMB = deviceMemory <= 2 ? 30 : 50;
-    PaintingBinding.instance.imageCache
-      ..maximumSizeBytes = cacheMB * 1024 * 1024
-      ..maximumSize = deviceMemory <= 2 ? 60 : 100;
+    // Plan 07 §7.2: detect the device tier once, then size the image cache
+    // from it (continuous RAM-scaled budget) or the user's explicit override.
+    await DeviceTierService.detect();
 
-    // ── Frame performance monitoring (UI-jank diagnostics) ──
-    if (kDebugMode) {
-      await FrameWatchdog.detectRefreshRate();
-      PerformanceMonitor.instance.start();
-      FrameWatchdog.start();
-      int consecutiveJankWindows = 0;
-      FrameWatchdog.onJankDetected = (jankRatio) {
-        try {
-          if (!SettingsProvider.instance.jankAutoBatterySaver) {
-            consecutiveJankWindows = 0;
-            return;
-          }
-          if (jankRatio > 0.08) {
-            consecutiveJankWindows++;
-            if (consecutiveJankWindows >= 3) {
-              SettingsProvider.instance.setBatterySaverMode(true);
-            }
-          } else {
-            consecutiveJankWindows = 0;
-          }
-        } catch (e, st) {
-          LoggingService.logger('main')
-              .warning('Failed to check jankAutoBatterySaver', e, st);
+    // ── Frame performance monitoring (UI-jank diagnostics + auto-degrade) ──
+    // Plan 07 §7.1: this now runs in RELEASE too (low overhead — per-frame
+    // integer counters; verbose logging stays debug-gated inside FrameWatchdog).
+    // Sustained jank triggers a *gradual* degrade (GPU/visuals first) rather
+    // than a blunt jump to full battery-saver.
+    await FrameWatchdog.detectRefreshRate();
+    PerformanceMonitor.instance.start();
+    FrameWatchdog.start();
+    int consecutiveJankWindows = 0;
+    FrameWatchdog.onJankDetected = (jankRatio) {
+      try {
+        final settings = SettingsProvider.instance;
+        if (!settings.autoReduceEffectsOnJank || jankRatio <= 0.08) {
+          consecutiveJankWindows = 0;
+          return;
         }
-      };
-    }
+        consecutiveJankWindows++;
+        if (consecutiveJankWindows < 3) return;
+        consecutiveJankWindows = 0;
+        // Step down one level per 3 janky windows: GPU/visuals first, and only
+        // reduce download concurrency (battery saver) as an opt-in last resort.
+        final current = settings.visualQuality;
+        if (current == VisualQuality.full) {
+          settings.setVisualQuality(VisualQuality.lite);
+        } else if (current == VisualQuality.lite) {
+          settings.setVisualQuality(VisualQuality.off);
+        } else if (settings.jankAutoBatterySaver &&
+            !settings.batterySaverMode) {
+          settings.setBatterySaverMode(true);
+        }
+        if (kDebugMode) {
+          _mainLog.warning(
+              '[Jank] Auto-degraded (visuals=${settings.visualQuality.name}) '
+              'after sustained ${(jankRatio * 100).toStringAsFixed(1)}% drop');
+        }
+      } catch (e, st) {
+        LoggingService.logger('main')
+            .warning('jank auto-degrade failed', e, st);
+      }
+    };
 
     await PowerMonitor.init();
     await ProtocolCache.init();
-
-    // FIX H-4: Store observer instance so it can be removed in _AppLifecycleObserver.detached
-    _screenObserver = _ScreenObserver();
-    WidgetsBinding.instance.addObserver(_screenObserver!);
 
     // Custom error widget builder for better UX & transient error retry
     ErrorWidget.builder = (FlutterErrorDetails errorDetails) {
@@ -204,13 +172,28 @@ Future<void> main(List<String> args) async {
       if (!isPrimary) exit(0);
 
       // ── PHASE 2: Parallel fast inits (no secure storage, no native) ──
-      await Future.wait([
-        PackageInfo.fromPlatform().then((info) => setAppVersion(info.version)),
-      ]);
+      final info = await PackageInfo.fromPlatform();
+      setAppVersion(info.version);
 
       // ── PHASE 3: Settings (required for theme before runApp) ──
       final settingsProvider = SettingsProvider.instance;
       await settingsProvider.load();
+      // FIX(P3.1): Apply DioNetworkPolicy (HTTPS-only, proxy) at startup so
+      // browser/metadata-probe clients enforce the policy from the first
+      // request, not only after the network settings page is visited.
+      DioNetworkPolicy.instance.update(
+        httpsOnly: settingsProvider.httpsOnly,
+        enableProxy: settingsProvider.enableProxy,
+        proxyType: ProxyType.fromString(settingsProvider.proxyType),
+        proxyHost: settingsProvider.proxyHost,
+        proxyPort: settingsProvider.proxyPort,
+        proxyUsername: settingsProvider.proxyUsername ?? '',
+        proxyPassword: settingsProvider.proxyPassword ?? '',
+      );
+      // Re-apply the image-cache budget now the user's override is loaded, and
+      // keep it in sync when the Performance & Resources slider changes.
+      _applyImageCacheBudget();
+      settingsProvider.addListener(_applyImageCacheBudget);
       XdmBackendClient().refreshConfig();
 
       // ── Crash reporting: initializes Sentry when SENTRY_DSN is set ──
@@ -241,6 +224,18 @@ Future<void> main(List<String> args) async {
         settingsProvider: settingsProvider,
         notificationService: notificationService,
         downloadEngine: downloadEngine,
+      );
+      // FIX(C-8): Publish the live provider instance into DI, replacing the
+      // lazy factory. Previously getIt<DownloadProvider>() created a SECOND
+      // provider with its own empty task list, and IConnectivity resolved to
+      // that instance's never-initialized NetworkMonitor — misattributing
+      // every torrent pause as "network lost".
+      if (getIt.isRegistered<DownloadProvider>()) {
+        getIt.unregister<DownloadProvider>();
+      }
+      getIt.registerSingleton<DownloadProvider>(
+        downloadProvider,
+        dispose: (p) => p.dispose(),
       );
 
       // Fast share-intent detection (bounded by 150ms timeout)
@@ -373,41 +368,27 @@ Future<void> _initNonCriticalServices(
   DownloadProvider downloadProvider,
   NotificationService notificationService,
 ) async {
-  try {
-    await MirrorHealthStore.instance.init();
-  } catch (e, st) {
-    _mainLog.warning('Mirror health store init failed', e, st);
-  }
-
-  try {
-    await XdmBackendClient.loadApiKey();
-  } catch (e, st) {
-    _mainLog.warning('API key load failed', e, st);
-  }
-
-  try {
-    await notificationService.init(requestPermission: false);
-  } catch (e, st) {
-    _mainLog.warning('Notification init failed', e, st);
-  }
-
-  try {
-    await BackgroundService.initialize();
-  } catch (e, st) {
-    _mainLog.warning('Background service init failed', e, st);
-  }
-
-  try {
-    await YoutubeService.init();
-  } catch (e, st) {
-    _mainLog.warning('YouTube init failed', e, st);
-  }
-
-  try {
-    await inject<SiteIntelligenceService>().init();
-  } catch (e, st) {
-    _mainLog.warning('SiteIntelligenceService init failed', e, st);
-  }
+  // Run all independent service inits in parallel
+  await Future.wait([
+    MirrorHealthStore.instance.init().catchError((e, st) {
+      _mainLog.warning('Mirror health store init failed', e, st);
+    }),
+    XdmBackendClient.loadApiKey().catchError((e, st) {
+      _mainLog.warning('API key load failed', e, st);
+    }),
+    notificationService.init(requestPermission: false).catchError((e, st) {
+      _mainLog.warning('Notification init failed', e, st);
+    }),
+    BackgroundService.initialize().catchError((e, st) {
+      _mainLog.warning('Background service init failed', e, st);
+    }),
+    YoutubeService.init().catchError((e, st) {
+      _mainLog.warning('YouTube init failed', e, st);
+    }),
+    inject<SiteIntelligenceService>().init().catchError((e, st) {
+      _mainLog.warning('SiteIntelligenceService init failed', e, st);
+    }),
+  ]);
 
   unawaited(
     RemoteApiService.start(
@@ -489,12 +470,7 @@ class DmxApp extends StatelessWidget {
         Provider<DatabaseService>.value(value: databaseService),
         ChangeNotifierProvider<SettingsProvider>.value(value: settingsProvider),
         ChangeNotifierProvider<DownloadProvider>.value(value: downloadProvider),
-        ChangeNotifierProvider<DownloadListProvider>(
-            create: (_) => getIt<DownloadListProvider>()),
-        ChangeNotifierProvider<DownloadQueueProvider>(
-            create: (_) => getIt<DownloadQueueProvider>()),
-        ChangeNotifierProvider<DownloadFilterProvider>(
-            create: (_) => getIt<DownloadFilterProvider>()),
+        // FIX(M-11): dead parallel providers removed from the tree.
         ChangeNotifierProvider<TorrentProvider>(
             create: (_) => getIt<TorrentProvider>()),
       ],
@@ -533,6 +509,21 @@ class DmxApp extends StatelessWidget {
                 themeData.isAmoled ? AppTheme.amoledTheme : AppTheme.darkTheme,
             themeMode: themeData.mode,
             locale: Locale(themeData.lang),
+            // Plan 06 §6.6: register Flutter's localization delegates so system
+            // widgets (date pickers, tooltips, selection controls) localize and
+            // RTL is applied formally for supported languages.
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            supportedLocales: const [
+              Locale('en'),
+              Locale('ar'),
+              Locale('es'),
+              Locale('fr'),
+              Locale('de'),
+            ],
             home: AnimatedTheme(
               data: currentTheme,
               duration: const Duration(milliseconds: 400),
@@ -616,6 +607,28 @@ class _AppLifecycleObserver with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    final isResumed = state == AppLifecycleState.resumed;
+
+    // Consolidated lifecycle management (replaces removed _ScreenObserver)
+    if (isResumed) {
+      DownloadEngine.markForeground();
+      FrameWatchdog.resume();
+      PerformanceMonitor.instance.resume();
+      if (getIt.isRegistered<AmbientAnimationController>()) {
+        getIt<AmbientAnimationController>().restartIfActive();
+      }
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden) {
+      DownloadEngine.markBackground();
+      FrameWatchdog.pause();
+      PerformanceMonitor.instance.pause();
+      if (getIt.isRegistered<AmbientAnimationController>()) {
+        getIt<AmbientAnimationController>().stopAll();
+      }
+    }
+    PowerMonitor.setScreenOn(isResumed);
+
     if (state == AppLifecycleState.resumed) {
       unawaited(
         NotificationService()
@@ -627,15 +640,16 @@ class _AppLifecycleObserver with WidgetsBindingObserver {
     }
 
     if (state == AppLifecycleState.detached) {
-      // FIX H-4/H-5: Remove stored observers to prevent leaks on re-initialization
-      if (_screenObserver != null) {
-        WidgetsBinding.instance.removeObserver(_screenObserver!);
-        _screenObserver = null;
-      }
-      if (_appLifecycleObserver != null) {
-        WidgetsBinding.instance.removeObserver(_appLifecycleObserver!);
-        _appLifecycleObserver = null;
-      }
+      // FIX H-4/H-5: Defer observer removal to avoid modifying dispatch list during callback
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_appLifecycleObserver != null) {
+          WidgetsBinding.instance.removeObserver(_appLifecycleObserver!);
+          _appLifecycleObserver = null;
+        }
+      });
+      try {
+        SettingsProvider.instance.removeListener(_applyImageCacheBudget);
+      } catch (_) {}
       // App is being terminated — release wake lock and shutdown singleton services
       unawaited(shutdownDependencies().catchError((e, st) {
         _mainLog.warning('Failed to shutdown dependencies on detach', e, st);
@@ -667,12 +681,21 @@ class _AppLifecycleObserver with WidgetsBindingObserver {
     }
   }
 
+  @override
+  void didHaveMemoryPressure() {
+    ServiceRegistry.broadcastMemoryPressure();
+    PaintingBinding.instance.imageCache.clear();
+    PaintingBinding.instance.imageCache.clearLiveImages();
+    debugPrint(
+        '[MemoryPressure] Cleared non-essential caches and image memory');
+  }
+
   Future<void> _saveTorrentState() async {
     if (_transitionInProgress) return;
     _transitionInProgress = true;
     try {
       final ids = TorrentService.activeTorrentIds.toList();
-      if (Platform.isIOS) {
+      if (!kIsWeb && Platform.isIOS) {
         await _iosTorrentChannel.invokeMethod<void>('setActiveTorrentIds', {
           'ids': ids,
         });
@@ -926,51 +949,27 @@ class _FpsOverlay extends StatefulWidget {
 }
 
 class _FpsOverlayState extends State<_FpsOverlay> {
-  int _frameCount = 0;
   double _fps = 0;
-  Timer? _timer;
-  bool _active = true;
+  StreamSubscription<FrameMetrics>? _metricsSub;
 
   @override
   void initState() {
     super.initState();
-    _active = true;
-    _scheduleNextFrame();
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (PowerMonitor.screenOff || DownloadEngine.isInBackground) return;
-      if (mounted) {
+    _metricsSub = PerformanceMonitor.instance.metricsStream.listen((metrics) {
+      if (mounted &&
+          !PowerMonitor.screenOff &&
+          !DownloadEngine.isInBackground) {
         setState(() {
-          _fps = _frameCount.toDouble();
-          _frameCount = 0;
+          _fps = metrics.fps;
         });
       }
     });
   }
 
-  void _scheduleNextFrame() {
-    if (!_active ||
-        !mounted ||
-        PowerMonitor.screenOff ||
-        DownloadEngine.isInBackground) {
-      return;
-    }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_active ||
-          !mounted ||
-          PowerMonitor.screenOff ||
-          DownloadEngine.isInBackground) {
-        return;
-      }
-      _frameCount++;
-      _scheduleNextFrame();
-    });
-  }
-
   @override
   void dispose() {
-    _active = false;
-    _timer?.cancel();
-    _timer = null;
+    _metricsSub?.cancel();
+    _metricsSub = null;
     super.dispose();
   }
 

@@ -13,6 +13,7 @@ import '../../../shared/widgets/empty_state_view.dart';
 import '../../../shared/widgets/geometric_grid_background.dart';
 import '../../browser/services/ad_blocker_service.dart';
 import '../../downloads/provider/download_provider.dart';
+import '../../subscription/screens/subscription_screen.dart';
 import '../provider/settings_provider.dart';
 import '../widgets/browser_extensions_sheet.dart';
 import '../widgets/settings_tiles.dart';
@@ -20,6 +21,7 @@ import 'advanced_settings_page.dart';
 import 'appearance_settings_page.dart';
 import 'downloads_settings_page.dart';
 import 'network_settings_page.dart';
+import 'power_settings_page.dart';
 import 'torrent_settings_page.dart';
 
 Color getSettingsTabColor(int tabIndex, bool isDark) {
@@ -92,6 +94,7 @@ class _SettingsScreenState extends State<SettingsScreen>
         2 => const NetworkSettingsPage(),
         3 => const TorrentSettingsPage(),
         4 => const AdvancedSettingsPage(),
+        5 => const PowerSettingsPage(),
         _ => const SizedBox.shrink(),
       };
     });
@@ -101,7 +104,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     _loadedTabs.add(_selectedCategoryIndex);
     return IndexedStack(
       index: _selectedCategoryIndex,
-      children: List.generate(5, (i) {
+      children: List.generate(6, (i) {
         if (_loadedTabs.contains(i)) {
           return _buildLazyTab(i);
         }
@@ -161,7 +164,10 @@ class _SettingsScreenState extends State<SettingsScreen>
       return 2;
     }
     if (s.contains('torrent')) return 3;
-    if (s.contains('adv') || s.contains('power') || s.contains('back')) {
+    if (s.contains('power') || s.contains('battery') || s.contains('thermal')) {
+      return 5;
+    }
+    if (s.contains('adv') || s.contains('back') || s.contains('appear')) {
       return 4;
     }
     return 0;
@@ -592,6 +598,12 @@ class _SettingsScreenState extends State<SettingsScreen>
         icon: Icons.settings_applications_outlined,
         color: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
       ),
+      _CategoryMeta(
+        id: 'performance',
+        title: isRtl ? 'الأداء والموارد' : 'Performance & Resources',
+        icon: Icons.speed_rounded,
+        color: isDark ? AppTheme.neonOrange : AppTheme.lightNeonOrange,
+      ),
     ];
 
     final activeTabColor = categories[_selectedCategoryIndex].color;
@@ -647,6 +659,22 @@ class _SettingsScreenState extends State<SettingsScreen>
                     context.read<DownloadProvider>().setActiveTabIndex(0);
                   },
                 ),
+          actions: [
+            IconButton(
+              icon: Icon(
+                Icons.workspace_premium_rounded,
+                color: isDark ? AppTheme.neonCyan : AppTheme.lightNeonCyan,
+              ),
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const SubscriptionScreen(),
+                  ),
+                );
+              },
+              tooltip: L10n.of(context, 'subscription_title'),
+            ),
+          ],
         ),
         body: Directionality(
           textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,

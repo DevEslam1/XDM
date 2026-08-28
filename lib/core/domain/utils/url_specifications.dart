@@ -122,7 +122,7 @@ class UrlSpecifications {
   static bool isMagnetUrl(String value, {bool strict = true}) {
     final clean = value.trim();
     if (!clean.toLowerCase().startsWith('magnet:')) return false;
-    
+
     // In lenient/non-strict mode, accept tracker-only magnets
     if (!strict && clean.contains('tr=') && !clean.contains('xt=')) return true;
 
@@ -139,7 +139,8 @@ class UrlSpecifications {
   }
 
   static bool isTorrentFileUrl(String value, {String? mimeType}) {
-    if (mimeType != null && mimeType.trim().toLowerCase() == 'application/x-bittorrent') {
+    if (mimeType != null &&
+        mimeType.trim().toLowerCase() == 'application/x-bittorrent') {
       return true;
     }
     final clean = value.trim().toLowerCase();
@@ -168,7 +169,9 @@ class UrlSpecifications {
   static TorrentUriKind resolveTorrentUriKind(Uri uri, {String? mimeType}) {
     final uriStr = uri.toString();
     if (uri.scheme.toLowerCase() == 'magnet') {
-      return isMagnetUrl(uriStr) ? TorrentUriKind.magnet : TorrentUriKind.notTorrent;
+      return isMagnetUrl(uriStr)
+          ? TorrentUriKind.magnet
+          : TorrentUriKind.notTorrent;
     }
     if (isTorrentFileUrl(uriStr, mimeType: mimeType)) {
       return TorrentUriKind.torrentFile;

@@ -32,7 +32,9 @@ HealthLevel calculateHealth({
   if (seeds >= 10 && downloadRate > 100 * 1024) return HealthLevel.excellent;
   if (seeds >= 3 || downloadRate > 20 * 1024) return HealthLevel.good;
   if (seeds > 0 || peers > 0 || downloadRate > 0) return HealthLevel.fair;
-  if (availability < 1.0 && distributedCopies < 1.0) return HealthLevel.poor;
+  // Health is derived only from real seeds/peers/rate. `availability` and
+  // `distributedCopies` are not used: the 1.9.2 bridge hardcodes
+  // distributedCopies to 0.0, so keying health off it would silently skew it.
   return HealthLevel.good;
 }
 

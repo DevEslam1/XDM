@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <data-extraction-rules>
     <cloud-backup>
-        <!-- Exclude huge transfer payloads and in-flight journals from cloud backup -->
+        <!-- Exclude huge transfer payloads, databases, and in-flight journals from cloud backup -->
         <exclude domain="file" path="." />
         <exclude domain="database" path="." />
     </cloud-backup>
     <device-transfer>
+        <!-- Only include user preferences; all files, journals, and databases are excluded -->
         <include domain="sharedpref" path="." />
     </device-transfer>
 </data-extraction-rules>

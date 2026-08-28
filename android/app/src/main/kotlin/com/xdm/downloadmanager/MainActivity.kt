@@ -32,13 +32,23 @@ class MainActivity : FlutterActivity() {
     private val YOUTUBE_CHANNEL = "com.xdm.downloadmanager/youtube_extractor"
     private val SAF_CHANNEL = "com.xdm.downloadmanager/saf"
     private val WAKE_LOCK_CHANNEL = "com.dmx.app/wakelock"
-    private val backgroundExecutor = Executors.newSingleThreadExecutor()
+    private val backgroundExecutor = Executors.newSingleThreadExecutor { r -> Thread(r, "xdm-bg").apply { isDaemon = true } }
     private var wakeLock: PowerManager.WakeLock? = null
 
     private var widgetBridgeChannel: MethodChannel? = null
     private var pendingDeepLink: String? = null
     private var forwardAttempts = 0
     private val mainHandler = Handler(Looper.getMainLooper())
+
+    override fun onDestroy() {
+        // Release all resources to prevent leaks
+        backgroundExecutor.shutdownNow()
+        wakeLock?.let { if (it.isHeld) it.release() }
+        wakeLock = null
+        widgetBridgeChannel?.setMethodCallHandler(null)
+        widgetBridgeChannel = null
+        super.onDestroy()
+    }
 
     override fun getBackgroundMode(): FlutterActivityLaunchConfigs.BackgroundMode {
         return FlutterActivityLaunchConfigs.BackgroundMode.transparent
@@ -176,6 +186,13 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.dmx.app/monotonic_clock").setMethodCallHandler { call, result ->
+            if (call.method == "elapsedRealtime") {
+                result.success(android.os.SystemClock.elapsedRealtime())
+            } else {
+                result.notImplemented()
+            }
+        }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, YOUTUBE_CHANNEL).setMethodCallHandler { call, result ->
             if (call.method != "getStreams") {
                 result.notImplemented()

@@ -68,14 +68,7 @@ class WidgetTaskSummary {
         'fileSizeBytes': fileSizeBytes,
         'downloadedBytes': downloadedBytes,
         'category': category,
-        'thumbnailUrl': thumbnailUrl,
-        'playlistId': playlistId,
-        'playlistTitle': playlistTitle,
-        'playlistIndex': playlistIndex,
-        'errorMessage': errorMessage,
         'isTorrent': isTorrent,
-        'seedingRatio': seedingRatio,
-        'priority': priority,
         'isAppUpdate': isAppUpdate,
         'speedTrend': speedTrend,
       };
@@ -132,28 +125,15 @@ class WidgetDashboard {
   /// Sorting (per the smart-launcher spec):
   /// failed first → app updates → active (by priority, high first) →
   /// queued → paused → completed.
+  ///
+  /// Capped to the top 20 tasks; all dashboard aggregates are computed
+  /// directly from this capped slice as the single source of truth (W-3).
   factory WidgetDashboard.fromTasks(
     List<WidgetTaskSummary> tasks, {
     required int availableStorageBytes,
     required bool isOnWifi,
     int completedTodayCount = 0,
   }) {
-    var totalSpeed = 0;
-    var activeCount = 0;
-    var downloadedBytes = 0;
-    var fileSizeBytes = 0;
-    var failed = 0;
-
-    for (final t in tasks) {
-      if (t.status == 'downloading' || t.status == 'seeding') {
-        activeCount++;
-        if (t.status == 'downloading') totalSpeed += t.speedBytesPerSec;
-      }
-      downloadedBytes += t.downloadedBytes;
-      fileSizeBytes += t.fileSizeBytes;
-      if (t.status == 'failed') failed++;
-    }
-
     final sorted = List<WidgetTaskSummary>.of(tasks)
       ..sort((a, b) {
         int rank(WidgetTaskSummary t) {
@@ -178,12 +158,31 @@ class WidgetDashboard {
         final rb = rank(b);
         if (ra != rb) return ra.compareTo(rb);
         if (a.isAppUpdate != b.isAppUpdate) return a.isAppUpdate ? -1 : 1;
-        if (ra == 1) return b.priority.compareTo(a.priority);
+        final prioComp = b.priority.compareTo(a.priority);
+        if (prioComp != 0) return prioComp;
         return a.fileName.compareTo(b.fileName);
       });
 
+    final capped = sorted.length > 20 ? sorted.sublist(0, 20) : sorted;
+
+    var totalSpeed = 0;
+    var activeCount = 0;
+    var downloadedBytes = 0;
+    var fileSizeBytes = 0;
+    var failed = 0;
+
+    for (final t in capped) {
+      if (t.status == 'downloading' || t.status == 'seeding') {
+        activeCount++;
+        if (t.status == 'downloading') totalSpeed += t.speedBytesPerSec;
+      }
+      downloadedBytes += t.downloadedBytes;
+      fileSizeBytes += t.fileSizeBytes;
+      if (t.status == 'failed') failed++;
+    }
+
     return WidgetDashboard(
-      tasks: sorted,
+      tasks: capped,
       totalActiveCount: activeCount,
       totalSpeedBytesPerSec: totalSpeed,
       totalDownloadedBytes: downloadedBytes,
@@ -274,7 +273,6 @@ class WidgetDataBridge {
   String? _lastPushedPayload;
 
   Future<void> _doPush(WidgetDashboard dashboard, {bool force = false}) async {
-    _lastPush = DateTime.now();
     try {
       final payload = jsonEncode(dashboard.toJson());
       if (!force && payload == _lastPushedPayload) {
@@ -285,9 +283,11 @@ class WidgetDataBridge {
       final test = testSink;
       if (test != null) {
         await test(dashboard);
+        _lastPush = DateTime.now();
         return;
       }
       await channel.invokeMethod<void>('pushDashboard', payload);
+      _lastPush = DateTime.now();
     } catch (e) {
       // Widget pushes are non-critical — never surface to the user.
       _log.fine('Widget dashboard push failed: $e');
@@ -362,5 +362,9 @@ class WidgetDataBridge {
   static bool isStorageCritical(int availableBytes) =>
       availableBytes >= 0 && availableBytes < 100 * 1024 * 1024;
 
-  void dispose() {}
+  void dispose() {
+    _pendingTimer?.cancel();
+    _pendingTimer = null;
+    _lastPush = null;
+  }
 }

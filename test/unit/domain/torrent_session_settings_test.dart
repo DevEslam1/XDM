@@ -27,6 +27,8 @@ void main() {
       expect(settings.sequentialDownload, isFalse);
       expect(settings.shareRatioLimit, 0.0);
       expect(settings.maxSeedingTimeMinutes, 0);
+      expect(settings.enableUtp, isTrue);
+      expect(settings.diskCacheSizeBytes, 64 * 1024 * 1024);
     });
 
     test('copyWith updates fields correctly', () {
@@ -36,6 +38,8 @@ void main() {
         torrentConnectionsLimit: 100,
         sequentialDownload: true,
         shareRatioLimit: 2.5,
+        enableUtp: false,
+        diskCacheSizeBytes: 128 * 1024 * 1024,
       );
 
       expect(updated.enableDht, isFalse);
@@ -43,6 +47,8 @@ void main() {
       expect(updated.sequentialDownload, isTrue);
       expect(updated.shareRatioLimit, 2.5);
       expect(updated.enableUpnp, isTrue);
+      expect(updated.enableUtp, isFalse);
+      expect(updated.diskCacheSizeBytes, 128 * 1024 * 1024);
     });
 
     test('SettingsProvider maps correctly to TorrentSessionSettings', () async {
@@ -50,6 +56,8 @@ void main() {
         'enableDht': false,
         'torrentConnectionsLimit': 150,
         'sequentialDownload': true,
+        'enableUtp': false,
+        'diskCacheSizeMb': 256,
       });
 
       final provider = SettingsProvider.instance;
@@ -59,6 +67,8 @@ void main() {
       expect(sessionSettings.enableDht, isFalse);
       expect(sessionSettings.torrentConnectionsLimit, 150);
       expect(sessionSettings.sequentialDownload, isTrue);
+      expect(sessionSettings.enableUtp, isFalse);
+      expect(sessionSettings.diskCacheSizeBytes, 256 * 1024 * 1024);
     });
   });
 }

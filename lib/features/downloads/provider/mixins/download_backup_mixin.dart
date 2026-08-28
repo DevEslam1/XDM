@@ -309,11 +309,14 @@ mixin DownloadBackupMixin {
         // NEW-4: Chunk DB writes in batches of 200 to prevent SQLite statement size overflow and RAM spikes
         const batchSize = 200;
         for (var i = 0; i < newTasks.length; i += batchSize) {
-          final end = (i + batchSize < newTasks.length) ? i + batchSize : newTasks.length;
+          final end = (i + batchSize < newTasks.length)
+              ? i + batchSize
+              : newTasks.length;
           final chunk = newTasks.sublist(i, end);
           await providerDatabaseService.saveTasks(chunk);
           if (newTasks.length > 500) {
-            await Future<void>.delayed(Duration.zero); // yield event loop for UI fluidity
+            await Future<void>.delayed(
+                Duration.zero); // yield event loop for UI fluidity
           }
         }
 

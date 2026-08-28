@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../features/downloads/models/download_task.dart';
 import '../../features/settings/provider/settings_provider.dart';
+import '../services/crash_reporting_service.dart';
 import 'l10n/app_ar.dart';
 import 'l10n/app_de.dart';
 import 'l10n/app_en.dart';
@@ -62,9 +63,16 @@ class L10n {
     } else {
       template =
           _getTranslations('en')[targetKey] ?? _getTranslations('en')[key];
-      if (template != null && kDebugMode) {
-        debugPrint(
-            'P0-6: Missing localization key "$targetKey" in locale "$lang", using English fallback.');
+      if (template != null) {
+        if (kDebugMode) {
+          debugPrint(
+              'P0-6: Missing localization key "$targetKey" in locale "$lang", using English fallback.');
+        } else {
+          CrashReportingService.addBreadcrumb(
+            'Missing key "$targetKey" in "$lang", using EN fallback',
+            category: 'l10n',
+          );
+        }
       }
     }
 
@@ -107,9 +115,12 @@ class L10n {
         'ar';
   }
 
+  // FIX(H-20): Normalize empty category to "Auto" so it displays correctly
+  // across LTR/RTL and appears in analytics/aggregation.
   static String translateCategory(BuildContext context, String cat) {
-    if (!isRtl(context)) return cat;
-    switch (cat) {
+    final effectiveCat = cat.isEmpty ? 'Auto' : cat;
+    if (!isRtl(context)) return effectiveCat;
+    switch (effectiveCat) {
       case 'Video':
         return 'فيديو';
       case 'Audio':
@@ -120,6 +131,8 @@ class L10n {
         return 'أرشيف';
       case 'APK':
         return 'تطبيق';
+      case 'Auto':
+        return 'تلقائي';
       default:
         return 'أخرى';
     }

@@ -62,7 +62,13 @@ class CircuitBreaker {
       case CircuitBreakerState.open:
         if (now.difference(_lastStateChange) >= openTimeout) {
           _transition(CircuitBreakerState.halfOpen, now);
-          return false;
+          // FIX P1-8b: Allow the request that triggers halfOpen to probe immediately,
+          // instead of requiring one extra request (saves openTimeout latency).
+          if (!_probeInFlight) {
+            _probeInFlight = true;
+            _probeStartedAt = now;
+            return true;
+          }
         }
         return false;
       case CircuitBreakerState.halfOpen:
@@ -93,7 +99,7 @@ class CircuitBreaker {
   }) async {
     if (!allowRequest()) {
       final remaining = isOpen
-          ? openTimeout - _clock().difference(_lastStateChange).abs()
+          ? openTimeout - _clock().difference(_lastStateChange)
           : halfOpenTimeout;
       throw CircuitOpenException(
         service: service,
@@ -166,12 +172,12 @@ class CircuitBreaker {
 class CircuitBreakerRegistry {
   static const String _prefsPrefix = 'cb_open_';
   final Map<String, CircuitBreaker> _breakers = {};
-  
+
   Future<void> restoreState() async {
     final prefs = await SharedPreferences.getInstance();
     final keys = prefs.getKeys().where((k) => k.startsWith(_prefsPrefix));
     final now = DateTime.now().millisecondsSinceEpoch;
-    
+
     for (final key in keys) {
       final expireTime = prefs.getInt(key);
       if (expireTime != null && expireTime > now) {
@@ -185,7 +191,8 @@ class CircuitBreakerRegistry {
     }
   }
 
-  CircuitBreaker getBreaker(String hostKey, {
+  CircuitBreaker getBreaker(
+    String hostKey, {
     int failureThreshold = 3,
     Duration openTimeout = const Duration(seconds: 30),
     Duration halfOpenTimeout = const Duration(seconds: 5),
@@ -193,7 +200,7 @@ class CircuitBreakerRegistry {
     if (_breakers.containsKey(hostKey)) {
       return _breakers[hostKey]!;
     }
-    
+
     final breaker = CircuitBreaker(
       failureThreshold: failureThreshold,
       openTimeout: openTimeout,
@@ -204,11 +211,11 @@ class CircuitBreakerRegistry {
     _breakers[hostKey] = breaker;
     return breaker;
   }
-  
+
   void _onStateChange(CircuitBreakerState state, String? key) {
     if (key == null) return;
     final prefsKey = '$_prefsPrefix$key';
-    
+
     if (state == CircuitBreakerState.open) {
       final breaker = _breakers[key];
       if (breaker != null) {
@@ -251,6 +258,15 @@ class UrlCircuitBreaker {
       final host = uri?.host ?? url;
       _urlFailures[host] = (_urlFailures[host] ?? 0) + 1;
       _lastFailures[host] = DateTime.now();
+      // FIX P1-8c: Bound map to prevent leak on burst 429/5xx across many hosts.
+      if (_urlFailures.length > 500) {
+        final oldest = _lastFailures.entries.toList()
+          ..sort((a, b) => a.value.compareTo(b.value));
+        for (var i = 0; i < 100 && i < oldest.length; i++) {
+          _urlFailures.remove(oldest[i].key);
+          _lastFailures.remove(oldest[i].key);
+        }
+      }
     } catch (_) {}
   }
 

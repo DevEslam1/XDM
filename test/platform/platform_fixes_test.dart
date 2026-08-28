@@ -8,14 +8,21 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('Phase 7 — Platform Fixes & Configuration Tests', () {
-    test('Android: AndroidManifest.xml contains BootReceiver & dataSync FGS', () {
+    test('Android: AndroidManifest.xml contains BootReceiver & dataSync FGS',
+        () {
       final manifestFile = File('android/app/src/main/AndroidManifest.xml');
       expect(manifestFile.existsSync(), isTrue);
 
       final content = manifestFile.readAsStringSync();
-      expect(content.contains('android.permission.RECEIVE_BOOT_COMPLETED'), isTrue);
-      expect(content.contains('android.permission.FOREGROUND_SERVICE_DATA_SYNC'), isTrue);
-      expect(content.contains('android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS'), isTrue);
+      expect(content.contains('android.permission.RECEIVE_BOOT_COMPLETED'),
+          isTrue);
+      expect(
+          content.contains('android.permission.FOREGROUND_SERVICE_DATA_SYNC'),
+          isTrue);
+      expect(
+          content.contains(
+              'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS'),
+          isTrue);
       expect(content.contains('.BootReceiver'), isTrue);
       expect(content.contains('android.intent.action.BOOT_COMPLETED'), isTrue);
     });
@@ -25,10 +32,15 @@ void main() {
       expect(gradleFile.existsSync(), isTrue);
 
       final content = gradleFile.readAsStringSync();
-      expect(content.contains('compileSdk = 36') || content.contains('compileSdk = 37'), isTrue);
+      expect(
+          content.contains('compileSdk = 36') ||
+              content.contains('compileSdk = 37'),
+          isTrue);
     });
 
-    test('iOS: Info.plist ATS contains accurate justification without pinned TLS claim', () {
+    test(
+        'iOS: Info.plist ATS contains accurate justification without pinned TLS claim',
+        () {
       final infoPlist = File('ios/Runner/Info.plist');
       expect(infoPlist.existsSync(), isTrue);
 

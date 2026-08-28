@@ -58,6 +58,14 @@ class FFmpegMuxService {
     if (mockMergeHandler != null) {
       return await mockMergeHandler!(videoPath, audioPath, outputPath);
     }
+    final vFile = File(videoPath);
+    final aFile = File(audioPath);
+    if (!await vFile.exists() || !await aFile.exists()) {
+      _log.severe(
+        '[FFmpegMuxService] Missing input file: videoExists=${await vFile.exists()}, audioExists=${await aFile.exists()}',
+      );
+      return false;
+    }
     await _mergeSemaphore.acquire();
     var wakelockAcquired = false;
     final sessionHolder = _SessionHolder();
@@ -100,6 +108,11 @@ class FFmpegMuxService {
             LoggingService.logger('FfmpegMuxService')
                 .warning('Operation failed', e, st);
           }
+          // FIX P1-17: Delete orphan *.part on timeout — previously leaked.
+          try {
+            final tmp = File('$outputPath.part');
+            if (tmp.existsSync()) tmp.deleteSync();
+          } catch (_) {}
           return false;
         },
       );
@@ -375,6 +388,17 @@ class FFmpegMuxService {
     final outputDir = File(outputPath).parent;
     if (!await outputDir.exists()) {
       await outputDir.create(recursive: true);
+    }
+
+    // Clean up orphan .part files from previous failed merges in the same output directory
+    try {
+      final partFile = File('$outputPath.part');
+      if (await partFile.exists()) {
+        await partFile.delete();
+        _log.info('Cleaned up orphan merge temp file: ${partFile.path}');
+      }
+    } catch (e) {
+      _log.fine('Failed to clean orphan .part file: $e');
     }
 
     final requiredSpace = videoSize + audioSize;

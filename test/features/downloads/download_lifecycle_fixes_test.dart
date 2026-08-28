@@ -37,8 +37,7 @@ void main() {
           CycleState.updatingLinks);
       expect(CycleState.fromLibtorrent('merging'), CycleState.merging);
       expect(CycleState.fromLibtorrent('starting'), CycleState.starting);
-      expect(
-          CycleState.fromLibtorrent('unknown_state'), CycleState.stalled);
+      expect(CycleState.fromLibtorrent('unknown_state'), CycleState.stalled);
 
       // Verify CycleStateResolver
       expect(CycleStateResolver.resolve(statusMessage: 'allocating'),

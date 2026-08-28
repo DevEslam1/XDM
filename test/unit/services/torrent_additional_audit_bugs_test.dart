@@ -72,8 +72,7 @@ void main() {
       expect(perTask, equals(409));
     });
 
-    test(
-        'Bug 2 & 4: resumeBlobFor returns cached data after loadResumeData',
+    test('Bug 2 & 4: resumeBlobFor returns cached data after loadResumeData',
         () {
       final sampleData = Uint8List.fromList([0x64, 0x31, 0x30, 0x65]);
       TorrentService.loadResumeData(999, sampleData);

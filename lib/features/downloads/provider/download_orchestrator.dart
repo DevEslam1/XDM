@@ -161,7 +161,8 @@ class DownloadOrchestrator {
     final isBg = PowerMonitor.screenOff ||
         !DownloadEngine.appInForeground ||
         DownloadEngine.isInBackground;
-    final interval = isBg ? const Duration(seconds: 60) : const Duration(seconds: 30);
+    final interval =
+        isBg ? const Duration(seconds: 60) : const Duration(seconds: 30);
     _periodicResumeSaveTimer = Timer.periodic(
       interval,
       (_) {
@@ -1063,14 +1064,17 @@ class DownloadOrchestrator {
 
       // STEP 2: Write merge checkpoint
       try {
-        final mergeCheckpointFile = File('${current.tempFilePath}.merge_checkpoint');
-        await mergeCheckpointFile.writeAsString(jsonEncode({
-          'taskId': taskId,
-          'video': actualVideoPath,
-          'audio': actualAudioPath,
-          'merged': mergedPath,
-          'timestamp': DateTime.now().millisecondsSinceEpoch,
-        }), flush: true);
+        final mergeCheckpointFile =
+            File('${current.tempFilePath}.merge_checkpoint');
+        await mergeCheckpointFile.writeAsString(
+            jsonEncode({
+              'taskId': taskId,
+              'video': actualVideoPath,
+              'audio': actualAudioPath,
+              'merged': mergedPath,
+              'timestamp': DateTime.now().millisecondsSinceEpoch,
+            }),
+            flush: true);
       } catch (e) {
         debugPrint('[DMX] Write merge checkpoint failed: $e');
       }
@@ -1540,7 +1544,8 @@ class DownloadOrchestrator {
     if (!current.isTorrent) {
       final file = File(current.localFilePath);
       if (!await file.exists()) {
-        debugPrint('[CompletionGate] Final file missing at ${current.localFilePath}');
+        debugPrint(
+            '[CompletionGate] Final file missing at ${current.localFilePath}');
         await _host.setTaskState(
           current.copyWith(
             status: DownloadStatus.failed,
@@ -1668,6 +1673,17 @@ class DownloadOrchestrator {
     );
 
     _sessionCachedTotalSize.remove(taskId);
+
+    // H1: the DB has now committed `completed`, so the durable `.dmxdone`
+    // completion marker written by the worker's _finalize has served its
+    // crash-recovery purpose. Delete it best-effort so markers don't
+    // accumulate across a long session (startup reconcile is the fallback).
+    if (!current.isTorrent && current.tempFilePath.isNotEmpty) {
+      try {
+        final doneMarker = File('${current.tempFilePath}.dmxdone');
+        if (await doneMarker.exists()) await doneMarker.delete();
+      } catch (_) {}
+    }
 
     // FIX-M6: Cleanup orphan audio sidecars after successful merge
     if (current.hasMergedAudio && current.tempFilePath.isNotEmpty) {
@@ -2670,6 +2686,9 @@ class DownloadOrchestrator {
                 torrentId: torrentId,
                 cookies: cookieString,
                 oauthToken: YoutubeService.oauthToken,
+                authUsername: task.authUsername,
+                authPassword: task.authPassword,
+                customHeaders: task.customHeaders,
                 adaptiveThreads: _host.providerSettingsProvider.adaptiveThreads,
                 speedLimitKbps: task.speedLimitKbps,
                 ytStreamKind: YtStreamKind.video,
@@ -2970,6 +2989,9 @@ class DownloadOrchestrator {
                     cancelToken: videoCancelToken,
                     cookies: cookieString,
                     oauthToken: YoutubeService.oauthToken,
+                    authUsername: task.authUsername,
+                    authPassword: task.authPassword,
+                    customHeaders: task.customHeaders,
                     adaptiveThreads:
                         _host.providerSettingsProvider.adaptiveThreads,
                     speedLimitKbps: task.speedLimitKbps,
@@ -3144,7 +3166,8 @@ class DownloadOrchestrator {
             // FIX-YT-1: Set merging status before merge in normal download path
             DownloadStateMachine(
               taskId: preMergeCheck.id,
-              initialState: DownloadStateMachine.fromStatus(preMergeCheck.status),
+              initialState:
+                  DownloadStateMachine.fromStatus(preMergeCheck.status),
             ).transition(DomainDownloadState.merging);
             final mergeOk = await _mergeAudioVideo(task.id, effectiveAudioPath,
                 notificationId: notificationId);
@@ -3482,6 +3505,29 @@ class DownloadOrchestrator {
         return;
       }
 
+      if (_host.providerSettingsProvider.pauseOnCellular &&
+          _host.networkMonitor.isCellular) {
+        _host.networkMonitor.markWifiWaiting(task.id);
+        await _host.setTaskState(
+          task.copyWith(
+            status: DownloadStatus.paused,
+            errorMessage: DownloadStatusMessages.waitingWifi,
+          ),
+        );
+        return;
+      }
+
+      if (_host.providerSettingsProvider.downloadOnlyWhileCharging &&
+          !PowerMonitor.isCharging) {
+        await _host.setTaskState(
+          task.copyWith(
+            status: DownloadStatus.paused,
+            errorMessage: DownloadStatusMessages.waitingCharging,
+          ),
+        );
+        return;
+      }
+
       if (_host.downloadingTasksCount == 0) {
         BackgroundService.start();
         // Prompt for battery optimization exemption once per app install
@@ -3745,8 +3791,7 @@ class DownloadOrchestrator {
                             0, (s, f) => s + (f['length'] as int));
                     task = task.copyWith(
                       fileName: meta['name'] as String? ?? task.fileName,
-                      fileSize:
-                          resolvedSize > 0 ? resolvedSize : task.fileSize,
+                      fileSize: resolvedSize > 0 ? resolvedSize : task.fileSize,
                       torrentFiles: resolvedFiles.isNotEmpty
                           ? resolvedFiles
                           : task.torrentFiles,
@@ -4776,6 +4821,8 @@ class DownloadOrchestrator {
     final List<File> sidecars = [
       File('${task.tempFilePath}.journal'), // always safe to delete
       File('${task.tempFilePath}.audio.journal'), // M1: always safe to delete
+      File(
+          '${task.tempFilePath}.dmxdone'), // H1: completion marker, safe to delete
     ];
 
     if (!preserveParts) {

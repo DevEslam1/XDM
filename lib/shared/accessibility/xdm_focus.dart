@@ -45,16 +45,24 @@ class _XdmFocusState extends State<XdmFocus> {
     return Focus(
       focusNode: _focusNode,
       onFocusChange: (hasFocus) => setState(() => _focused = hasFocus),
-      child: AnimatedContainer(
-        duration: duration,
-        padding: widget.padding,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(widget.borderRadius),
-          border: _focused
-              ? Border.all(color: ringColor, width: 2)
-              : Border.all(color: Colors.transparent, width: 2),
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: () {
+          if (!_focusNode.hasFocus) {
+            _focusNode.requestFocus();
+          }
+        },
+        child: AnimatedContainer(
+          duration: duration,
+          padding: widget.padding,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(widget.borderRadius),
+            border: _focused
+                ? Border.all(color: ringColor, width: 2)
+                : Border.all(color: Colors.transparent, width: 2),
+          ),
+          child: widget.child,
         ),
-        child: widget.child,
       ),
     );
   }

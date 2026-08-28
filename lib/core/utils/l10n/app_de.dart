@@ -615,4 +615,45 @@ const Map<String, String> deTranslations = {
   'torrent_meta_retry': 'Metadaten erneut abrufen',
   'torrent_peers_label': 'Peers',
   'torrent_dht_nodes': 'DHT-Knoten',
+  // Abonnement (Sub Club)
+  'subscription_title': 'Abonnement',
+  'subscription_subtitle': 'Schalten Sie das volle XDM-Erlebnis frei',
+  'subscription_free_tier': 'Kostenloser Plan',
+  'subscription_free_description':
+      'Eingeschränkte Funktionen — upgraden Sie für vollen Zugang',
+  'subscription_premium': 'Premium',
+  'subscription_premium_feature': 'Premium-Funktion',
+  'subscription_upgrade_to_unlock':
+      'Upgraden Sie auf Premium um diese Funktion freizuschalten',
+  'subscription_upgrade_now': 'Jetzt Upgraden',
+  'subscription_view_plans': 'Pläne Ansehen',
+  'subscription_choose_plan': 'Wählen Sie Ihren Plan',
+  'subscription_subscribe': 'Abonnieren',
+  'subscription_subscribe_now': 'Jetzt Abonnieren',
+  'subscription_manage': 'Verwalten',
+  'subscription_manage_description':
+      'Verwalten Sie Ihr Abonnement im App Store oder Play Store.',
+  'subscription_restore': 'Käufe Wiederherstellen',
+  'subscription_restore_success': 'Käufe erfolgreich wiederhergestellt',
+  'subscription_restore_failed': 'Keine Käufe zum Wiederherstellen gefunden',
+  'subscription_status_active': 'Premium Aktiv',
+  'subscription_status_expired': 'Abonnement Abgelaufen',
+  'subscription_expires': 'Läuft ab',
+  'subscription_grace_period':
+      'Ihre Downloads laufen bis zum Ende der Karenzzeit weiter.',
+  'subscription_free_limit':
+      'Der kostenlose Plan erlaubt bis zu {0} gleichzeitige Downloads',
+  'subscription_max_downloads_reached': 'Download-Limit Erreicht',
+  'subscription_compare_plans': 'Pläne Vergleichen',
+  'subscription_feature': 'Funktion',
+  'subscription_free': 'Kostenlos',
+  'subscription_go_premium': 'Premium Höchste Stufe',
+  'subscription_paywall_subtitle':
+      'Schalten Sie unbegrenzte Downloads, Torrent-Unterstützung und mehr frei',
+  'subscription_unlock_feature': 'Diese Funktion Freischalten',
+  'subscription_terms':
+      'Das Abonnement verlängert sich automatisch, sofern es nicht mindestens 24 Stunden vor Ablauf der aktuellen Periode gekündigt wird.',
+  'subscription_welcome_premium':
+      'Willkommen bei Premium! Genießen Sie unbegrenzte Downloads.',
+  'maybe_later': 'Später',
 };

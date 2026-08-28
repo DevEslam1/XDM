@@ -22,7 +22,8 @@ class ScriptableHttpServer {
 
   int get port => _server?.port ?? 0;
   String get baseUrl => 'http://127.0.0.1:$port';
-  String urlFor(String path) => '$baseUrl${path.startsWith('/') ? path : '/$path'}';
+  String urlFor(String path) =>
+      '$baseUrl${path.startsWith('/') ? path : '/$path'}';
 
   Uint8List get payload => _payload;
   String get etag => _etag;
@@ -42,7 +43,8 @@ class ScriptableHttpServer {
   }
 
   /// Set the payload to serve
-  void setPayload(Uint8List bytes, {String etag = '"v1"', String? lastModified}) {
+  void setPayload(Uint8List bytes,
+      {String etag = '"v1"', String? lastModified}) {
     _payload = bytes;
     _etag = etag;
     if (lastModified != null) _lastModified = lastModified;
@@ -95,9 +97,14 @@ class ScriptableHttpServer {
       method: request.method,
       uri: request.uri,
       headers: Map.fromEntries(
-        request.headers.toString().split('\n').where((s) => s.contains(':')).map((s) {
+        request.headers
+            .toString()
+            .split('\n')
+            .where((s) => s.contains(':'))
+            .map((s) {
           final idx = s.indexOf(':');
-          return MapEntry(s.substring(0, idx).trim().toLowerCase(), s.substring(idx + 1).trim());
+          return MapEntry(s.substring(0, idx).trim().toLowerCase(),
+              s.substring(idx + 1).trim());
         }),
       ),
       rangeHeader: rangeHeader,
@@ -108,9 +115,12 @@ class ScriptableHttpServer {
     if (_redirectIndex < _redirectChain.length) {
       final statusCode = _redirectChain[_redirectIndex++];
       final isLastRedirect = _redirectIndex >= _redirectChain.length;
-      final targetPath = isLastRedirect ? (_redirectFinalPath ?? '/file.bin') : '/redirect_$_redirectIndex';
+      final targetPath = isLastRedirect
+          ? (_redirectFinalPath ?? '/file.bin')
+          : '/redirect_$_redirectIndex';
       request.response.statusCode = statusCode;
-      request.response.headers.set(HttpHeaders.locationHeader, urlFor(targetPath));
+      request.response.headers
+          .set(HttpHeaders.locationHeader, urlFor(targetPath));
       await request.response.close();
       return;
     }
@@ -118,7 +128,8 @@ class ScriptableHttpServer {
     // Handle 416
     if (_return416) {
       request.response.statusCode = HttpStatus.requestedRangeNotSatisfiable;
-      request.response.headers.set('Content-Range', 'bytes */${_payload.length}');
+      request.response.headers
+          .set('Content-Range', 'bytes */${_payload.length}');
       await request.response.close();
       return;
     }
@@ -130,7 +141,11 @@ class ScriptableHttpServer {
     }
 
     // Handle Range Requests
-    if (_supportRanges && !_ignoreRanges && !ifRangeMismatch && rangeHeader != null && rangeHeader.startsWith('bytes=')) {
+    if (_supportRanges &&
+        !_ignoreRanges &&
+        !ifRangeMismatch &&
+        rangeHeader != null &&
+        rangeHeader.startsWith('bytes=')) {
       final match = RegExp(r'bytes=(\d+)-(\d*)').firstMatch(rangeHeader);
       if (match != null) {
         final start = int.parse(match.group(1)!);
@@ -141,7 +156,8 @@ class ScriptableHttpServer {
 
         if (start >= _payload.length) {
           request.response.statusCode = HttpStatus.requestedRangeNotSatisfiable;
-          request.response.headers.set('Content-Range', 'bytes */${_payload.length}');
+          request.response.headers
+              .set('Content-Range', 'bytes */${_payload.length}');
           await request.response.close();
           return;
         }
@@ -151,7 +167,8 @@ class ScriptableHttpServer {
         request.response.headers.set('ETag', _etag);
         request.response.headers.set('Last-Modified', _lastModified);
         request.response.headers.set('Accept-Ranges', 'bytes');
-        request.response.headers.set('Content-Range', 'bytes $start-$end/${_payload.length}');
+        request.response.headers
+            .set('Content-Range', 'bytes $start-$end/${_payload.length}');
         request.response.headers.set('Content-Length', slice.length.toString());
 
         await _sendBodyWithFaultInjection(request, slice);
@@ -163,19 +180,23 @@ class ScriptableHttpServer {
     request.response.statusCode = HttpStatus.ok;
     request.response.headers.set('ETag', _etag);
     request.response.headers.set('Last-Modified', _lastModified);
-    request.response.headers.set('Accept-Ranges', _supportRanges ? 'bytes' : 'none');
+    request.response.headers
+        .set('Accept-Ranges', _supportRanges ? 'bytes' : 'none');
     request.response.headers.set('Content-Length', _payload.length.toString());
 
     await _sendBodyWithFaultInjection(request, _payload);
   }
 
-  Future<void> _sendBodyWithFaultInjection(HttpRequest request, Uint8List data) async {
+  Future<void> _sendBodyWithFaultInjection(
+      HttpRequest request, Uint8List data) async {
     var sent = 0;
     while (sent < data.length) {
-      final chunkEnd = (sent + _chunkSize < data.length) ? sent + _chunkSize : data.length;
+      final chunkEnd =
+          (sent + _chunkSize < data.length) ? sent + _chunkSize : data.length;
       final chunk = data.sublist(sent, chunkEnd);
 
-      if (_dropAfterBytes != null && (sent + chunk.length) >= _dropAfterBytes!) {
+      if (_dropAfterBytes != null &&
+          (sent + chunk.length) >= _dropAfterBytes!) {
         // Send partial chunk up to drop threshold then simulate socket reset
         final sendable = _dropAfterBytes! - sent;
         if (sendable > 0) {
@@ -183,7 +204,8 @@ class ScriptableHttpServer {
           await request.response.flush().catchError((_) {});
         }
         _dropAfterBytes = null; // Drop only once
-        request.response.addError(const SocketException('Connection reset by peer'));
+        request.response
+            .addError(const SocketException('Connection reset by peer'));
         try {
           await request.response.close();
         } catch (_) {}

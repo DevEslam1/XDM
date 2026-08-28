@@ -45,9 +45,8 @@ class BackgroundService {
   static Timer? _wakeLockRenewalTimer;
   static Timer? _wakeLockSafetyTimer;
   static Timer? _heartbeatTimer;
-  static Duration get _maxWakeLockHold => Platform.isIOS
-      ? const Duration(seconds: 30)
-      : const Duration(minutes: 9);
+  static Duration get _maxWakeLockHold =>
+      Platform.isIOS ? const Duration(seconds: 30) : const Duration(minutes: 9);
   static DateTime? _lastHeartbeatTime;
   static final Lock _activeLock = Lock();
   static final Set<String> _activeTaskIds = <String>{};
@@ -178,7 +177,7 @@ class BackgroundService {
         }
       }
     } catch (e, st) {
-      _log.fine('Failed to load iOS background cooldown', e, st);
+      _log.warning('Failed to load iOS background cooldown', e, st);
     }
     if (!isSupported) return;
     if (Platform.isIOS) {
@@ -207,6 +206,7 @@ class BackgroundService {
   static StreamSubscription<Map<String, dynamic>?>? onStartStopSub;
   static StreamSubscription<Map<String, dynamic>?>? onStartUpdateSub;
   static StreamSubscription<Map<String, dynamic>?>? onStartHeartbeatSub;
+  static StreamSubscription<Map<String, dynamic>?>? onStartTimeoutSub;
 
   @visibleForTesting
   static StreamSubscription<Map<String, dynamic>?>?
@@ -220,6 +220,10 @@ class BackgroundService {
   static StreamSubscription<Map<String, dynamic>?>?
       get onStartHeartbeatSubForTesting => onStartHeartbeatSub;
 
+  @visibleForTesting
+  static StreamSubscription<Map<String, dynamic>?>?
+      get onStartTimeoutSubForTesting => onStartTimeoutSub;
+
   @pragma('vm:entry-point')
   static void _onStart(ServiceInstance service) {
     bool isStopped = false;
@@ -229,9 +233,11 @@ class BackgroundService {
       onStartStopSub?.cancel();
       onStartUpdateSub?.cancel();
       onStartHeartbeatSub?.cancel();
+      onStartTimeoutSub?.cancel();
       onStartStopSub = null;
       onStartUpdateSub = null;
       onStartHeartbeatSub = null;
+      onStartTimeoutSub = null;
     }
 
     onStartStopSub = service.on('stopService').listen(
@@ -246,6 +252,27 @@ class BackgroundService {
           cancelOnError: false,
           onError: (e) {
             _log.warning('stopService stream error', e);
+          },
+          onDone: () {
+            _log.info('stopService stream closed');
+            cancelAll();
+          },
+        );
+
+    onStartTimeoutSub = service.on('onFgsTimeout').listen(
+          (_) async {
+            try {
+              _log.warning('FGS timeout event received from system.');
+              await handleFgsTimeout();
+              cancelAll();
+              service.stopSelf();
+            } catch (e) {
+              _log.warning('onFgsTimeout handling error', e);
+            }
+          },
+          cancelOnError: false,
+          onError: (e) {
+            _log.warning('onFgsTimeout stream error', e);
           },
         );
 
@@ -279,6 +306,31 @@ class BackgroundService {
             _log.warning('heartbeat stream error', e);
           },
         );
+  }
+
+  /// Handles Android 15 Foreground Service dataSync 6-hour timeout gracefully:
+  /// 1. Gracefully pauses active transfers.
+  /// 2. Flushes WAL and syncs download journals to disk.
+  /// 3. Schedules WorkManager expedited resumption.
+  /// 4. Notifies user about background limit and automatic resumption.
+  static Future<void> handleFgsTimeout({
+    Future<void> Function()? onPauseActiveTasks,
+    NotificationService? notificationService,
+  }) async {
+    _log.warning(
+        'Android 15 FGS 6-hour timeout reached. Commencing graceful timeout shutdown.');
+    try {
+      if (onPauseActiveTasks != null) {
+        await onPauseActiveTasks();
+      }
+      await DownloadJournal.flushAllActive();
+      BackgroundScheduler.instance
+          .scheduleBackgroundSync(delay: const Duration(minutes: 15));
+      final notifier = notificationService ?? NotificationService();
+      await notifier.showTimeoutNotice();
+    } catch (e, st) {
+      _log.warning('Error handling FGS timeout', e, st);
+    }
   }
 
   static bool _iosBgCallInFlight = false;
@@ -383,10 +435,10 @@ class BackgroundService {
     final result = Completer<bool>();
 
     _iosBgWatchdogTimer?.cancel();
-    _iosBgWatchdogTimer = Timer(const Duration(seconds: 25), () async {
+    _iosBgWatchdogTimer = Timer(const Duration(seconds: 20), () async {
       if (!result.isCompleted) {
         _log.warning(
-            '[iOS BG Watchdog] iOS background call wedged for 25s; force-resetting and allowing next schedule.');
+            '[iOS BG Watchdog] iOS background call wedged for 20s; force-resetting and allowing next schedule.');
         try {
           DownloadEngine.markBackground();
           await Future.wait([
@@ -399,6 +451,7 @@ class BackgroundService {
               e,
               st);
         }
+        _iosBgCallInFlight = false;
         result.complete(false);
       }
     });
@@ -504,6 +557,7 @@ class BackgroundService {
       _handleDataSyncTimeout();
 
   static Future<void> _handleDataSyncTimeout() async {
+    if (_activeTaskIds.isEmpty) return;
     _log.warning(
       'Android 15 dataSync 6-hour foreground service timeout reached. '
       'Flushing state, checkpointing journals, and scheduling background retry.',
@@ -517,14 +571,16 @@ class BackgroundService {
       try {
         await DownloadJournal.flushAllActive();
       } catch (e, st) {
-        _log.warning('Failed to flush active download journals on timeout', e, st);
+        _log.warning(
+            'Failed to flush active download journals on timeout', e, st);
       }
 
       // 2b. Synchronously flush database saves
       try {
-        DatabaseService.instance.flushPendingSavesSync();
+        await DatabaseService.instance.flushPendingSavesSync();
       } catch (e, st) {
-        _log.warning('Failed to synchronously flush pending saves on timeout', e, st);
+        _log.warning(
+            'Failed to synchronously flush pending saves on timeout', e, st);
       }
 
       // 2c & 2d. For each active HTTP task: save TransferState; For torrents: save resume data
@@ -569,8 +625,7 @@ class BackgroundService {
           ));
         }
       } catch (e) {
-        _log.warning(
-            'Failed to checkpoint active tasks on timeout: $e');
+        _log.warning('Failed to checkpoint active tasks on timeout: $e');
       }
 
       try {
@@ -663,7 +718,8 @@ class BackgroundService {
     if (!force) {
       final activeCount = await _checkActiveDownloadCount();
       if (activeCount > 0) {
-        _log.info('Not stopping: downloads still active ($activeCount running)');
+        _log.info(
+            'Not stopping: downloads still active ($activeCount running)');
         return;
       }
     }
@@ -697,8 +753,8 @@ class BackgroundService {
     _log.info('Background service fully stopped');
   }
 
-  void dispose() {
-    stop();
+  Future<void> dispose() async {
+    await stop();
   }
 
   static Future<void> updateNotification({
@@ -736,7 +792,8 @@ class BackgroundService {
     }
     // Battery gate: if battery is <20% and not charging, do not hold wake lock to avoid rapid battery drain
     try {
-      if (PowerMonitor.batterySaverMode == BatterySaverMode.aggressive) {
+      final mode = PowerMonitor.batterySaverMode;
+      if (mode == BatterySaverMode.aggressive) {
         _log.fine('Wake lock skipped due to aggressive battery saver mode');
         return;
       }

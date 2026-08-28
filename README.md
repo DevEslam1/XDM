@@ -11,6 +11,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/DevEslam1/XDM/actions/workflows/ci.yml"><img src="https://github.com/DevEslam1/XDM/actions/workflows/ci.yml/badge.svg" alt="CI Production Gate" /></a>
   <a href="https://deveslam1.github.io/XDM/"><img src="https://img.shields.io/badge/Website-Live_Landing_Page-00C4CC?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Live Website" /></a>
   <a href="https://github.com/DevEslam1/XDM/releases/latest"><img src="https://img.shields.io/badge/Android_Release-v3.0.0_Stable-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android Release" /></a>
   <a href="https://github.com/DevEslam1/XDM/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-3B82F6?style=for-the-badge&logo=opensourceinitiative&logoColor=white" alt="MIT License" /></a>

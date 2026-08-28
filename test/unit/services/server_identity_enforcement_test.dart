@@ -53,7 +53,8 @@ void main() {
       expect(result.mismatchReason, contains('Remote content length changed'));
     });
 
-    test('Detects changed ETag and rejects resume (handles weak ETag prefix)', () {
+    test('Detects changed ETag and rejects resume (handles weak ETag prefix)',
+        () {
       final initial = ResumeIdentity.fromHeaders(
         url: 'https://cdn.example.com/patch.bin',
         headers: const {

@@ -17,28 +17,33 @@ class HtmlSanitizer {
   );
 
   static final RegExp _inlineEventHandlerRegex = RegExp(
-    r'''\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)''',
+    // FIX(P1.6): allow `/` as attribute separator (HTML permits `<div/onclick=...>`)
+    r'''[\s/]on\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)''',
     caseSensitive: false,
   );
 
   static final RegExp _inlineStyleRegex = RegExp(
-    r'''\sstyle\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)''',
+    // FIX(P1.6): same `/` separator allowance for style attributes
+    r'''[\s/]style\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)''',
     caseSensitive: false,
   );
 
   static final RegExp _javascriptDataLinkRegex = RegExp(
-    r'<\s*a\s+[^>]*href\s*=\s*"?\s*(javascript|data)\s*:',
+    // FIX(P1.6): also block vbscript: scheme
+    r'<\s*a\s+[^>]*href\s*=\s*"?\s*(javascript|vbscript|data)\s*:',
     caseSensitive: false,
     dotAll: true,
   );
 
   static final RegExp _hrefJavascriptRegex = RegExp(
-    r'href\s*=\s*"?\s*javascript\s*:[^" >]*',
+    // FIX(P1.6): also block vbscript: scheme
+    r'href\s*=\s*"?\s*(javascript|vbscript)\s*:[^" >]*',
     caseSensitive: false,
   );
 
   static final RegExp _srcJavascriptRegex = RegExp(
-    r'src\s*=\s*"?\s*(javascript|data:text/html)\s*:[^" >]*',
+    // FIX(P1.6): also block vbscript: scheme
+    r'src\s*=\s*"?\s*(javascript|vbscript|data:text/html)\s*:[^" >]*',
     caseSensitive: false,
   );
 
@@ -52,6 +57,9 @@ class HtmlSanitizer {
     if (htmlText.isEmpty) return '';
 
     var result = htmlText;
+    // FIX(P1.6): Decode numeric HTML entities before pattern matching so
+    // &#106;avascript: (j) and similar obfuscation is caught.
+    result = _decodeNumericEntities(result);
     // Multi-pass tag removal to prevent evasion via nesting (e.g., <scr<script>ipt>)
     for (var pass = 0; pass < 2; pass++) {
       result = result
@@ -68,6 +76,21 @@ class HtmlSanitizer {
         .replaceAll(_imgOnErrorRegex, '');
 
     return result;
+  }
+
+  /// Decode numeric character references (decimal &#nnn; and hex &#xhhh;).
+  static String _decodeNumericEntities(String input) {
+    return input.replaceAllMapped(RegExp(r'&#(\d+);'), (match) {
+      final code = int.tryParse(match.group(1) ?? '') ?? 0;
+      return code > 0 && code < 0x110000
+          ? String.fromCharCode(code)
+          : match.group(0)!;
+    }).replaceAllMapped(RegExp(r'&#x([0-9a-fA-F]+);'), (match) {
+      final code = int.tryParse(match.group(1) ?? '', radix: 16) ?? 0;
+      return code > 0 && code < 0x110000
+          ? String.fromCharCode(code)
+          : match.group(0)!;
+    });
   }
 
   /// Asynchronous sanitization offloaded to a background isolate via [compute].

@@ -471,9 +471,7 @@ class _HomeScreenState extends State<HomeScreen>
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  isRtl
-                      ? 'تتوقف التنزيلات عند وضع التطبيق في الخلفية.'
-                      : 'Downloads pause when the app is in the background.',
+                  L10n.of(context, 'ios_background_banner'),
                   style: TextStyle(fontSize: 12.5, color: textClr),
                 ),
               ),
@@ -1742,7 +1740,9 @@ class _DownloadTaskList extends StatelessWidget {
                             prev.errorMessage != next.errorMessage ||
                             prev.statusMessage != next.statusMessage ||
                             prev.fileSize != next.fileSize ||
-                            (prev.downloadedBytes - next.downloadedBytes).abs() > 65536;
+                            (prev.downloadedBytes - next.downloadedBytes)
+                                    .abs() >
+                                65536;
                       },
                       builder: (_, liveTask, __) {
                         final effectiveTask = liveTask ?? item.task!;
@@ -1830,7 +1830,9 @@ class _DownloadTaskList extends StatelessWidget {
                               prev.errorMessage != next.errorMessage ||
                               prev.statusMessage != next.statusMessage ||
                               prev.fileSize != next.fileSize ||
-                              (prev.downloadedBytes - next.downloadedBytes).abs() > 65536;
+                              (prev.downloadedBytes - next.downloadedBytes)
+                                      .abs() >
+                                  65536;
                         },
                         builder: (_, liveTask, __) {
                           final effectiveTask = liveTask ?? item.task!;
@@ -1898,7 +1900,9 @@ class _DownloadTaskList extends StatelessWidget {
                               prev.errorMessage != next.errorMessage ||
                               prev.statusMessage != next.statusMessage ||
                               prev.fileSize != next.fileSize ||
-                              (prev.downloadedBytes - next.downloadedBytes).abs() > 65536;
+                              (prev.downloadedBytes - next.downloadedBytes)
+                                      .abs() >
+                                  65536;
                         },
                         builder: (_, liveTask, __) {
                           final effectiveTask = liveTask ?? item.task!;
@@ -1932,7 +1936,8 @@ class _DownloadTaskList extends StatelessWidget {
                   child: LinearProgressIndicator(
                     value: null,
                     backgroundColor: Colors.transparent,
-                    valueColor: AlwaysStoppedAnimation<Color>(AppTheme.neonGreen),
+                    valueColor:
+                        AlwaysStoppedAnimation<Color>(AppTheme.neonGreen),
                   ),
                 ),
                 Expanded(child: contentWidget),

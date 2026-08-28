@@ -96,7 +96,8 @@ class TabManager extends ChangeNotifier {
   void switchToTab(int index) {
     if (index < 0 || index >= _tabs.length || index == _currentIndex) return;
     final oldTab = activeTab;
-    if (oldTab != null) {
+    // FIX P0-10: Don't leak incognito tab order via _tabIdHistory persistence
+    if (oldTab != null && !oldTab.isIncognito) {
       if (_tabIdHistory.isEmpty || _tabIdHistory.last != oldTab.id) {
         _tabIdHistory.add(oldTab.id);
         if (_tabIdHistory.length > 50) {
@@ -131,6 +132,12 @@ class TabManager extends ChangeNotifier {
         } catch (e, st) {
           LoggingService.logger('TabManager')
               .warning('Operation failed', e, st);
+        }
+        try {
+          tab.pullToRefreshController?.dispose();
+        } catch (e, st) {
+          LoggingService.logger('TabManager')
+              .warning('PullToRefresh dispose failed', e, st);
         }
         tab.controller = null;
         tab.pullToRefreshController = null;
@@ -204,7 +211,7 @@ class TabManager extends ChangeNotifier {
     // 4. Update current index if switching or keep focus on active tab
     if (switchToTab) {
       final oldActive = activeTab;
-      if (oldActive != null) {
+      if (oldActive != null && !oldActive.isIncognito && !newTab.isIncognito) {
         if (_tabIdHistory.isEmpty || _tabIdHistory.last != oldActive.id) {
           _tabIdHistory.add(oldActive.id);
           if (_tabIdHistory.length > 50) {
@@ -227,7 +234,10 @@ class TabManager extends ChangeNotifier {
     _tabs.add(tab);
     if (switchToTab) {
       final oldActive = activeTab;
-      if (oldActive != null && oldActive.id != tab.id) {
+      if (oldActive != null &&
+          oldActive.id != tab.id &&
+          !oldActive.isIncognito &&
+          !tab.isIncognito) {
         if (_tabIdHistory.isEmpty || _tabIdHistory.last != oldActive.id) {
           _tabIdHistory.add(oldActive.id);
           if (_tabIdHistory.length > 50) {
@@ -251,11 +261,18 @@ class TabManager extends ChangeNotifier {
     final isClosingActive = targetIndex == _currentIndex;
     final closingTab = _tabs[targetIndex];
 
-    // Dispose WebView controller BEFORE removing from list (PERF-6)
+    // Dispose WebView controllers BEFORE removing from list (PERF-6)
+    // FIX P0-10: Dispose both controller and PullToRefreshController.
     try {
       closingTab.controller?.dispose();
     } catch (e, st) {
       LoggingService.logger('TabManager').warning('Operation failed', e, st);
+    }
+    try {
+      closingTab.pullToRefreshController?.dispose();
+    } catch (e, st) {
+      LoggingService.logger('TabManager')
+          .warning('PullToRefresh dispose failed', e, st);
     }
     closingTab.controller = null;
     closingTab.pullToRefreshController = null;

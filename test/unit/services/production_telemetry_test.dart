@@ -15,7 +15,9 @@ void main() {
   });
 
   group('Task 7: Production Telemetry Suite', () {
-    test('Opt-in requirement: ignores metric recording when optInEnabled is false', () {
+    test(
+        'Opt-in requirement: ignores metric recording when optInEnabled is false',
+        () {
       ProductionTelemetryService.optInEnabled = false;
 
       telemetry.recordTaskCreated();
@@ -29,7 +31,9 @@ void main() {
       expect(report['journalRecoveryCount'], equals(0));
     });
 
-    test('Aggregates failure and mismatch rates accurately when optInEnabled is true', () {
+    test(
+        'Aggregates failure and mismatch rates accurately when optInEnabled is true',
+        () {
       ProductionTelemetryService.optInEnabled = true;
 
       // 10 tasks created, 2 failed
@@ -61,7 +65,9 @@ void main() {
       expect(report['jankRatio'], equals(0.015));
     });
 
-    test('Guarantees 100% PII-free reports (no URLs, filepaths, secrets, or tokens)', () {
+    test(
+        'Guarantees 100% PII-free reports (no URLs, filepaths, secrets, or tokens)',
+        () {
       ProductionTelemetryService.optInEnabled = true;
 
       telemetry.recordTaskCreated();

@@ -96,8 +96,10 @@ class RetryEngine {
           onFinalFailure?.call(e);
           rethrow;
         }
-        attempt++;
+        // FIX P1-9: Delay for attempt 0 should be baseDelay (3s), not base*2.
+        // Previously attempt++ before getDelay gave 6s on first retry (2x).
         final delay = getDelayForAttempt(attempt);
+        attempt++;
         onRetry?.call(e, attempt, delay);
         await _delayWithCancellation(delay, cancelToken);
       }

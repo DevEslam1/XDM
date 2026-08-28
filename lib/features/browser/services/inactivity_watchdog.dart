@@ -18,21 +18,67 @@ class InactivityWatchdog {
 
   bool get isHibernating => _isHibernating;
 
+  // FIX: Persist the last onTimeout + re-arm flag when resetTimer is called
+  // with isMounted == false so we can re-schedule on resume instead of
+  // permanently disarming.
+  VoidCallback? _pendingOnTimeout;
+  bool _needsRearm = false;
+
+  bool get needsRearm => _needsRearm;
+
   /// Resets the 5-minute inactivity timer.
   void resetTimer({
     required bool isMounted,
     required VoidCallback onTimeout,
   }) {
     _inactivityTimer?.cancel();
+    _inactivityTimer = null;
     if (_isHibernating) {
       _isHibernating = false;
       _log.warning(
           '[BrowserWatchdog] Browser active — resuming inactivity watchdog.');
     }
-    if (!isMounted) return;
+    if (!isMounted) {
+      // Was disarmed because widget was not mounted — remember to re-arm
+      // on next onResumed() instead of permanently staying idle.
+      _needsRearm = true;
+      _pendingOnTimeout = onTimeout;
+      _log.fine('[BrowserWatchdog] resetTimer disarmed (not mounted), will re-arm on resume.');
+      return;
+    }
+    _needsRearm = false;
+    _pendingOnTimeout = onTimeout;
     _inactivityTimer = Timer(inactivityDuration, () {
       onTimeout();
     });
+  }
+
+  /// Re-arms the inactivity timer if it was previously disarmed due to
+  /// isMounted == false. Should be called from AppLifecycleState.resumed
+  /// (or widget didChangeAppLifecycleState) so the watchdog resumes after
+  /// backgrounding.
+  void onResumed() {
+    if (_isHibernating) {
+      _isHibernating = false;
+      _log.warning(
+          '[BrowserWatchdog] Browser resumed — clearing hibernation flag.');
+    }
+    if (_needsRearm && _pendingOnTimeout != null) {
+      _log.fine('[BrowserWatchdog] Re-arming inactivity timer on resume.');
+      _inactivityTimer?.cancel();
+      final cb = _pendingOnTimeout!;
+      _needsRearm = false;
+      _inactivityTimer = Timer(inactivityDuration, () {
+        cb();
+      });
+    } else if (_inactivityTimer == null && _pendingOnTimeout != null && !_isHibernating) {
+      // Edge: timer was cancelled externally but we still have a pending callback.
+      _log.fine('[BrowserWatchdog] Re-scheduling idle timer on resume (no active timer).');
+      final cb = _pendingOnTimeout!;
+      _inactivityTimer = Timer(inactivityDuration, () {
+        cb();
+      });
+    }
   }
 
   final Set<String> _pausedByInactivityTabIds = {};
@@ -137,5 +183,7 @@ class InactivityWatchdog {
   void dispose() {
     _inactivityTimer?.cancel();
     _inactivityTimer = null;
+    _pendingOnTimeout = null;
+    _needsRearm = false;
   }
 }

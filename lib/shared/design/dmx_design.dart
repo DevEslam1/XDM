@@ -345,8 +345,12 @@ class DmxDialog extends StatelessWidget {
         accentColor ?? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue);
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
 
+    final screenHeight = MediaQuery.sizeOf(context).height;
     final Widget dialogContent = ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 560),
+      constraints: BoxConstraints(
+        maxWidth: 560,
+        maxHeight: screenHeight * 0.75,
+      ),
       child: DmxCardShell(
         accent: accent,
         radius: 20,

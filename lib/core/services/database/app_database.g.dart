@@ -399,6 +399,24 @@ class $DownloadTasksTable extends DownloadTasks
       defaultConstraints: GeneratedColumn.constraintIsAlways(
           'CHECK ("is_cancelled" IN (0, 1))'),
       defaultValue: const Constant(false));
+  static const VerificationMeta _authUsernameMeta =
+      const VerificationMeta('authUsername');
+  @override
+  late final GeneratedColumn<String> authUsername = GeneratedColumn<String>(
+      'auth_username', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _authPasswordMeta =
+      const VerificationMeta('authPassword');
+  @override
+  late final GeneratedColumn<String> authPassword = GeneratedColumn<String>(
+      'auth_password', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _customHeadersMeta =
+      const VerificationMeta('customHeaders');
+  @override
+  late final GeneratedColumn<String> customHeaders = GeneratedColumn<String>(
+      'custom_headers', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -458,7 +476,10 @@ class $DownloadTasksTable extends DownloadTasks
         httpPartsTotal,
         previousCycleState,
         infoHash,
-        isCancelled
+        isCancelled,
+        authUsername,
+        authPassword,
+        customHeaders
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -784,6 +805,24 @@ class $DownloadTasksTable extends DownloadTasks
           isCancelled.isAcceptableOrUnknown(
               data['is_cancelled']!, _isCancelledMeta));
     }
+    if (data.containsKey('auth_username')) {
+      context.handle(
+          _authUsernameMeta,
+          authUsername.isAcceptableOrUnknown(
+              data['auth_username']!, _authUsernameMeta));
+    }
+    if (data.containsKey('auth_password')) {
+      context.handle(
+          _authPasswordMeta,
+          authPassword.isAcceptableOrUnknown(
+              data['auth_password']!, _authPasswordMeta));
+    }
+    if (data.containsKey('custom_headers')) {
+      context.handle(
+          _customHeadersMeta,
+          customHeaders.isAcceptableOrUnknown(
+              data['custom_headers']!, _customHeadersMeta));
+    }
     return context;
   }
 
@@ -916,6 +955,12 @@ class $DownloadTasksTable extends DownloadTasks
           .read(DriftSqlType.string, data['${effectivePrefix}info_hash']),
       isCancelled: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}is_cancelled'])!,
+      authUsername: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}auth_username']),
+      authPassword: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}auth_password']),
+      customHeaders: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}custom_headers']),
     );
   }
 
@@ -994,6 +1039,9 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
   final String? previousCycleState;
   final String? infoHash;
   final bool isCancelled;
+  final String? authUsername;
+  final String? authPassword;
+  final String? customHeaders;
   const DbDownloadTask(
       {required this.id,
       required this.fileName,
@@ -1052,7 +1100,10 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       this.httpPartsTotal,
       this.previousCycleState,
       this.infoHash,
-      required this.isCancelled});
+      required this.isCancelled,
+      this.authUsername,
+      this.authPassword,
+      this.customHeaders});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -1177,6 +1228,15 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       map['info_hash'] = Variable<String>(infoHash);
     }
     map['is_cancelled'] = Variable<bool>(isCancelled);
+    if (!nullToAbsent || authUsername != null) {
+      map['auth_username'] = Variable<String>(authUsername);
+    }
+    if (!nullToAbsent || authPassword != null) {
+      map['auth_password'] = Variable<String>(authPassword);
+    }
+    if (!nullToAbsent || customHeaders != null) {
+      map['custom_headers'] = Variable<String>(customHeaders);
+    }
     return map;
   }
 
@@ -1295,6 +1355,15 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           ? const Value.absent()
           : Value(infoHash),
       isCancelled: Value(isCancelled),
+      authUsername: authUsername == null && nullToAbsent
+          ? const Value.absent()
+          : Value(authUsername),
+      authPassword: authPassword == null && nullToAbsent
+          ? const Value.absent()
+          : Value(authPassword),
+      customHeaders: customHeaders == null && nullToAbsent
+          ? const Value.absent()
+          : Value(customHeaders),
     );
   }
 
@@ -1367,6 +1436,9 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           serializer.fromJson<String?>(json['previousCycleState']),
       infoHash: serializer.fromJson<String?>(json['infoHash']),
       isCancelled: serializer.fromJson<bool>(json['isCancelled']),
+      authUsername: serializer.fromJson<String?>(json['authUsername']),
+      authPassword: serializer.fromJson<String?>(json['authPassword']),
+      customHeaders: serializer.fromJson<String?>(json['customHeaders']),
     );
   }
   @override
@@ -1433,6 +1505,9 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       'previousCycleState': serializer.toJson<String?>(previousCycleState),
       'infoHash': serializer.toJson<String?>(infoHash),
       'isCancelled': serializer.toJson<bool>(isCancelled),
+      'authUsername': serializer.toJson<String?>(authUsername),
+      'authPassword': serializer.toJson<String?>(authPassword),
+      'customHeaders': serializer.toJson<String?>(customHeaders),
     };
   }
 
@@ -1495,7 +1570,10 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           Value<int?> httpPartsTotal = const Value.absent(),
           Value<String?> previousCycleState = const Value.absent(),
           Value<String?> infoHash = const Value.absent(),
-          bool? isCancelled}) =>
+          bool? isCancelled,
+          Value<String?> authUsername = const Value.absent(),
+          Value<String?> authPassword = const Value.absent(),
+          Value<String?> customHeaders = const Value.absent()}) =>
       DbDownloadTask(
         id: id ?? this.id,
         fileName: fileName ?? this.fileName,
@@ -1580,6 +1658,12 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
             : this.previousCycleState,
         infoHash: infoHash.present ? infoHash.value : this.infoHash,
         isCancelled: isCancelled ?? this.isCancelled,
+        authUsername:
+            authUsername.present ? authUsername.value : this.authUsername,
+        authPassword:
+            authPassword.present ? authPassword.value : this.authPassword,
+        customHeaders:
+            customHeaders.present ? customHeaders.value : this.customHeaders,
       );
   DbDownloadTask copyWithCompanion(DownloadTasksCompanion data) {
     return DbDownloadTask(
@@ -1711,6 +1795,15 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       infoHash: data.infoHash.present ? data.infoHash.value : this.infoHash,
       isCancelled:
           data.isCancelled.present ? data.isCancelled.value : this.isCancelled,
+      authUsername: data.authUsername.present
+          ? data.authUsername.value
+          : this.authUsername,
+      authPassword: data.authPassword.present
+          ? data.authPassword.value
+          : this.authPassword,
+      customHeaders: data.customHeaders.present
+          ? data.customHeaders.value
+          : this.customHeaders,
     );
   }
 
@@ -1775,7 +1868,10 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           ..write('httpPartsTotal: $httpPartsTotal, ')
           ..write('previousCycleState: $previousCycleState, ')
           ..write('infoHash: $infoHash, ')
-          ..write('isCancelled: $isCancelled')
+          ..write('isCancelled: $isCancelled, ')
+          ..write('authUsername: $authUsername, ')
+          ..write('authPassword: $authPassword, ')
+          ..write('customHeaders: $customHeaders')
           ..write(')'))
         .toString();
   }
@@ -1839,7 +1935,10 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
         httpPartsTotal,
         previousCycleState,
         infoHash,
-        isCancelled
+        isCancelled,
+        authUsername,
+        authPassword,
+        customHeaders
       ]);
   @override
   bool operator ==(Object other) =>
@@ -1903,7 +2002,10 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           other.httpPartsTotal == this.httpPartsTotal &&
           other.previousCycleState == this.previousCycleState &&
           other.infoHash == this.infoHash &&
-          other.isCancelled == this.isCancelled);
+          other.isCancelled == this.isCancelled &&
+          other.authUsername == this.authUsername &&
+          other.authPassword == this.authPassword &&
+          other.customHeaders == this.customHeaders);
 }
 
 class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
@@ -1965,6 +2067,9 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
   final Value<String?> previousCycleState;
   final Value<String?> infoHash;
   final Value<bool> isCancelled;
+  final Value<String?> authUsername;
+  final Value<String?> authPassword;
+  final Value<String?> customHeaders;
   final Value<int> rowid;
   const DownloadTasksCompanion({
     this.id = const Value.absent(),
@@ -2025,6 +2130,9 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.previousCycleState = const Value.absent(),
     this.infoHash = const Value.absent(),
     this.isCancelled = const Value.absent(),
+    this.authUsername = const Value.absent(),
+    this.authPassword = const Value.absent(),
+    this.customHeaders = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   DownloadTasksCompanion.insert({
@@ -2086,6 +2194,9 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.previousCycleState = const Value.absent(),
     this.infoHash = const Value.absent(),
     this.isCancelled = const Value.absent(),
+    this.authUsername = const Value.absent(),
+    this.authPassword = const Value.absent(),
+    this.customHeaders = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         fileName = Value(fileName),
@@ -2157,6 +2268,9 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     Expression<String>? previousCycleState,
     Expression<String>? infoHash,
     Expression<bool>? isCancelled,
+    Expression<String>? authUsername,
+    Expression<String>? authPassword,
+    Expression<String>? customHeaders,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2225,6 +2339,9 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
         'previous_cycle_state': previousCycleState,
       if (infoHash != null) 'info_hash': infoHash,
       if (isCancelled != null) 'is_cancelled': isCancelled,
+      if (authUsername != null) 'auth_username': authUsername,
+      if (authPassword != null) 'auth_password': authPassword,
+      if (customHeaders != null) 'custom_headers': customHeaders,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2288,6 +2405,9 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       Value<String?>? previousCycleState,
       Value<String?>? infoHash,
       Value<bool>? isCancelled,
+      Value<String?>? authUsername,
+      Value<String?>? authPassword,
+      Value<String?>? customHeaders,
       Value<int>? rowid}) {
     return DownloadTasksCompanion(
       id: id ?? this.id,
@@ -2349,6 +2469,9 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       previousCycleState: previousCycleState ?? this.previousCycleState,
       infoHash: infoHash ?? this.infoHash,
       isCancelled: isCancelled ?? this.isCancelled,
+      authUsername: authUsername ?? this.authUsername,
+      authPassword: authPassword ?? this.authPassword,
+      customHeaders: customHeaders ?? this.customHeaders,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2537,6 +2660,15 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     if (isCancelled.present) {
       map['is_cancelled'] = Variable<bool>(isCancelled.value);
     }
+    if (authUsername.present) {
+      map['auth_username'] = Variable<String>(authUsername.value);
+    }
+    if (authPassword.present) {
+      map['auth_password'] = Variable<String>(authPassword.value);
+    }
+    if (customHeaders.present) {
+      map['custom_headers'] = Variable<String>(customHeaders.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2605,6 +2737,9 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
           ..write('previousCycleState: $previousCycleState, ')
           ..write('infoHash: $infoHash, ')
           ..write('isCancelled: $isCancelled, ')
+          ..write('authUsername: $authUsername, ')
+          ..write('authPassword: $authPassword, ')
+          ..write('customHeaders: $customHeaders, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -4215,6 +4350,9 @@ typedef $$DownloadTasksTableCreateCompanionBuilder = DownloadTasksCompanion
   Value<String?> previousCycleState,
   Value<String?> infoHash,
   Value<bool> isCancelled,
+  Value<String?> authUsername,
+  Value<String?> authPassword,
+  Value<String?> customHeaders,
   Value<int> rowid,
 });
 typedef $$DownloadTasksTableUpdateCompanionBuilder = DownloadTasksCompanion
@@ -4277,6 +4415,9 @@ typedef $$DownloadTasksTableUpdateCompanionBuilder = DownloadTasksCompanion
   Value<String?> previousCycleState,
   Value<String?> infoHash,
   Value<bool> isCancelled,
+  Value<String?> authUsername,
+  Value<String?> authPassword,
+  Value<String?> customHeaders,
   Value<int> rowid,
 });
 
@@ -4491,6 +4632,15 @@ class $$DownloadTasksTableFilterComposer
 
   ColumnFilters<bool> get isCancelled => $composableBuilder(
       column: $table.isCancelled, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get authUsername => $composableBuilder(
+      column: $table.authUsername, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get authPassword => $composableBuilder(
+      column: $table.authPassword, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get customHeaders => $composableBuilder(
+      column: $table.customHeaders, builder: (column) => ColumnFilters(column));
 }
 
 class $$DownloadTasksTableOrderingComposer
@@ -4704,6 +4854,18 @@ class $$DownloadTasksTableOrderingComposer
 
   ColumnOrderings<bool> get isCancelled => $composableBuilder(
       column: $table.isCancelled, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get authUsername => $composableBuilder(
+      column: $table.authUsername,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get authPassword => $composableBuilder(
+      column: $table.authPassword,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get customHeaders => $composableBuilder(
+      column: $table.customHeaders,
+      builder: (column) => ColumnOrderings(column));
 }
 
 class $$DownloadTasksTableAnnotationComposer
@@ -4891,6 +5053,15 @@ class $$DownloadTasksTableAnnotationComposer
 
   GeneratedColumn<bool> get isCancelled => $composableBuilder(
       column: $table.isCancelled, builder: (column) => column);
+
+  GeneratedColumn<String> get authUsername => $composableBuilder(
+      column: $table.authUsername, builder: (column) => column);
+
+  GeneratedColumn<String> get authPassword => $composableBuilder(
+      column: $table.authPassword, builder: (column) => column);
+
+  GeneratedColumn<String> get customHeaders => $composableBuilder(
+      column: $table.customHeaders, builder: (column) => column);
 }
 
 class $$DownloadTasksTableTableManager extends RootTableManager<
@@ -4978,6 +5149,9 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             Value<String?> previousCycleState = const Value.absent(),
             Value<String?> infoHash = const Value.absent(),
             Value<bool> isCancelled = const Value.absent(),
+            Value<String?> authUsername = const Value.absent(),
+            Value<String?> authPassword = const Value.absent(),
+            Value<String?> customHeaders = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               DownloadTasksCompanion(
@@ -5039,6 +5213,9 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             previousCycleState: previousCycleState,
             infoHash: infoHash,
             isCancelled: isCancelled,
+            authUsername: authUsername,
+            authPassword: authPassword,
+            customHeaders: customHeaders,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -5101,6 +5278,9 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             Value<String?> previousCycleState = const Value.absent(),
             Value<String?> infoHash = const Value.absent(),
             Value<bool> isCancelled = const Value.absent(),
+            Value<String?> authUsername = const Value.absent(),
+            Value<String?> authPassword = const Value.absent(),
+            Value<String?> customHeaders = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               DownloadTasksCompanion.insert(
@@ -5162,6 +5342,9 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             previousCycleState: previousCycleState,
             infoHash: infoHash,
             isCancelled: isCancelled,
+            authUsername: authUsername,
+            authPassword: authPassword,
+            customHeaders: customHeaders,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0

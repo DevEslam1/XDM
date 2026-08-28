@@ -55,9 +55,10 @@ class ProtocolFallbackMemory {
   static String? _extractHost(String urlOrHost) {
     if (!urlOrHost.contains('://')) {
       final idx = urlOrHost.indexOf('/');
-      return (idx != -1 ? urlOrHost.substring(0, idx) : urlOrHost).toLowerCase().trim();
+      return (idx != -1 ? urlOrHost.substring(0, idx) : urlOrHost)
+          .toLowerCase()
+          .trim();
     }
     return Uri.tryParse(urlOrHost)?.host.toLowerCase().trim();
   }
 }
-

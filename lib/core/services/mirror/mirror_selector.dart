@@ -33,7 +33,7 @@ class MirrorManager {
         .where((m) => m.failures < maxFailuresBeforeDeprioritize)
         .toList();
     if (healthy.isEmpty) return _mirrors.first.url;
-    healthy.sort((a, b) => b.avgSpeedBps.compareTo(a.avgSpeedBps));
+    healthy.sort((a, b) => b.healthScore.compareTo(a.healthScore));
     return healthy.first.url;
   }
 
@@ -45,7 +45,7 @@ class MirrorManager {
         )
         .toList();
     if (candidates.isEmpty) return null;
-    candidates.sort((a, b) => b.avgSpeedBps.compareTo(a.avgSpeedBps));
+    candidates.sort((a, b) => b.healthScore.compareTo(a.healthScore));
     return candidates.first.url;
   }
 
@@ -54,6 +54,13 @@ class MirrorManager {
     if (mirror == null) return;
     mirror.totalBytes += bytes;
     mirror.totalMs += elapsed.inMilliseconds;
+    mirror.successCount++;
+    if (mirror.avgLatencyMs == 0) {
+      mirror.avgLatencyMs = elapsed.inMilliseconds.toDouble();
+    } else {
+      mirror.avgLatencyMs =
+          0.7 * elapsed.inMilliseconds + 0.3 * mirror.avgLatencyMs;
+    }
     mirror.failures = 0;
     mirror.lastUsed = DateTime.now();
   }
@@ -84,6 +91,8 @@ class MirrorStats {
   int totalBytes = 0;
   int totalMs = 0;
   int failures = 0;
+  int successCount = 0;
+  double avgLatencyMs = 0.0;
   DateTime? lastUsed;
 
   MirrorStats(this.url);
@@ -94,6 +103,17 @@ class MirrorStats {
     if (totalMs <= 0) return 0;
     final raw = totalBytes / totalMs * 1000;
     return raw > _maxAvgSpeedBps ? _maxAvgSpeedBps : raw;
+  }
+
+  double get healthScore {
+    if (failures >= MirrorManager.maxFailuresBeforeDeprioritize) return 0.0;
+    final totalAttempts = successCount + failures;
+    final reliability =
+        totalAttempts > 0 ? (successCount / totalAttempts) : 0.5;
+    final speedScore = (avgSpeedBps / (100 * 1024 * 1024)).clamp(0.0, 1.0);
+    final latencyScore =
+        avgLatencyMs > 0 ? (1.0 / (1.0 + avgLatencyMs / 300.0)) : 0.5;
+    return (reliability * 0.5) + (speedScore * 0.3) + (latencyScore * 0.2);
   }
 }
 

@@ -45,46 +45,70 @@ class MetadataProbeService {
         host == 'youtu.be' ||
         host.endsWith('.googlevideo.com');
 
-    final isolatedDio = _dioPool.acquireClient(
+    // FIX P1-5: Use separate Dio clients for concurrent HEAD/GET probes.
+    // Sharing one Dio instance causes interceptor/header races and validateStatus bleed.
+    // Also cancel the ranged GET when HEAD succeeds to avoid leaked socket.
+    final headClient = _dioPool.acquireClient(
       url: punyUrl,
       customUserAgent: customUserAgent,
       referer: referer,
       cookies: cookies,
       oauthToken: oauthToken,
     );
+    final getClient = _dioPool.acquireClient(
+      url: punyUrl,
+      customUserAgent: customUserAgent,
+      referer: referer,
+      cookies: cookies,
+      oauthToken: oauthToken,
+    );
+    final getProbeCancel = CancelToken();
+    // Propagate outer cancellation to GET probe.
+    cancelToken?.whenCancel.then((_) {
+      try {
+        if (!getProbeCancel.isCancelled) getProbeCancel.cancel('outer_cancel');
+      } catch (_) {}
+    });
 
     try {
       final headFuture = _probeWithHead(
         punyUrl: punyUrl,
-        client: isolatedDio,
+        client: headClient,
         requestedFileName: requestedFileName,
         isYoutube: isYoutube,
         cancelToken: cancelToken,
       );
       final getFuture = _probeWithGet(
         punyUrl: punyUrl,
-        client: isolatedDio,
+        client: getClient,
         requestedFileName: requestedFileName,
         isYoutube: isYoutube,
-        cancelToken: cancelToken,
+        cancelToken: getProbeCancel,
       );
 
       try {
         final headResult = await headFuture;
         if (headResult.isValid) {
-          getFuture.ignore();
+          // Cancel the in-flight ranged GET instead of ignore() leak.
+          if (!getProbeCancel.isCancelled) getProbeCancel.cancel('head_valid');
+          // Drain but don't block on GET error.
+          getFuture.catchError((_) => const DownloadMetadata(fileName: '', category: '', fileSize: 0, supportsResume: false));
           return headResult;
         }
         final getResult = await getFuture;
         if (getResult.isValid) return getResult;
         return headResult;
       } catch (_) {
-        final getResult = await getFuture;
+        final getResult = await getFuture.catchError((_) => const DownloadMetadata(fileName: '', category: '', fileSize: 0, supportsResume: false));
         if (getResult.isValid) return getResult;
         rethrow;
       }
     } finally {
-      _dioPool.releaseClient(isolatedDio);
+      if (!getProbeCancel.isCancelled) {
+        try { getProbeCancel.cancel('cleanup'); } catch (_) {}
+      }
+      _dioPool.releaseClient(headClient);
+      _dioPool.releaseClient(getClient);
     }
   }
 
@@ -451,7 +475,8 @@ class MetadataProbeService {
           _dioPool.releaseClient(client);
         }
       } catch (e) {
-        debugPrint('[MetadataProbeService] Failed to fetch remote .torrent: $e');
+        debugPrint(
+            '[MetadataProbeService] Failed to fetch remote .torrent: $e');
       }
     } else {
       final file = File(url);
@@ -461,7 +486,8 @@ class MetadataProbeService {
     }
 
     if (torrentBytes != null && torrentBytes.isNotEmpty) {
-      final meta = await compute(BencodeDecoder.parseTorrentBytes, torrentBytes);
+      final meta =
+          await compute(BencodeDecoder.parseTorrentBytes, torrentBytes);
       if (meta != null) {
         fileName = meta['name'] ?? fileName;
         torrentFiles = (meta['files'] as List? ?? []).map((f) {
@@ -474,7 +500,8 @@ class MetadataProbeService {
           };
         }).toList();
         fileSize = meta['length'] ??
-            torrentFiles.fold<int>(0, (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0));
+            torrentFiles.fold<int>(
+                0, (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0));
       }
     }
 

@@ -25,11 +25,13 @@ void main() {
       final sub2 = controller.stream.listen((_) {});
 
       TorrentSubscriptionRegistry.instance.register(1, handler, sub1);
-      expect(TorrentSubscriptionRegistry.instance.getSubscription(1), equals(sub1));
+      expect(TorrentSubscriptionRegistry.instance.getSubscription(1),
+          equals(sub1));
 
       // Re-register replaces and cancels sub1
       TorrentSubscriptionRegistry.instance.register(1, handler, sub2);
-      expect(TorrentSubscriptionRegistry.instance.getSubscription(1), equals(sub2));
+      expect(TorrentSubscriptionRegistry.instance.getSubscription(1),
+          equals(sub2));
 
       await sub2.cancel();
       await controller.close();
@@ -46,7 +48,8 @@ void main() {
 
       // Attempt unregister with foreign handler2
       TorrentSubscriptionRegistry.instance.unregister(10, handler2);
-      expect(TorrentSubscriptionRegistry.instance.getSubscription(10), equals(sub));
+      expect(TorrentSubscriptionRegistry.instance.getSubscription(10),
+          equals(sub));
 
       // Unregister with owning handler1 succeeds
       TorrentSubscriptionRegistry.instance.unregister(10, handler1);
@@ -57,7 +60,8 @@ void main() {
     });
 
     // Regression: M1
-    test('unregisterAll removes and cancels all subscriptions for a handler', () async {
+    test('unregisterAll removes and cancels all subscriptions for a handler',
+        () async {
       final handler = TorrentDownloadHandler(torrentService: fakeService);
       final controller1 = StreamController<void>();
       final controller2 = StreamController<void>();
@@ -67,10 +71,12 @@ void main() {
       TorrentSubscriptionRegistry.instance.register(101, handler, sub1);
       TorrentSubscriptionRegistry.instance.register(102, handler, sub2);
 
-      expect(TorrentSubscriptionRegistry.instance.activeCountForTesting, equals(2));
+      expect(TorrentSubscriptionRegistry.instance.activeCountForTesting,
+          equals(2));
 
       TorrentSubscriptionRegistry.instance.unregisterAll(handler);
-      expect(TorrentSubscriptionRegistry.instance.activeCountForTesting, equals(0));
+      expect(TorrentSubscriptionRegistry.instance.activeCountForTesting,
+          equals(0));
 
       await controller1.close();
       await controller2.close();

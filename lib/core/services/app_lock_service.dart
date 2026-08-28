@@ -6,11 +6,13 @@ import 'package:dmx/core/services/logging_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:synchronized/synchronized.dart';
 
 import '../utils/crypto_utils.dart';
 import 'crash_reporting_service.dart';
 
 class AppLockService {
+  static final Lock _verifyLock = Lock();
   static const FlutterSecureStorage _storage = FlutterSecureStorage();
   static const String _pinKey = 'xdm_app_lock_pin';
   static const String _saltKey = 'xdm_app_lock_salt';
@@ -40,15 +42,15 @@ class AppLockService {
   @visibleForTesting
   static set lastObservedTimeMs(int v) => _lastObservedTimeMs = v;
 
+  static final Stopwatch _fallbackStopwatch = Stopwatch()..start();
+
   static Future<int> getMonotonicTimeMs() async {
     if (mockMonotonicTimeMs != null) return mockMonotonicTimeMs!;
     try {
       final val = await _monotonicChannel.invokeMethod<int>('elapsedRealtime');
       if (val != null && val > 0) return val;
-    } catch (e, st) {
-      _log.warning('Operation failed', e, st);
-    }
-    return DateTime.now().millisecondsSinceEpoch;
+    } catch (_) {}
+    return _fallbackStopwatch.elapsedMilliseconds;
   }
 
   /// Detects clock jumps > 60s backward and validates monotonic state.
@@ -87,47 +89,51 @@ class AppLockService {
   }
 
   static Future<void> setPin(String pin) async {
-    final salt = _generateRandomSalt();
-    await _storage.write(key: _saltKey, value: salt);
-    final hashed = hashSecret(pin, salt: salt);
-    await _storage.write(key: _pinKey, value: hashed);
-    await _storage.write(key: _enabledKey, value: 'true');
-    await resetFailedAttempts();
+    return _verifyLock.synchronized(() async {
+      final salt = _generateRandomSalt();
+      await _storage.write(key: _saltKey, value: salt);
+      final hashed = hashSecret(pin, salt: salt);
+      await _storage.write(key: _pinKey, value: hashed);
+      await _storage.write(key: _enabledKey, value: 'true');
+      await resetFailedAttempts();
+    });
   }
 
   static Future<bool> verifyPin(String pin) async {
-    if (await lockoutRemaining() > Duration.zero) return false;
+    return _verifyLock.synchronized(() async {
+      if (await lockoutRemaining() > Duration.zero) return false;
 
-    final storedPin = await _storage.read(key: _pinKey);
-    final salt = await _storage.read(key: _saltKey);
+      final storedPin = await _storage.read(key: _pinKey);
+      final salt = await _storage.read(key: _saltKey);
 
-    if (storedPin == null || salt == null) {
-      return false;
-    }
-
-    bool matches = false;
-    if (storedPin.startsWith('pbkdf2:')) {
-      final hashedInput = hashSecret(pin, salt: salt);
-      matches = timingSafeEqual(storedPin, hashedInput);
-    } else {
-      // Legacy SHA-256 fallback check for transparent upgrade
-      final stretchedInput = legacyStretchedHash(pin, salt: salt);
-      final legacyInput = legacyHashSecret(pin, salt: salt);
-      if (timingSafeEqual(storedPin, stretchedInput) ||
-          timingSafeEqual(storedPin, legacyInput)) {
-        matches = true;
-        // Transparently upgrade to PBKDF2 format
-        final upgradedHash = hashSecret(pin, salt: salt);
-        await _storage.write(key: _pinKey, value: upgradedHash);
+      if (storedPin == null || salt == null) {
+        return false;
       }
-    }
 
-    if (matches) {
-      await resetFailedAttempts();
-      return true;
-    }
-    await _registerFailedAttempt();
-    return false;
+      bool matches = false;
+      if (storedPin.startsWith('pbkdf2:')) {
+        final hashedInput = hashSecret(pin, salt: salt);
+        matches = timingSafeEqual(storedPin, hashedInput);
+      } else {
+        // Legacy SHA-256 fallback check for transparent upgrade
+        final stretchedInput = legacyStretchedHash(pin, salt: salt);
+        final legacyInput = legacyHashSecret(pin, salt: salt);
+        if (timingSafeEqual(storedPin, stretchedInput) ||
+            timingSafeEqual(storedPin, legacyInput)) {
+          matches = true;
+          // Transparently upgrade to PBKDF2 format
+          final upgradedHash = hashSecret(pin, salt: salt);
+          await _storage.write(key: _pinKey, value: upgradedHash);
+        }
+      }
+
+      if (matches) {
+        await resetFailedAttempts();
+        return true;
+      }
+      await _registerFailedAttempt();
+      return false;
+    });
   }
 
   static Future<Duration> lockoutRemaining() async {

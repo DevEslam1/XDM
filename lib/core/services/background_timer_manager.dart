@@ -74,16 +74,16 @@ class BackgroundTimerManager {
     final now = DateTime.now();
     _stateChangeTimestamps.add(now);
     _stateChangeTimestamps.removeWhere(
-      (t) => now.difference(t) > const Duration(seconds: 2),
+      (t) => now.difference(t) > const Duration(seconds: 3),
     );
 
     if (_stateChangeTimestamps.length > 4) {
       _listenersSuppressed = true;
       _log.warning(
-          '[BackgroundTimerManager] High state-change flapping detected: ${_stateChangeTimestamps.length} changes within 2s.');
+          '[BackgroundTimerManager] High state-change flapping detected: ${_stateChangeTimestamps.length} changes within 3s.');
 
       _suppressionTimer?.cancel();
-      _suppressionTimer = Timer(const Duration(seconds: 2), () {
+      _suppressionTimer = Timer(const Duration(seconds: 3), () {
         _listenersSuppressed = false;
         _readaptAllTimers();
       });
@@ -157,6 +157,10 @@ class BackgroundTimerManager {
       t.cancel();
     }
     _timers.clear();
+    _debounceTimer?.cancel();
+    _debounceTimer = null;
+    _suppressionTimer?.cancel();
+    _suppressionTimer = null;
   }
 
   /// Resumes all paused timers using the current adapted intervals.

@@ -74,7 +74,8 @@ class DomainStateMachine {
       _transitionController.stream;
 
   /// Table-driven transition matrix: `Map<FromState, Set<ToState>>`
-  static const Map<DomainDownloadState, Set<DomainDownloadState>> _allowedTransitions = {
+  static const Map<DomainDownloadState, Set<DomainDownloadState>>
+      _allowedTransitions = {
     DomainDownloadState.idle: {
       DomainDownloadState.queued,
       DomainDownloadState.starting,
@@ -172,7 +173,9 @@ class DomainStateMachine {
   /// Helper to map [DomainDownloadState] back to [DownloadStatus].
   static DownloadStatus toStatus(DomainDownloadState state) {
     return switch (state) {
-      DomainDownloadState.idle || DomainDownloadState.queued => DownloadStatus.queued,
+      DomainDownloadState.idle ||
+      DomainDownloadState.queued =>
+        DownloadStatus.queued,
       DomainDownloadState.starting ||
       DomainDownloadState.downloading ||
       DomainDownloadState.retrying =>
@@ -285,7 +288,8 @@ class DomainStateMachine {
     }
 
     if (onTransitionHook != null) {
-      final hookResult = onTransitionHook!(taskId, previous, targetState, effectiveCommand);
+      final hookResult =
+          onTransitionHook!(taskId, previous, targetState, effectiveCommand);
       if (hookResult is Future) {
         unawaited(hookResult);
       }

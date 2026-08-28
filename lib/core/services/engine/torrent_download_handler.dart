@@ -81,7 +81,8 @@ class TorrentSubscriptionRegistry {
         try {
           existing.handler.removeActiveTorrent(torrentId);
         } catch (e, st) {
-          _log.fine('Failed to notify old handler on re-registration: $e', e, st);
+          _log.fine(
+              'Failed to notify old handler on re-registration: $e', e, st);
         }
       }
     }
@@ -104,15 +105,18 @@ class TorrentSubscriptionRegistry {
   }
 
   void unregisterAll(TorrentDownloadHandler handler) {
-    _registry.removeWhere((id, entry) {
-      if (identical(entry.handler, handler)) {
-        try {
-          entry.subscription.cancel();
-        } catch (_) {}
-        return true;
+    final toRemove = <int>[];
+    for (final entry in _registry.entries) {
+      if (identical(entry.value.handler, handler)) {
+        toRemove.add(entry.key);
       }
-      return false;
-    });
+    }
+    for (final id in toRemove) {
+      final entry = _registry.remove(id);
+      try {
+        entry?.subscription.cancel();
+      } catch (_) {}
+    }
   }
 
   Map<int, StreamSubscription> subsForHandler(TorrentDownloadHandler handler) {
@@ -256,17 +260,25 @@ class TorrentDownloadHandler {
   static Map<int, StreamSubscription> get globalActiveSubsForTesting =>
       TorrentSubscriptionRegistry.instance.subsMapForTesting;
   @visibleForTesting
-  Timer? get stallWatchdogForTesting =>
-      _runtime.values.map((r) => r.stallWatchdog).whereType<Timer>().firstOrNull;
+  Timer? get stallWatchdogForTesting => _runtime.values
+      .map((r) => r.stallWatchdog)
+      .whereType<Timer>()
+      .firstOrNull;
   @visibleForTesting
-  Timer? get alivenessWatchdogForTesting =>
-      _runtime.values.map((r) => r.alivenessWatchdog).whereType<Timer>().firstOrNull;
+  Timer? get alivenessWatchdogForTesting => _runtime.values
+      .map((r) => r.alivenessWatchdog)
+      .whereType<Timer>()
+      .firstOrNull;
   @visibleForTesting
-  Completer<void>? get completionGuardForTesting =>
-      _runtime.values.map((r) => r.completionGuard).whereType<Completer<void>>().firstOrNull;
+  Completer<void>? get completionGuardForTesting => _runtime.values
+      .map((r) => r.completionGuard)
+      .whereType<Completer<void>>()
+      .firstOrNull;
   @visibleForTesting
-  Completer<void>? get pauseCompleterForTesting =>
-      _runtime.values.map((r) => r.pauseCompleter).whereType<Completer<void>>().firstOrNull;
+  Completer<void>? get pauseCompleterForTesting => _runtime.values
+      .map((r) => r.pauseCompleter)
+      .whereType<Completer<void>>()
+      .firstOrNull;
 
   @visibleForTesting
   TorrentRuntime? getRuntimeForTesting(int id) => _runtime[id];
@@ -398,8 +410,7 @@ class TorrentDownloadHandler {
     // A torrent without metadata cannot reliably transition to "paused" via the
     // graceful path (libtorrent stays in downloading_metadata). Skip straight to
     // forceStopTorrent to avoid burning the entire budget on guaranteed timeouts.
-    final hasMetadata =
-        _torrentService.latestStats[id]?.hasMetadata ?? false;
+    final hasMetadata = _torrentService.latestStats[id]?.hasMetadata ?? false;
     if (!hasMetadata) {
       _log.fine(
           'haltTorrent $id: no metadata — skipping graceful pause, forcing stop.');
@@ -436,7 +447,8 @@ class TorrentDownloadHandler {
         await Future.delayed(const Duration(milliseconds: 100));
       }
     }
-    _log.warning('haltTorrent failed graceful pause for $id within budget — forcing stop');
+    _log.warning(
+        'haltTorrent failed graceful pause for $id within budget — forcing stop');
     try {
       await _torrentService.forceStopTorrent(id);
     } catch (e, st) {
@@ -453,8 +465,8 @@ class TorrentDownloadHandler {
     final cachedBlob = _torrentService.resumeBlobFor(id);
     final hasMetadata =
         (_torrentService.latestStats[id]?.hasMetadata ?? false) ||
-        (cachedBlob != null && cachedBlob.isNotEmpty) ||
-        (_torrentService.getFiles(id).isNotEmpty);
+            (cachedBlob != null && cachedBlob.isNotEmpty) ||
+            (_torrentService.getFiles(id).isNotEmpty);
     if (!hasMetadata && (cachedBlob == null || cachedBlob.isEmpty)) {
       _log.fine(
           'Skipping saveResumeData for torrent $id — no metadata yet, nothing to save.');
@@ -518,7 +530,8 @@ class TorrentDownloadHandler {
               st);
         }
 
-        if (attempt < 2 && remainingBudget() > const Duration(milliseconds: 500)) {
+        if (attempt < 2 &&
+            remainingBudget() > const Duration(milliseconds: 500)) {
           await Future.delayed(Duration(milliseconds: 500 * (1 << attempt)));
         }
       }
@@ -865,7 +878,9 @@ class TorrentDownloadHandler {
             var metadataResolved = false;
             final cancelWaitCompleter = Completer<int>();
             final cancelSub = cancelToken.whenCancel.then((_) {
-              if (metadataResolved) return; // main loop tears down via cancelToken
+              if (metadataResolved) {
+                return; // main loop tears down via cancelToken
+              }
               final existingId = _torrentService.idForSource(url);
               if (existingId != null) _safeRemoveTorrent(existingId);
               if (!cancelWaitCompleter.isCompleted) {
@@ -885,7 +900,8 @@ class TorrentDownloadHandler {
             }));
 
             try {
-              id = await Future.any([metadataFuture, cancelWaitCompleter.future]);
+              id = await Future.any(
+                  [metadataFuture, cancelWaitCompleter.future]);
               metadataResolved = true;
             } finally {
               cancelSub.ignore();
@@ -986,9 +1002,14 @@ class TorrentDownloadHandler {
           final activeFiles = preloadedFiles ?? initFiles;
           final activeSummary = normalizeTorrentFiles(activeFiles);
           final resumeSummary = (
-            total: activeSummary.total > 0 ? activeSummary.total : initSummary.total,
-            done: activeSummary.total > 0 ? activeSummary.done : initSummary.done,
-            bytes: activeSummary.bytes > 0 ? activeSummary.bytes : initSummary.bytes,
+            total: activeSummary.total > 0
+                ? activeSummary.total
+                : initSummary.total,
+            done:
+                activeSummary.total > 0 ? activeSummary.done : initSummary.done,
+            bytes: activeSummary.bytes > 0
+                ? activeSummary.bytes
+                : initSummary.bytes,
             downloaded: activeSummary.downloaded > 0
                 ? activeSummary.downloaded
                 : initSummary.downloaded,
@@ -1155,7 +1176,8 @@ class TorrentDownloadHandler {
           await Future.delayed(const Duration(milliseconds: 50));
 
           List<Map<String, dynamic>>? pauseFiles = getTorrentFiles?.call();
-          String normKey(String name) => name.toLowerCase().replaceAll('\\', '/');
+          String normKey(String name) =>
+              name.toLowerCase().replaceAll('\\', '/');
           final previousSelectedMap = <String, bool>{
             if (pauseFiles != null)
               for (final f in pauseFiles)
@@ -1210,8 +1232,9 @@ class TorrentDownloadHandler {
                       previousLength: previousLengthMap[normKey(af.name)] ??
                           previousLengthByIndex[i],
                     );
-                    final dl =
-                        len > 0 ? af.downloadedBytes.clamp(0, len) : af.downloadedBytes;
+                    final dl = len > 0
+                        ? af.downloadedBytes.clamp(0, len)
+                        : af.downloadedBytes;
                     // An unmeasurable reading is not "nothing downloaded": keep
                     // the count this file already had so pausing cannot erase it.
                     final resolvedDl = af.isEstimated
@@ -1223,8 +1246,7 @@ class TorrentDownloadHandler {
                       'name': af.name,
                       'length': len,
                       'downloadedBytes': clampedDl,
-                      'selected':
-                          previousSelectedMap[normKey(af.name)] ?? true,
+                      'selected': previousSelectedMap[normKey(af.name)] ?? true,
                       'priority': previousPriorityMap[normKey(af.name)] ?? 4,
                       'progress':
                           len > 0 ? (clampedDl / len).clamp(0.0, 1.0) : 0.0,
@@ -1389,7 +1411,8 @@ class TorrentDownloadHandler {
       }
     } catch (e, st) {
       if (e is! DioException || e.type != DioExceptionType.cancel) {
-        _log.severe('Post-add setup or download failed for torrent $id: $e', e, st);
+        _log.severe(
+            'Post-add setup or download failed for torrent $id: $e', e, st);
         _safeRemoveTorrent(id);
         try {
           TorrentResumeStore.unregisterTorrent(id);
@@ -1445,8 +1468,10 @@ class TorrentDownloadHandler {
       return nativeFiles.asMap().entries.map((entry) {
         final i = entry.key;
         final f = entry.value;
-        final old = oldByName[normKey(f.name)] ??
-            (i < currentList.length ? currentList[i] : null);
+        final old = (i < currentList.length && currentList[i]['name'] == f.name)
+            ? currentList[i]
+            : (oldByName[normKey(f.name)] ??
+                (i < currentList.length ? currentList[i] : null));
         // The engine reports 0 for a size it cannot determine; the length we
         // already parsed from the torrent metadata stays authoritative.
         final len = TorrentFileNormalizer.resolveFileLength(
@@ -1485,8 +1510,10 @@ class TorrentDownloadHandler {
     final updated = List<Map<String, dynamic>>.from(currentList);
     for (int i = 0; i < nativeFiles.length; i++) {
       final f = nativeFiles[i];
-      final old = oldByName[normKey(f.name)] ??
-          (i < currentList.length ? currentList[i] : null);
+      final old = (i < currentList.length && currentList[i]['name'] == f.name)
+          ? currentList[i]
+          : (oldByName[normKey(f.name)] ??
+              (i < currentList.length ? currentList[i] : null));
       final len = TorrentFileNormalizer.resolveFileLength(
         f.size,
         previousLength: (old?['length'] as num?)?.toInt(),
@@ -1583,8 +1610,7 @@ class TorrentDownloadHandler {
                     ((f['length'] as num?)?.toInt() ?? 0) > 0)
                   normKey(f['name'] as String): (f['length'] as num).toInt()
           };
-          rt.cachedAccurateFiles =
-              nativeFiles.asMap().entries.map((entry) {
+          rt.cachedAccurateFiles = nativeFiles.asMap().entries.map((entry) {
             final i = entry.key;
             final f = entry.value;
             final dl = f.safeDownloadedBytes < 0 ? 0 : f.safeDownloadedBytes;
@@ -1658,12 +1684,16 @@ class TorrentDownloadHandler {
     TorrentSubscriptionRegistry.instance.register(id, this, sub);
 
     StreamSubscription? alertSub;
-    alertSub = _torrentService.alertUpdates.where((e) => e.torrentId == id).listen((event) {
+    alertSub = _torrentService.alertUpdates
+        .where((e) => e.torrentId == id)
+        .listen((event) {
       if (cancelToken.isCancelled) return;
       if (event.category.toLowerCase().contains('error')) {
         final msg = event.message.toLowerCase();
         FailureCategory category = FailureCategory.torrentError;
-        if (msg.contains('disk') || msg.contains('write') || msg.contains('no space')) {
+        if (msg.contains('disk') ||
+            msg.contains('write') ||
+            msg.contains('no space')) {
           category = FailureCategory.diskFull;
         } else if (msg.contains('tracker')) {
           category = FailureCategory.torrentError;
@@ -1681,6 +1711,14 @@ class TorrentDownloadHandler {
         }
       }
     });
+
+    if (cancelToken.isCancelled && !completer.isCompleted) {
+      completer.completeError(DioException(
+        requestOptions: RequestOptions(path: url),
+        type: DioExceptionType.cancel,
+        error: cancelToken.cancelError,
+      ));
+    }
 
     cancelToken.whenCancel.then((cancelError) {
       if (!completer.isCompleted) {
@@ -1756,6 +1794,7 @@ class TorrentDownloadHandler {
         // watchdog out rather than act on data that means nothing; the
         // connectivity check above is independent of the struct, so it stays.
         if (!TorrentService.bridgeCompatible) return;
+        if (tracker.lastTorrentProgressTime.millisecondsSinceEpoch == 0) return;
         final elapsed =
             DateTime.now().difference(tracker.lastTorrentProgressTime);
         final isTerminal = rt.lastStateLabel == 'seeding' ||
@@ -1856,9 +1895,12 @@ class TorrentDownloadHandler {
     required _TorrentTrackerState tracker,
     required List<Map<String, dynamic>>? Function()? getTorrentFiles,
     required int knownFileSize,
+    void Function(StreamSubscription sub)? onSubReplaced,
   }) {
     int streamMisses = 0;
-    return _torrentService.torrentUpdates.listen((torrents) async {
+    int streamErrorCount = 0;
+    StreamSubscription? currentSub;
+    currentSub = _torrentService.torrentUpdates.listen((torrents) async {
       try {
         if (cancelToken.isCancelled) return;
         final torrent = torrents[id];
@@ -1893,18 +1935,42 @@ class TorrentDownloadHandler {
           knownFileSize: knownFileSize,
         );
       } catch (e, st) {
-        _log.severe('Unexpected error processing torrent update for $id', e, st);
+        _log.severe(
+            'Unexpected error processing torrent update for $id', e, st);
       }
     }, onError: (Object e, StackTrace st) {
       _log.severe('Torrent updates stream error for $id: $e', e, st);
-      if (!completer.isCompleted && !_torrentService.isTorrentAlive(id)) {
-        completer.completeError(DioException(
-          requestOptions: RequestOptions(path: url),
-          type: DioExceptionType.unknown,
-          error: 'Torrent stream terminated: $e',
-        ));
+      streamErrorCount++;
+      if (!completer.isCompleted) {
+        if (!_torrentService.isTorrentAlive(id) || streamErrorCount >= 3) {
+          completer.completeError(DioException(
+            requestOptions: RequestOptions(path: url),
+            type: DioExceptionType.unknown,
+            error: 'Torrent stream terminated: $e',
+          ));
+        } else {
+          currentSub?.cancel();
+          final newSub = _subscribeToUpdates(
+            id: id,
+            url: url,
+            localFilePath: localFilePath,
+            cancelToken: cancelToken,
+            emitProgress: emitProgress,
+            completer: completer,
+            tracker: tracker,
+            getTorrentFiles: getTorrentFiles,
+            knownFileSize: knownFileSize,
+            onSubReplaced: onSubReplaced,
+          );
+          if (onSubReplaced != null) {
+            onSubReplaced(newSub);
+          } else {
+            TorrentSubscriptionRegistry.instance.register(id, this, newSub);
+          }
+        }
       }
     });
+    return currentSub;
   }
 
   Future<void> _handleUpdate({
@@ -1937,13 +2003,15 @@ class TorrentDownloadHandler {
       try {
         _torrentService.announceNow(id);
       } catch (e, st) {
-        _log.warning('Fallback stall recovery announceNow failed for $id', e, st);
+        _log.warning(
+            'Fallback stall recovery announceNow failed for $id', e, st);
       }
     }
 
     if (!isTerminal &&
         !isStateChange &&
-        now.difference(rt.lastProgressTick) < const Duration(milliseconds: 500)) {
+        now.difference(rt.lastProgressTick) <
+            const Duration(milliseconds: 500)) {
       return;
     }
     final previousState = rt.lastStateLabel;
@@ -1959,8 +2027,8 @@ class TorrentDownloadHandler {
     final piecesDelta = torrent.piecesHave != rt.lastPiecesHave;
     final bool cachedHasZeroLengths = rt.cachedAccurateFiles == null ||
         rt.cachedAccurateFiles!.isEmpty ||
-        rt.cachedAccurateFiles!.every(
-            (f) => ((f['length'] as num?)?.toInt() ?? 0) <= 0);
+        rt.cachedAccurateFiles!
+            .every((f) => ((f['length'] as num?)?.toInt() ?? 0) <= 0);
     if ((torrent.hasMetadata || torrent.piecesTotal > 0) &&
         (piecesDelta || cachedHasZeroLengths)) {
       rt.lastPiecesHave = torrent.piecesHave;
@@ -2007,7 +2075,8 @@ class TorrentDownloadHandler {
         0;
     final int selectedFilesSum = effectiveFiles
             ?.where((f) => (f['selected'] as bool?) ?? true)
-            .fold<int>(0, (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0)) ??
+            .fold<int>(
+                0, (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0)) ??
         0;
 
     int totalSize = (torrent.totalWanted > 0)
@@ -2021,9 +2090,8 @@ class TorrentDownloadHandler {
       try {
         final nf = _torrentService.getFiles(id);
         if (nf.isNotEmpty) {
-          totalSize = nf
-              .where((f) => f.selected)
-              .fold<int>(0, (s, f) => s + f.size);
+          totalSize =
+              nf.where((f) => f.selected).fold<int>(0, (s, f) => s + f.size);
           if (totalSize <= 0) {
             totalSize = nf.fold<int>(0, (s, f) => s + f.size);
           }
@@ -2200,8 +2268,11 @@ class TorrentDownloadHandler {
         fileSize: 0,
         speed: speed,
         eta: null,
-        fileName: (torrent.hasMetadata && torrent.name.isNotEmpty) ? torrent.name : null,
-        torrentFiles: bridgeUntrusted ? null : (resolvedFiles ?? rt.cachedAccurateFiles),
+        fileName: (torrent.hasMetadata && torrent.name.isNotEmpty)
+            ? torrent.name
+            : null,
+        torrentFiles:
+            bridgeUntrusted ? null : (resolvedFiles ?? rt.cachedAccurateFiles),
         cycleState: CycleState.fetchingMetadata,
         totalPieces: bridgeUntrusted ? 0 : torrent.piecesTotal,
         completedPieces: bridgeUntrusted ? null : torrent.piecesHave,
@@ -2215,15 +2286,18 @@ class TorrentDownloadHandler {
       return;
     }
 
-    final bool isProgressValid = (torrent.hasMetadata || torrent.totalDone > 0) &&
-        (torrent.totalWanted > 0 ||
-            rawDownloaded > 0 ||
-            stateLabel == 'seeding');
+    final bool isProgressValid =
+        (torrent.hasMetadata || torrent.totalDone > 0) &&
+            (torrent.totalWanted > 0 ||
+                rawDownloaded > 0 ||
+                stateLabel == 'seeding');
     // `torrent.progress` is only download progress outside a checking phase.
     // While checking, fall back to the last confirmed byte count so the bar
     // holds its previous position instead of tracking verification.
     final safeProgress = bridgeUntrusted
-        ? 0.0
+        ? (totalSize > 0 && rt.lastConfirmedDownloadedBytes > 0
+            ? (rt.lastConfirmedDownloadedBytes / totalSize).clamp(0.0, 1.0)
+            : 0.0)
         : isChecking
             ? (totalSize > 0
                 ? (rt.lastConfirmedDownloadedBytes / totalSize).clamp(0.0, 1.0)
@@ -2283,8 +2357,7 @@ class TorrentDownloadHandler {
             final piecesTotal =
                 (pieceProgress['piecesTotal'] as num?)?.toInt() ?? 0;
             if (piecesTotal > 0) {
-              final pieceRatio =
-                  (piecesHave / piecesTotal).clamp(0.0, 1.0);
+              final pieceRatio = (piecesHave / piecesTotal).clamp(0.0, 1.0);
               TorrentFileProgressEstimator.updateFilesWithNativeProgress(
                 filesToUpdate,
                 pieceRatio,
@@ -2392,9 +2465,7 @@ class TorrentDownloadHandler {
                 torrent.state == TorrentState.downloadingMetadata ||
                 torrent.isChecking);
     final String? resolvedTorrentName =
-        (torrent.hasMetadata && torrent.name.isNotEmpty)
-            ? torrent.name
-            : null;
+        (torrent.hasMetadata && torrent.name.isNotEmpty) ? torrent.name : null;
 
     // `piecesHave` counts verified pieces while checking, so withholding it
     // keeps a piece-based progress bar on its last real value.
@@ -2404,7 +2475,11 @@ class TorrentDownloadHandler {
     // Byte counts, rates and piece totals all come out of the status struct, so
     // an untrusted bridge must report none of them. `totalSize` is kept: it is
     // derived from the parsed torrent metadata / resume store, not the struct.
-    final int emittedDownloadedBytes = bridgeUntrusted ? 0 : downloadedBytes;
+    final int emittedDownloadedBytes = bridgeUntrusted
+        ? (rt.lastConfirmedDownloadedBytes > 0
+            ? rt.lastConfirmedDownloadedBytes
+            : 0)
+        : downloadedBytes;
     final double emittedSpeed = bridgeUntrusted ? 0.0 : speed;
     final int emittedTotalPieces = bridgeUntrusted ? 0 : torrent.piecesTotal;
 
@@ -2449,9 +2524,7 @@ class TorrentDownloadHandler {
       ));
     }
     if (tracker.lastRecoveryEmit == null ||
-        DateTime.now()
-                .difference(tracker.lastRecoveryEmit!)
-                .inMilliseconds >=
+        DateTime.now().difference(tracker.lastRecoveryEmit!).inMilliseconds >=
             2000) {
       emitProgress(DownloadProgress(
         downloadedBytes: emittedDownloadedBytes,
@@ -2509,13 +2582,16 @@ class TorrentDownloadHandler {
     // Verification counters can transiently satisfy every completion predicate
     // below, so a checking torrent is never treated as complete.
     if (torrent.isChecking) return;
-    final bool isProgressComplete = (torrent.progress >= 0.999 && totalSize > 0) ||
-        (totalSize > 0 && downloadedBytes >= totalSize) ||
-        (torrent.totalWanted > 0 &&
-            torrent.totalWantedDone >= torrent.totalWanted &&
-            torrent.progress >= 0.999);
-    final bool isSeedingComplete = (stateLabel == 'seeding' || stateLabel == 'finished') &&
-        (isProgressComplete || (totalSize > 0 && downloadedBytes >= (totalSize * 0.99).toInt()));
+    final bool isProgressComplete =
+        (torrent.progress >= 0.999 && totalSize > 0) ||
+            (totalSize > 0 && downloadedBytes >= totalSize) ||
+            (torrent.totalWanted > 0 &&
+                torrent.totalWantedDone >= torrent.totalWanted &&
+                torrent.progress >= 0.999);
+    final bool isSeedingComplete = (stateLabel == 'seeding' ||
+            stateLabel == 'finished') &&
+        (isProgressComplete ||
+            (totalSize > 0 && downloadedBytes >= (totalSize * 0.99).toInt()));
 
     final bool isCompleted = torrent.hasMetadata &&
         hasReliableTotalSize &&
@@ -2579,7 +2655,7 @@ class TorrentDownloadHandler {
 }
 
 class _TorrentTrackerState {
-  DateTime lastTorrentProgressTime = DateTime.now();
+  DateTime lastTorrentProgressTime = DateTime.fromMillisecondsSinceEpoch(0);
   int lastTorrentDownloadedBytes = 0;
   int lastTorrentPiecesDone = 0;
   double lastTorrentSpeed = 0.0;

@@ -44,7 +44,8 @@ void main() {
       listProvider = DownloadListProvider(mockRepo);
     });
 
-    test('addTask writes to repository before updating in-memory list', () async {
+    test('addTask writes to repository before updating in-memory list',
+        () async {
       final task = createDummyTask(id: 'task-1');
 
       when(() => mockRepo.save(any())).thenAnswer((_) async {});
@@ -56,16 +57,19 @@ void main() {
       verify(() => mockRepo.save(task)).called(1);
     });
 
-    test('addTask rolls back / leaves memory unchanged if DB write throws', () async {
+    test('addTask rolls back / leaves memory unchanged if DB write throws',
+        () async {
       final task = createDummyTask(id: 'task-err');
 
-      when(() => mockRepo.save(any())).thenThrow(Exception('DB disk I/O error'));
+      when(() => mockRepo.save(any()))
+          .thenThrow(Exception('DB disk I/O error'));
 
       expect(() => listProvider.addTask(task), throwsException);
       expect(listProvider.tasks.isEmpty, isTrue);
     });
 
-    test('updateTask rolls back to previous state if repository save fails', () async {
+    test('updateTask rolls back to previous state if repository save fails',
+        () async {
       final originalTask = createDummyTask(
         id: 'task-update',
         status: DownloadStatus.downloading,
@@ -91,7 +95,8 @@ void main() {
       expect(current.status, DownloadStatus.downloading);
     });
 
-    test('deleteTask does not remove from memory if repository delete fails', () async {
+    test('deleteTask does not remove from memory if repository delete fails',
+        () async {
       final task = createDummyTask(
         id: 'task-del',
         status: DownloadStatus.downloading,
@@ -112,13 +117,16 @@ void main() {
   });
 
   group('Phase 1.6: Bounded Memory Maps & Leak Prevention', () {
-    test('1000 simulated progress ticks across 10 tasks do not leak memory in notifiers', () {
+    test(
+        '1000 simulated progress ticks across 10 tasks do not leak memory in notifiers',
+        () {
       final mockRepo = MockTaskRepository();
       final listProvider = DownloadListProvider(mockRepo);
 
       final tasks = List.generate(
         10,
-        (i) => createDummyTask(id: 'task-$i', status: DownloadStatus.downloading),
+        (i) =>
+            createDummyTask(id: 'task-$i', status: DownloadStatus.downloading),
       );
 
       for (final t in tasks) {
@@ -132,7 +140,8 @@ void main() {
         final progressRatio = (tick % 100) / 100.0;
         final speed = (tick % 50) * 1024.0;
 
-        (listProvider.progressRatioFor(taskId) as dynamic).value = progressRatio;
+        (listProvider.progressRatioFor(taskId) as dynamic).value =
+            progressRatio;
         (listProvider.speedFor(taskId) as dynamic).value = speed;
       }
 

@@ -43,12 +43,17 @@ Future<void> _forwardBackgroundAction(String actionId, String? payload) async {
       debugPrint(
           '[NotificationService] WARNING: null or empty payload for action $actionId');
     }
+    final safeTaskId = (payload != null &&
+            payload.isNotEmpty &&
+            RegExp(r'^[a-zA-Z0-9_\-]+$').hasMatch(payload))
+        ? payload
+        : null;
     final prefs = await SharedPreferences.getInstance();
     final nonce = prefs.getString(_nonceKey);
     final rawList = prefs.getStringList(_pendingActionsKey) ?? <String>[];
     final actionJson = jsonEncode({
       'action': actionId,
-      'taskId': payload,
+      'taskId': safeTaskId,
       'nonce': nonce,
       'timestamp': DateTime.now().millisecondsSinceEpoch,
     });
@@ -165,12 +170,14 @@ class NotificationService {
     final key = '${event['action']}_${event['taskId']}';
     final now = DateTime.now();
     final lastTime = _lastActionTimes[key];
-    if (lastTime != null && now.difference(lastTime) < const Duration(milliseconds: 500)) {
+    if (lastTime != null &&
+        now.difference(lastTime) < const Duration(milliseconds: 500)) {
       return;
     }
     _lastActionTimes[key] = now;
     if (_lastActionTimes.length > 100) {
-      _lastActionTimes.removeWhere((_, time) => now.difference(time) > const Duration(minutes: 5));
+      _lastActionTimes.removeWhere(
+          (_, time) => now.difference(time) > const Duration(minutes: 5));
     }
 
     unawaited(_actionQueueLock.synchronized(() {
@@ -775,6 +782,39 @@ class NotificationService {
     );
   }
 
+  Future<void> showTimeoutNotice({
+    int notificationId = 999,
+    String? title,
+    String? body,
+    String languageCode = 'en',
+  }) async {
+    if (!_initialized) return;
+    final noticeTitle = title ?? 'Downloads Paused (Background Limit)';
+    final noticeBody = body ??
+        'Downloads paused to comply with OS background limits and will resume automatically.';
+    const androidDetails = AndroidNotificationDetails(
+      'dmx_background_service',
+      'XDM Background Service',
+      importance: Importance.defaultImportance,
+      priority: Priority.defaultPriority,
+      showProgress: false,
+    );
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      threadIdentifier: 'dmx_downloads',
+    );
+    const details = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+    await _plugin.show(
+      id: notificationId,
+      title: noticeTitle,
+      body: noticeBody,
+      notificationDetails: details,
+    );
+  }
+
   Future<void> showProgress({
     required int notificationId,
     required String title,
@@ -809,10 +849,18 @@ class NotificationService {
     }
     _trailingPostTimers.clear();
     if (!_initialized) return;
-    await _plugin.cancelAll();
+    try {
+      await _plugin.cancelAll();
+    } catch (e, st) {
+      LoggingService.logger('NotificationService').fine(
+          'Notification plugin cancelAll suppressed in headless/uninitialized environment',
+          e,
+          st);
+    }
   }
 
   Future<void> dispose() async {
+    await cancelAll();
     _pollTimer?.cancel();
     _pollTimer = null;
     for (final timer in _trailingPostTimers.values) {

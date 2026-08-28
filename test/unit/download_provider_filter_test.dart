@@ -228,7 +228,8 @@ void main() {
       expect(filtered.first.id, equals('1')); // Small first in ascending
     });
 
-    test('9. setMixinActiveTabIndex updates activeTabIndex and shows navbar', () {
+    test('9. setMixinActiveTabIndex updates activeTabIndex and shows navbar',
+        () {
       final host = TestFilterHost();
       expect(host.activeTabIndex, equals(0));
 

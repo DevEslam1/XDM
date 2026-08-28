@@ -68,7 +68,8 @@ class ResourceProbe {
     _isRunning = true;
     _timer?.cancel();
     _timer = Timer.periodic(interval, (_) => sampleNow());
-    LoggingService.logger('ResourceProbe').info('ResourceProbe started (interval: ${interval.inSeconds}s)');
+    LoggingService.logger('ResourceProbe')
+        .info('ResourceProbe started (interval: ${interval.inSeconds}s)');
   }
 
   /// Halts the sampling loop.

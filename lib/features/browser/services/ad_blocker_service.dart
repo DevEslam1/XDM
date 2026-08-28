@@ -302,6 +302,23 @@ class AdBlockerService {
   final Map<String, RegExp> _compiledPatterns = <String, RegExp>{};
 
   RegExp? _compilePatternCached(String pattern) {
+    // FIX P1-11: ReDoS guard — reject overly long or nested-quantifier patterns
+    // that cause catastrophic backtracking on hasMatch (e.g., (a+)+$).
+    if (pattern.length > 200) {
+      LoggingService.logger('AdBlockerService')
+          .warning('Regex pattern too long (${pattern.length}), skipping');
+      return null;
+    }
+    if ('*'.allMatches(pattern).length > 10) {
+      LoggingService.logger('AdBlockerService')
+          .warning('Regex pattern too many wildcards, skipping: $pattern');
+      return null;
+    }
+    if (RegExp(r'\(\s*[^)]*[+*]\s*\)\s*[+*]').hasMatch(pattern)) {
+      LoggingService.logger('AdBlockerService')
+          .warning('Potential ReDoS pattern rejected: $pattern');
+      return null;
+    }
     final cached = _compiledPatterns.remove(pattern);
     if (cached != null) {
       // Refresh LRU position by re-inserting at the end.

@@ -20,7 +20,8 @@ final class StartTask extends TaskCommand {
   const StartTask(super.id, {this.ignoreQueueLimit = false});
 
   @override
-  String toString() => 'StartTask(id: $id, ignoreQueueLimit: $ignoreQueueLimit)';
+  String toString() =>
+      'StartTask(id: $id, ignoreQueueLimit: $ignoreQueueLimit)';
 }
 
 /// Command to pause an active task.

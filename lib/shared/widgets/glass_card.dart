@@ -178,7 +178,7 @@ class _GlassCardState extends State<GlassCard> {
           constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
           child: MouseRegion(
             cursor: SystemMouseCursors.click,
-            onEnter: (_) {
+            onExit: (_) {
               if (_pressed && mounted) setState(() => _pressed = false);
             },
             child: GestureDetector(

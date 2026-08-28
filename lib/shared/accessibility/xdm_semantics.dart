@@ -29,7 +29,8 @@ class XdmSemantics {
     required double value, // 0.0 to 1.0
     required String label,
   }) {
-    final clamped = value.clamp(0.0, 1.0);
+    final clamped =
+        (value.isNaN || value.isInfinite) ? 0.0 : value.clamp(0.0, 1.0);
     final pct = (clamped * 100).toStringAsFixed(0);
     return Semantics(
       label: label,

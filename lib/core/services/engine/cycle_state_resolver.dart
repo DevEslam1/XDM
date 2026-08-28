@@ -62,7 +62,8 @@ class CycleStateResolver {
   static CycleState _resolveMessage(String sm) {
     final match = _compiledPattern.firstMatch(sm);
     if (match == null) {
-      _log.warning('Unrecognized cycle state label: "$sm". Falling back to default.');
+      _log.warning(
+          'Unrecognized cycle state label: "$sm". Falling back to default.');
       return CycleState.downloading;
     }
     if (match.namedGroup('metadata') != null) {
@@ -82,8 +83,9 @@ class CycleStateResolver {
     if (match.namedGroup('paused') != null) return CycleState.paused;
     if (match.namedGroup('stalled') != null) return CycleState.stalled;
     if (match.namedGroup('failed') != null) return CycleState.failed;
-    
-    _log.warning('Unrecognized cycle state label: "$sm". Falling back to default.');
+
+    _log.warning(
+        'Unrecognized cycle state label: "$sm". Falling back to default.');
     return CycleState.downloading;
   }
 

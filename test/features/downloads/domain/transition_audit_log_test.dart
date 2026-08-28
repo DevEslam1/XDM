@@ -11,7 +11,9 @@ void main() {
       auditLog.clear();
     });
 
-    test('captures from/to/command/caller/engine for a full scripted user journey', () async {
+    test(
+        'captures from/to/command/caller/engine for a full scripted user journey',
+        () async {
       const taskId = 'journey-task-101';
       final sm = DomainStateMachine(
         taskId: taskId,

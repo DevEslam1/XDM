@@ -40,7 +40,8 @@ void main() {
   });
 
   group('Phase 0 Matrix — HTTP Engine Resiliency', () {
-    test('1. HTTP: pause -> resume completes with byte-identical checksum', () async {
+    test('1. HTTP: pause -> resume completes with byte-identical checksum',
+        () async {
       final targetPath = '${tempDir.path}/test_pause_resume.bin';
       final tempPath = '${tempDir.path}/test_pause_resume.bin.tmp';
       final serverUrl = server.urlFor('/pause_resume.bin');
@@ -64,7 +65,8 @@ void main() {
         etag: '"matrix-v1"',
         chunks: [
           ChunkState(start: 0, end: halfSize - 1, downloaded: halfSize ~/ 2),
-          ChunkState(start: halfSize, end: fileSize - 1, downloaded: halfSize ~/ 2),
+          ChunkState(
+              start: halfSize, end: fileSize - 1, downloaded: halfSize ~/ 2),
         ],
       );
       await StateStore.save(tempPath, partState, durable: true);
@@ -76,7 +78,8 @@ void main() {
       await journal.close();
 
       // Write partial bytes to disk
-      await File(tempPath).writeAsBytes(samplePayload.sublist(0, halfSize), flush: true);
+      await File(tempPath)
+          .writeAsBytes(samplePayload.sublist(0, halfSize), flush: true);
 
       // Phase B: Resume to completion
       final receivePort = ReceivePort();
@@ -94,7 +97,9 @@ void main() {
       expect(sha256.convert(downloaded).toString(), equals(sampleSha256));
     });
 
-    test('2. HTTP: pause -> app kill -> cold relaunch reconciles journal and finishes cleanly', () async {
+    test(
+        '2. HTTP: pause -> app kill -> cold relaunch reconciles journal and finishes cleanly',
+        () async {
       final targetPath = '${tempDir.path}/test_cold_kill.bin';
       final tempPath = '${tempDir.path}/test_cold_kill.bin.tmp';
       final serverUrl = server.urlFor('/cold_kill.bin');
@@ -111,7 +116,8 @@ void main() {
       );
 
       // Uncheckpointed journal write simulating crash before graceful flush
-      await File(tempPath).writeAsBytes(samplePayload.sublist(0, 60000), flush: true);
+      await File(tempPath)
+          .writeAsBytes(samplePayload.sublist(0, 60000), flush: true);
       final journal = DownloadJournal('$tempPath.journal');
       await journal.open();
       await journal.writeInit(2, fileSize);
@@ -129,10 +135,12 @@ void main() {
       final finalFile = File(targetPath);
       expect(await finalFile.exists(), isTrue);
       expect(await finalFile.length(), equals(fileSize));
-      expect(sha256.convert(await finalFile.readAsBytes()).toString(), equals(sampleSha256));
+      expect(sha256.convert(await finalFile.readAsBytes()).toString(),
+          equals(sampleSha256));
     });
 
-    test('3. HTTP: fail -> retry recovers from connection drop mid-stream', () async {
+    test('3. HTTP: fail -> retry recovers from connection drop mid-stream',
+        () async {
       final targetPath = '${tempDir.path}/test_fail_retry.bin';
       final tempPath = '${tempDir.path}/test_fail_retry.bin.tmp';
       final serverUrl = server.urlFor('/fail_retry.bin');
@@ -162,7 +170,8 @@ void main() {
         receivePort1.close();
       }
 
-      expect(caughtError, isTrue, reason: 'Expected connection drop on first run');
+      expect(caughtError, isTrue,
+          reason: 'Expected connection drop on first run');
 
       // Reset drop flag and retry
       server.setDropConnectionAfterBytes(null);
@@ -177,10 +186,12 @@ void main() {
       final finalFile = File(targetPath);
       expect(await finalFile.exists(), isTrue);
       expect(await finalFile.length(), equals(fileSize));
-      expect(sha256.convert(await finalFile.readAsBytes()).toString(), equals(sampleSha256));
+      expect(sha256.convert(await finalFile.readAsBytes()).toString(),
+          equals(sampleSha256));
     });
 
-    test('4. HTTP: pause -> server file changed (ETag flip) resets cleanly', () async {
+    test('4. HTTP: pause -> server file changed (ETag flip) resets cleanly',
+        () async {
       final targetPath = '${tempDir.path}/test_etag_flip.bin';
       final tempPath = '${tempDir.path}/test_etag_flip.bin.tmp';
       final serverUrl = server.urlFor('/etag_flip.bin');
@@ -196,7 +207,8 @@ void main() {
         ],
       );
       await StateStore.save(tempPath, partState, durable: true);
-      await File(tempPath).writeAsBytes(samplePayload.sublist(0, 10000), flush: true);
+      await File(tempPath)
+          .writeAsBytes(samplePayload.sublist(0, 10000), flush: true);
 
       // Server updates to v2 with different content
       final updatedPayload = Uint8List.fromList(
@@ -231,7 +243,8 @@ void main() {
       final finalFile = File(targetPath);
       expect(await finalFile.exists(), isTrue);
       expect(await finalFile.length(), equals(fileSize));
-      expect(sha256.convert(await finalFile.readAsBytes()).toString(), equals(updatedSha256));
+      expect(sha256.convert(await finalFile.readAsBytes()).toString(),
+          equals(updatedSha256));
     });
   });
 
@@ -242,7 +255,9 @@ void main() {
       torrentService = FakeITorrentService();
     });
 
-    test('5. Torrent: pause -> resume triggers state transitions and bandwidth drops', () async {
+    test(
+        '5. Torrent: pause -> resume triggers state transitions and bandwidth drops',
+        () async {
       const id = 101;
       torrentService.seedTorrent(
         id: id,
@@ -269,8 +284,10 @@ void main() {
       expect(torrentService.resumedTorrents, contains(id));
     });
 
-    test('6. Torrent: pause during metadata fetch cancels gracefully', () async {
-      final id = torrentService.addMagnet('magnet:?xt=urn:btih:fake123', '/downloads');
+    test('6. Torrent: pause during metadata fetch cancels gracefully',
+        () async {
+      final id =
+          torrentService.addMagnet('magnet:?xt=urn:btih:fake123', '/downloads');
       expect(torrentService.latestStats[id]?.hasMetadata, isFalse);
 
       // Pause while metadata is resolving
@@ -279,7 +296,9 @@ void main() {
       expect(torrentService.pausedTorrents, contains(id));
     });
 
-    test('7. Torrent: pause -> fastresume saved -> relaunch resumes from resume blob', () async {
+    test(
+        '7. Torrent: pause -> fastresume saved -> relaunch resumes from resume blob',
+        () async {
       const id = 102;
       torrentService.seedTorrent(
         id: id,
@@ -305,7 +324,8 @@ void main() {
   });
 
   group('Phase 0 Matrix — Concurrency & State Invariance', () {
-    test('8. Concurrent pause of 5 tasks is idempotent and dead-lock free', () async {
+    test('8. Concurrent pause of 5 tasks is idempotent and dead-lock free',
+        () async {
       final fakeEngine = FakeIDownloadEngine();
       final tasks = List.generate(5, (i) => 'task-concurrent-$i');
 
@@ -326,7 +346,9 @@ void main() {
       }
     });
 
-    test('9. DomainStateMachine: User pause is idempotent and validates all transitions', () async {
+    test(
+        '9. DomainStateMachine: User pause is idempotent and validates all transitions',
+        () async {
       final sm = DomainStateMachine(
         taskId: 'task-p0',
         initialState: DomainDownloadState.queued,
@@ -338,11 +360,13 @@ void main() {
       expect(sm.currentState, equals(DomainDownloadState.downloading));
 
       // User pauses
-      sm.transition(DomainDownloadState.paused, command: 'user_pause', reason: 'user');
+      sm.transition(DomainDownloadState.paused,
+          command: 'user_pause', reason: 'user');
       expect(sm.currentState, equals(DomainDownloadState.paused));
 
       // Repeated pause is idempotent
-      sm.transition(DomainDownloadState.paused, command: 'user_pause', reason: 'user');
+      sm.transition(DomainDownloadState.paused,
+          command: 'user_pause', reason: 'user');
       expect(sm.currentState, equals(DomainDownloadState.paused));
 
       // Resume back to downloading

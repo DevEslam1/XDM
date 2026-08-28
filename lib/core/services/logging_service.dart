@@ -175,7 +175,8 @@ class LoggingService {
         caseSensitive: false,
       ),
       (m) {
-        final prefix = m.group(0)!.startsWith(RegExp(r'[?&\s]')) ? m.group(0)![0] : '';
+        final prefix =
+            m.group(0)!.startsWith(RegExp(r'[?&\s]')) ? m.group(0)![0] : '';
         return '$prefix${m.group(1)}=[REDACTED]';
       },
     );

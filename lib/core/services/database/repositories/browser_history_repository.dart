@@ -73,6 +73,7 @@ class BrowserHistoryRepository {
     Map<String, dynamic> entry, {
     bool immediate = false,
   }) async {
+    if (!SettingsProvider.instance.saveBrowserHistory) return 0;
     final url = entry['url'] as String? ?? '';
     if (url.isEmpty || url == 'about:blank') return 0;
 

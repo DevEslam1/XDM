@@ -6,7 +6,8 @@ export 'cycle_state.dart';
 export 'download_request.dart';
 export 'pause_reason.dart';
 export 'torrent_session_settings.dart';
-export 'utils/url_specifications.dart' show TorrentFileSelection, TorrentUriKind;
+export 'utils/url_specifications.dart'
+    show TorrentFileSelection, TorrentUriKind;
 
 /// Progress callback signature for download engine operations.
 typedef ValueChangedProgress = void Function(DownloadProgress progress);

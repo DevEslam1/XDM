@@ -10,7 +10,8 @@ class _FakeEnginePort implements TaskEnginePort {
   final Map<String, int> activeEngineTasks = {};
 
   @override
-  Future<void> startEngineTask(String taskId, {bool ignoreQueueLimit = false}) async {
+  Future<void> startEngineTask(String taskId,
+      {bool ignoreQueueLimit = false}) async {
     // Artificial small jitter to stress interleaving
     await Future<void>.delayed(const Duration(milliseconds: 2));
     engineStartCounts[taskId] = (engineStartCounts[taskId] ?? 0) + 1;
@@ -18,19 +19,22 @@ class _FakeEnginePort implements TaskEnginePort {
   }
 
   @override
-  Future<void> pauseEngineTask(String taskId, {String? reason, bool userInitiated = true}) async {
+  Future<void> pauseEngineTask(String taskId,
+      {String? reason, bool userInitiated = true}) async {
     await Future<void>.delayed(const Duration(milliseconds: 1));
     activeEngineTasks[taskId] = 0;
   }
 
   @override
-  Future<void> cancelEngineTask(String taskId, {bool deleteFiles = false}) async {
+  Future<void> cancelEngineTask(String taskId,
+      {bool deleteFiles = false}) async {
     await Future<void>.delayed(const Duration(milliseconds: 1));
     activeEngineTasks[taskId] = 0;
   }
 
   @override
-  Future<void> deleteEngineTask(String taskId, {bool deleteFiles = false}) async {
+  Future<void> deleteEngineTask(String taskId,
+      {bool deleteFiles = false}) async {
     await Future<void>.delayed(const Duration(milliseconds: 1));
     activeEngineTasks[taskId] = 0;
   }
@@ -46,7 +50,8 @@ class _FakeEnginePort implements TaskEnginePort {
   }
 
   @override
-  Future<void> handleNetworkChanged({required bool isConnected, required bool isWifi}) async {}
+  Future<void> handleNetworkChanged(
+      {required bool isConnected, required bool isWifi}) async {}
 
   @override
   Future<void> handleAppLifecycleChanged(dynamic state) async {}
@@ -57,11 +62,19 @@ class _FakeEnginePort implements TaskEnginePort {
 
 void main() {
   group('Domain Concurrency Stress Test', () {
-    test('fires 100 randomized interleaved commands from 5 concurrent entry points', () async {
+    test(
+        'fires 100 randomized interleaved commands from 5 concurrent entry points',
+        () async {
       final engine = _FakeEnginePort();
       final executor = TaskExecutor(enginePort: engine);
 
-      const taskIds = ['task-alpha', 'task-beta', 'task-gamma', 'task-delta', 'task-epsilon'];
+      const taskIds = [
+        'task-alpha',
+        'task-beta',
+        'task-gamma',
+        'task-delta',
+        'task-epsilon'
+      ];
       final random = Random(42); // deterministic seed
 
       final commands = <DownloadCommand>[];

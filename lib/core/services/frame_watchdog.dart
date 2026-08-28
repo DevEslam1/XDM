@@ -49,7 +49,8 @@ class FrameWatchdog {
     try {
       final display = await getDisplayRefreshRate();
       if (display > 0) {
-        final rateChanged = (_refreshRate - display).abs() > 0.05 || _cachedRefreshRate == null;
+        final rateChanged =
+            (_refreshRate - display).abs() > 0.05 || _cachedRefreshRate == null;
         _refreshRate = display;
         _cachedRefreshRate = display;
         if (rateChanged) {
@@ -80,7 +81,10 @@ class FrameWatchdog {
   }
 
   static void start() {
-    if (!kDebugMode && !enableInReleaseForTesting) return;
+    // Plan 07 §7.1: frame monitoring runs in release too (low overhead — only
+    // per-frame integer counters; the verbose jank logs below are debug-level).
+    // This is what makes release-mode jank auto-degrade work. The screen-off /
+    // background guards below still keep it idle when there is nothing to watch.
     if (_isRunning ||
         PowerMonitor.screenOff ||
         !DownloadEngine.appInForeground ||

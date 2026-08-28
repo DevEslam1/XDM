@@ -327,7 +327,7 @@ class ErrorTaxonomy {
           final underlying = error.error;
           final errStr = error.toString().toLowerCase();
           final underlyingStr = underlying?.toString().toLowerCase() ?? '';
-          
+
           if (underlying is HandshakeException ||
               underlying is TlsException ||
               underlying is CertificateException ||
@@ -365,14 +365,23 @@ class ErrorTaxonomy {
             retryable: true,
             recoveryAction: RecoveryAction.retryWithDelay,
           );
+        case DioExceptionType.unknown:
+          final underlying = error.error;
+          if (underlying != null) {
+            return classify(underlying, message: message, httpStatus: status);
+          }
+          return const ErrorClassification(
+            family: ErrorFamily.network,
+            message: 'Network error',
+            retryable: true,
+            recoveryAction: RecoveryAction.retryWithDelay,
+          );
         default:
           break;
       }
     }
 
-    if (error is HandshakeException ||
-        error is TlsException ||
-        error is CertificateException) {
+    if (_isTlsError(error)) {
       return const ErrorClassification(
         family: ErrorFamily.auth,
         message: 'Secure connection failed (SSL/TLS Certificate Error)',
@@ -458,5 +467,27 @@ class ErrorTaxonomy {
     return message.contains('no space left') ||
         message.contains('not enough space') ||
         message.contains('disk full');
+  }
+
+  /// Checks if an error is a TLS/SSL error using type checks guarded for
+  /// web compatibility (dart:io types are not available on web).
+  static bool _isTlsError(Object error) {
+    try {
+      if (error is HandshakeException ||
+          error is TlsException ||
+          error is CertificateException) {
+        return true;
+      }
+    } catch (_) {
+      // On web, dart:io types are not available — fall through to string checks
+    }
+    final typeName = error.runtimeType.toString();
+    final stringRep = error.toString().toLowerCase();
+    return typeName == 'HandshakeException' ||
+        typeName == 'TlsException' ||
+        typeName == 'CertificateException' ||
+        stringRep.contains('handshake') ||
+        stringRep.contains('certificate') ||
+        stringRep.contains('tls');
   }
 }

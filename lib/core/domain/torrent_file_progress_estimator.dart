@@ -82,7 +82,8 @@ class TorrentFileProgressEstimator {
     bool sequential = false,
   }) {
     // If native data is available and matches file count, use it directly
-    if (nativeFileProgress.isNotEmpty && nativeFileProgress.length >= files.length) {
+    if (nativeFileProgress.isNotEmpty &&
+        nativeFileProgress.length >= files.length) {
       for (var i = 0; i < files.length; i++) {
         final f = files[i];
         if (!TorrentFileNormalizer.isTorrentFileSelected(f)) {
@@ -93,7 +94,8 @@ class TorrentFileProgressEstimator {
           continue;
         }
         final len = (f['length'] as num?)?.toInt() ?? 0;
-        final dl = nativeFileProgress[i].clamp(0, len > 0 ? len : nativeFileProgress[i]);
+        final dl = nativeFileProgress[i]
+            .clamp(0, len > 0 ? len : nativeFileProgress[i]);
         f['downloadedBytes'] = dl;
         f['progress'] = len > 0 ? (dl / len).clamp(0.0, 1.0) : 0.0;
         f['isComplete'] = len > 0 && dl >= len;
@@ -102,7 +104,8 @@ class TorrentFileProgressEstimator {
       return;
     }
     // Fall back to estimation
-    updateFilesWithNativeProgress(files, overallProgress, totalDownloadedBytes, sequential: sequential);
+    updateFilesWithNativeProgress(files, overallProgress, totalDownloadedBytes,
+        sequential: sequential);
   }
 
   /// Distributes estimated downloaded bytes sequentially (file-by-file).
@@ -218,8 +221,8 @@ class TorrentFileProgressEstimator {
       }
     }
     final diff = totalDownloadedBytes - currentSum;
-    if (diff == 0 || estimatedFiles.isEmpty) return;
-    if (diff > 0 && totalRemainingNeeded > 0) {
+    if (diff == 0) return;
+    if (diff > 0 && totalRemainingNeeded > 0 && estimatedFiles.isNotEmpty) {
       int applied = 0;
       for (int i = 0; i < estimatedFiles.length; i++) {
         final f = estimatedFiles[i];
@@ -235,6 +238,31 @@ class TorrentFileProgressEstimator {
         // FIX: [Audit] Empty / zero-length files must have 0.0 progress, not 1.0
         f['progress'] = len > 0 ? (newDl / len).clamp(0.0, 1.0) : 0.0;
         f['isComplete'] = len > 0 && newDl >= len;
+      }
+    } else if (diff < 0) {
+      final filesWithDl = files
+          .where((f) =>
+              ((f['downloadedBytes'] as num?)?.toInt() ?? 0) > 0 &&
+              ((f['progressEstimated'] as bool?) ?? false))
+          .toList();
+      final totalEstimatedDl = filesWithDl.fold(
+          0, (sum, f) => sum + ((f['downloadedBytes'] as num?)?.toInt() ?? 0));
+      if (totalEstimatedDl > 0) {
+        final excess = -diff;
+        int subtracted = 0;
+        for (int i = 0; i < filesWithDl.length; i++) {
+          final f = filesWithDl[i];
+          final len = (f['length'] as num?)?.toInt() ?? 0;
+          final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+          final share = (i == filesWithDl.length - 1)
+              ? (excess - subtracted)
+              : ((dl / totalEstimatedDl) * excess).round();
+          subtracted += share;
+          final newDl = math.max(0, dl - share);
+          f['downloadedBytes'] = newDl;
+          f['progress'] = len > 0 ? (newDl / len).clamp(0.0, 1.0) : 0.0;
+          f['isComplete'] = len > 0 && newDl >= len;
+        }
       }
     }
   }

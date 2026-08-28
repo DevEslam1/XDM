@@ -34,7 +34,9 @@ void main() {
   });
 
   group('Phase 5 — Kill -9 Crash Matrix & Data-Loss Hardening', () {
-    test('Matrix Case 1: Kill -9 Crash at 10% progress -> Zero byte loss on recovery', () async {
+    test(
+        'Matrix Case 1: Kill -9 Crash at 10% progress -> Zero byte loss on recovery',
+        () async {
       const totalSize = 10 * 1024 * 1024; // 10 MB
       const threadCount = 4;
       const targetDownloaded = 1 * 1024 * 1024; // 1 MB (10%)
@@ -60,14 +62,16 @@ void main() {
         url: 'https://example.com/file_10pct.bin',
         chunks: initialChunks,
       );
-      await StateStore.save(tempFilePath, state, durable: true, taskId: 'task-10');
+      await StateStore.save(tempFilePath, state,
+          durable: true, taskId: 'task-10');
 
       final journal = DownloadJournal('$tempFilePath.journal');
       await journal.open();
       await journal.writeInit(threadCount, totalSize);
       await journal.recordChunkProgress(0, targetDownloaded);
       await journal.flushAndSync();
-      await journal.close(); // Simulates fsync flush to disk right before kill -9
+      await journal
+          .close(); // Simulates fsync flush to disk right before kill -9
 
       // Seed task into database as downloading
       final task = DownloadTask(
@@ -112,7 +116,9 @@ void main() {
       provider.dispose();
     });
 
-    test('Matrix Case 2: Kill -9 Crash at 50% progress -> Zero byte loss on recovery', () async {
+    test(
+        'Matrix Case 2: Kill -9 Crash at 50% progress -> Zero byte loss on recovery',
+        () async {
       const totalSize = 20 * 1024 * 1024; // 20 MB
       const threadCount = 4;
       const chunkSize = totalSize ~/ threadCount; // 5 MB per chunk
@@ -126,8 +132,14 @@ void main() {
       await raf.close();
 
       final chunks = [
-        ChunkState(start: 0, end: chunkSize - 1, downloaded: chunkSize), // 5MB complete
-        ChunkState(start: chunkSize, end: 2 * chunkSize - 1, downloaded: chunkSize), // 5MB complete
+        ChunkState(
+            start: 0,
+            end: chunkSize - 1,
+            downloaded: chunkSize), // 5MB complete
+        ChunkState(
+            start: chunkSize,
+            end: 2 * chunkSize - 1,
+            downloaded: chunkSize), // 5MB complete
         ChunkState(start: 2 * chunkSize, end: 3 * chunkSize - 1, downloaded: 0),
         ChunkState(start: 3 * chunkSize, end: totalSize - 1, downloaded: 0),
       ];
@@ -137,7 +149,8 @@ void main() {
         url: 'https://example.com/file_50pct.bin',
         chunks: chunks,
       );
-      await StateStore.save(tempFilePath, state, durable: true, taskId: 'task-50');
+      await StateStore.save(tempFilePath, state,
+          durable: true, taskId: 'task-50');
 
       final journal = DownloadJournal('$tempFilePath.journal');
       await journal.open();
@@ -193,7 +206,9 @@ void main() {
       provider.dispose();
     });
 
-    test('Matrix Case 3: Kill -9 Crash at 99% progress -> Zero byte loss, only 1% left', () async {
+    test(
+        'Matrix Case 3: Kill -9 Crash at 99% progress -> Zero byte loss, only 1% left',
+        () async {
       const totalSize = 100 * 1024 * 1024; // 100 MB
       const threadCount = 4;
       const chunkSize = totalSize ~/ threadCount; // 25 MB per chunk
@@ -208,10 +223,20 @@ void main() {
       await raf.close();
 
       final chunks = [
-        ChunkState(start: 0, end: chunkSize - 1, downloaded: chunkSize), // 25 MB
-        ChunkState(start: chunkSize, end: 2 * chunkSize - 1, downloaded: chunkSize), // 25 MB
-        ChunkState(start: 2 * chunkSize, end: 3 * chunkSize - 1, downloaded: chunkSize), // 25 MB
-        ChunkState(start: 3 * chunkSize, end: totalSize - 1, downloaded: chunk3Downloaded), // 24 MB
+        ChunkState(
+            start: 0, end: chunkSize - 1, downloaded: chunkSize), // 25 MB
+        ChunkState(
+            start: chunkSize,
+            end: 2 * chunkSize - 1,
+            downloaded: chunkSize), // 25 MB
+        ChunkState(
+            start: 2 * chunkSize,
+            end: 3 * chunkSize - 1,
+            downloaded: chunkSize), // 25 MB
+        ChunkState(
+            start: 3 * chunkSize,
+            end: totalSize - 1,
+            downloaded: chunk3Downloaded), // 24 MB
       ];
       final state = TransferState(
         totalSize: totalSize,
@@ -219,12 +244,14 @@ void main() {
         url: 'https://example.com/file_99pct.bin',
         chunks: chunks,
       );
-      await StateStore.save(tempFilePath, state, durable: true, taskId: 'task-99');
+      await StateStore.save(tempFilePath, state,
+          durable: true, taskId: 'task-99');
 
       final journal = DownloadJournal('$tempFilePath.journal');
       await journal.open();
       await journal.writeInit(threadCount, totalSize);
-      await journal.writeCheckpoint([chunkSize, chunkSize, chunkSize, chunk3Downloaded], totalSize);
+      await journal.writeCheckpoint(
+          [chunkSize, chunkSize, chunkSize, chunk3Downloaded], totalSize);
       await journal.flushAndSync();
       await journal.close();
 
@@ -262,7 +289,9 @@ void main() {
       provider.dispose();
     });
 
-    test('Matrix Case 4: Kill -9 Crash during final rename/move -> Target recognized, completed', () async {
+    test(
+        'Matrix Case 4: Kill -9 Crash during final rename/move -> Target recognized, completed',
+        () async {
       const totalSize = 5 * 1024 * 1024; // 5 MB
       final localFilePath = '${tempDir.path}/final_file.bin';
       final tempFilePath = '${tempDir.path}/final_file.bin.dmxpart';
@@ -282,7 +311,8 @@ void main() {
         tempFilePath: tempFilePath,
         fileSize: totalSize,
         downloadedBytes: totalSize,
-        status: DownloadStatus.downloading, // DB still recorded downloading when crash occurred
+        status: DownloadStatus
+            .downloading, // DB still recorded downloading when crash occurred
         category: 'other',
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
@@ -311,7 +341,9 @@ void main() {
       provider.dispose();
     });
 
-    test('Matrix Case 5: Kill -9 Crash during DB write -> Journal/Disk truth overwrites stale DB', () async {
+    test(
+        'Matrix Case 5: Kill -9 Crash during DB write -> Journal/Disk truth overwrites stale DB',
+        () async {
       const totalSize = 10 * 1024 * 1024;
       const threadCount = 2;
       const diskBytes = 6 * 1024 * 1024; // 6 MB on disk (60%)
@@ -333,7 +365,8 @@ void main() {
         url: 'https://example.com/file_db_crash.bin',
         chunks: chunks,
       );
-      await StateStore.save(tempFilePath, state, durable: true, taskId: 'task-db-crash');
+      await StateStore.save(tempFilePath, state,
+          durable: true, taskId: 'task-db-crash');
 
       final journal = DownloadJournal('$tempFilePath.journal');
       await journal.open();
@@ -372,12 +405,78 @@ void main() {
 
       final recovered = provider.findTaskById('task-db-crash');
       expect(recovered, isNotNull);
-      expect(recovered!.downloadedBytes, equals(diskBytes)); // Reconciled from 2MB to 6MB
+      expect(recovered!.downloadedBytes,
+          equals(diskBytes)); // Reconciled from 2MB to 6MB
       expect(recovered.status, equals(DownloadStatus.paused));
 
       final updatedDb = await dbService.getTask('task-db-crash');
       expect(updatedDb!.downloadedBytes, equals(diskBytes));
       expect(updatedDb.status, equals(DownloadStatus.paused));
+
+      provider.dispose();
+    });
+
+    test(
+        'Matrix Case 6: Kill -9 during rename of UNKNOWN-length download -> .dmxdone marker recognized, completed',
+        () async {
+      // Unknown Content-Length: fileSize is 0. The size-based reconcile gate
+      // (fileSize > 0) structurally cannot recognize completion, so the durable
+      // `.dmxdone` marker written by _finalize is the only recovery signal.
+      const downloadedSize = 3 * 1024 * 1024; // 3 MB actually written
+      final localFilePath = '${tempDir.path}/unknown_len.bin';
+      final tempFilePath = '${tempDir.path}/unknown_len.bin.dmxpart';
+
+      // Rename to final destination completed on disk...
+      final localFile = File(localFilePath);
+      final raf = await localFile.open(mode: FileMode.write);
+      await raf.truncate(downloadedSize);
+      await raf.close();
+
+      // ...and _finalize wrote the durable completion marker before crash,
+      // but the DB was never updated (still 'downloading', fileSize 0, and the
+      // StateStore snapshot was already removed).
+      await File('$tempFilePath.dmxdone')
+          .writeAsString('$downloadedSize', flush: true);
+
+      final task = DownloadTask(
+        id: 'task-unknown-len',
+        url: 'https://example.com/unknown_len.bin',
+        fileName: 'unknown_len.bin',
+        savePath: localFilePath,
+        localFilePath: localFilePath,
+        tempFilePath: tempFilePath,
+        fileSize: 0, // Unknown Content-Length
+        downloadedBytes: 0,
+        status: DownloadStatus.downloading,
+        category: 'other',
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        threadCount: 1,
+        chunks: const [],
+        speed: 1024 * 1024,
+      );
+      await dbService.saveTask(task);
+
+      final provider = DownloadProvider(
+        databaseService: dbService,
+        settingsProvider: settingsProvider,
+        enableBackgroundTimers: false,
+      );
+      await provider.load(pauseOrphanDownloads: true, autoResume: false);
+
+      final recoveredTask = provider.findTaskById('task-unknown-len');
+      expect(recoveredTask, isNotNull);
+      expect(recoveredTask!.status, equals(DownloadStatus.completed));
+      expect(recoveredTask.downloadedBytes, equals(downloadedSize));
+      // fileSize was 0; reconcile adopts the marker's byte count.
+      expect(recoveredTask.fileSize, equals(downloadedSize));
+
+      final dbTask = await dbService.getTask('task-unknown-len');
+      expect(dbTask!.status, equals(DownloadStatus.completed));
+      expect(dbTask.downloadedBytes, equals(downloadedSize));
+
+      // Marker must be consumed so it can't falsely reconcile a future re-download.
+      expect(await File('$tempFilePath.dmxdone').exists(), isFalse);
 
       provider.dispose();
     });

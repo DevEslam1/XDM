@@ -44,20 +44,24 @@ void main() {
     expect(result, isNonNegative);
   });
 
-  test('AppDatabase cleanupStaleConnections validates connection health', () async {
+  test('AppDatabase cleanupStaleConnections validates connection health',
+      () async {
     final isHealthy = await db.cleanupStaleConnections();
     expect(isHealthy, isTrue);
   });
 
-  test('AppDatabase periodic checkpointer can be started and stopped', () async {
-    db.startPeriodicWalCheckpointer(interval: const Duration(milliseconds: 100));
+  test('AppDatabase periodic checkpointer can be started and stopped',
+      () async {
+    db.startPeriodicWalCheckpointer(
+        interval: const Duration(milliseconds: 100));
     await Future<void>.delayed(const Duration(milliseconds: 250));
     db.stopPeriodicWalCheckpointer();
     // No crashes or unhandled exceptions
     expect(true, isTrue);
   });
 
-  test('DatabaseService exposes WAL management and connection health checks', () async {
+  test('DatabaseService exposes WAL management and connection health checks',
+      () async {
     final dbService = DatabaseService();
     await dbService.init(testPath: tempDir);
 

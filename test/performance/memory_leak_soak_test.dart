@@ -8,7 +8,9 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('Task 8: Memory & Resource Leak Soak Suite', () {
-    test('Repeated add and delete task lifecycle is stable without leaking listeners', () async {
+    test(
+        'Repeated add and delete task lifecycle is stable without leaking listeners',
+        () async {
       final queueProvider = DownloadQueueProvider();
 
       final initialListeners = ServiceRegistry.activeMemoryListenersCount;
@@ -24,10 +26,12 @@ void main() {
 
       final finalListeners = ServiceRegistry.activeMemoryListenersCount;
       expect(finalListeners, lessThanOrEqualTo(initialListeners + 5),
-          reason: 'Listener references must be cleaned up and not leak across cycles');
+          reason:
+              'Listener references must be cleaned up and not leak across cycles');
     });
 
-    test('Simulates 8-hour soak test: memory remains bounded (< 50MB growth)', () async {
+    test('Simulates 8-hour soak test: memory remains bounded (< 50MB growth)',
+        () async {
       final startingRss = ProcessInfo.currentRss;
       final allocations = <List<int>>[];
 
@@ -45,10 +49,12 @@ void main() {
 
       // Verify RAM growth is well below the 50 MB threshold
       expect(growthMb, lessThan(50.0),
-          reason: 'Continuous background processing must remain strictly bounded (< 50MB)');
+          reason:
+              'Continuous background processing must remain strictly bounded (< 50MB)');
     });
 
-    test('StateStore path lock map stays bounded under high path turnover', () async {
+    test('StateStore path lock map stays bounded under high path turnover',
+        () async {
       final store = StateStoreInstance();
 
       // Access 1000 unique file paths

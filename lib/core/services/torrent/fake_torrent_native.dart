@@ -30,14 +30,16 @@ class FakeTorrentNative implements ITorrentNative {
   bool simulateResumeLoadFailure = false;
 
   // FIX(N3): Injectable telemetry recorder to isolate DiagnosticService in tests
-  void Function(String event, {String? taskId, String? details})? onTelemetryAlert;
+  void Function(String event, {String? taskId, String? details})?
+      onTelemetryAlert;
 
   void _recordTelemetry(String event, {String? taskId, String? details}) {
     if (onTelemetryAlert != null) {
       onTelemetryAlert!(event, taskId: taskId, details: details);
     } else {
       try {
-        DiagnosticService.instance.recordTelemetryAlert(event, taskId: taskId, details: details);
+        DiagnosticService.instance
+            .recordTelemetryAlert(event, taskId: taskId, details: details);
       } catch (_) {}
     }
   }
@@ -152,7 +154,8 @@ class FakeTorrentNative implements ITorrentNative {
     var allDone = 0;
 
     for (var i = 0; i < files.length; i++) {
-      final downloaded = i < perFileDownloadedBytes.length ? perFileDownloadedBytes[i] : 0;
+      final downloaded =
+          i < perFileDownloadedBytes.length ? perFileDownloadedBytes[i] : 0;
       allDone += downloaded;
       if (priorities[i] > 0) {
         wantedTotal += files[i].size;
@@ -160,7 +163,8 @@ class FakeTorrentNative implements ITorrentNative {
       }
     }
 
-    final progress = wantedTotal > 0 ? (wantedDone / wantedTotal).clamp(0.0, 1.0) : 1.0;
+    final progress =
+        wantedTotal > 0 ? (wantedDone / wantedTotal).clamp(0.0, 1.0) : 1.0;
     final totalPieces = status.numPieces > 0 ? status.numPieces : 100;
     final piecesDone = (totalPieces * progress).floor();
     final piecesBitfield = List.generate(totalPieces, (i) => i < piecesDone);
@@ -175,8 +179,8 @@ class FakeTorrentNative implements ITorrentNative {
       fileProgress: _fileProgress[id],
       filePriorities: priorities,
       isFinished: progress >= 0.999,
-      state: progress >= 0.999 ? 3 : 2,
-      stateLabel: progress >= 0.999 ? 'Finished' : 'Downloading',
+      state: progress >= 0.999 ? 4 : 2,
+      stateLabel: progress >= 0.999 ? 'Seeding' : 'Downloading',
     );
 
     _statuses[id] = updated;
@@ -270,7 +274,10 @@ class FakeTorrentNative implements ITorrentNative {
       downloadRate: 0,
       uploadRate: 0,
       totalDone: 0,
-      totalWanted: 0,
+      // FIX(P2.6): Initialize totalWanted to a plausible non-zero value so
+      // that the progress formula (totalDone / totalWanted) doesn't compute
+      // 0/0 = 1.0 and make a freshly-added torrent appear 100% complete.
+      totalWanted: 1024 * 1024,
       totalWantedDone: 0,
       totalUploaded: 0,
       numPeers: 0,
@@ -457,7 +464,17 @@ class FakeTorrentNative implements ITorrentNative {
     Duration timeout = const Duration(seconds: 5),
   }) async {
     saveResumeDataCallCount++;
-    final data = [0x64, 0x31, 0x30, 0x3a, 0x66, 0x61, 0x73, 0x74, 0x65]; // bencoded blob
+    final data = [
+      0x64,
+      0x31,
+      0x30,
+      0x3a,
+      0x66,
+      0x61,
+      0x73,
+      0x74,
+      0x65
+    ]; // bencoded blob
     _savedResumeData[id] = data;
 
     emitAlert(NativeAlertEvent(
@@ -486,8 +503,14 @@ class FakeTorrentNative implements ITorrentNative {
   @override
   void setUploadLimit(int bps) {}
 
+  /// Captures the most recent [NativeBtConfig] handed to [configureSession] so
+  /// tests can assert the SettingsProvider → session-settings → native wiring.
+  NativeBtConfig? lastConfig;
+
   @override
-  void configureSession(NativeBtConfig config) {}
+  void configureSession(NativeBtConfig config) {
+    lastConfig = config;
+  }
 
   @override
   NativeBtConfig getDefaultConfig() => const NativeBtConfig();

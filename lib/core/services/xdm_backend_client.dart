@@ -11,6 +11,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../features/settings/provider/settings_provider.dart';
 import 'backend_health_service.dart';
 import 'circuit_breaker.dart';
+import 'diagnostic_service.dart';
 import 'logging_service.dart';
 import 'retry_engine.dart';
 import 'xdm_backend_exceptions.dart';
@@ -278,15 +279,39 @@ class XdmBackendClient {
     String? oauthToken,
     bool forceRefresh = false,
   }) async {
+    final cacheKey = _normalizeCacheUrl(url);
     if (!forceRefresh) {
-      final cached = _streamsCache[url];
+      final cached = _streamsCache[cacheKey];
       if (cached != null) {
         if (!cached.isExpired) {
-          cached.lastAccessed = DateTime.now();
-          cacheHits++;
-          return cached.data;
+          // FIX P1-18: Also evict if any googlevideo URL's expire= is within 5m.
+          // Previously a cached 10m entry could return a URL expiring in 30s -> 403.
+          try {
+            final jsonStr = jsonEncode(cached.data);
+            final matches = RegExp(r'expire=(\d+)').allMatches(jsonStr);
+            bool nearExpiry = false;
+            final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+            for (final m in matches) {
+              final exp = int.tryParse(m.group(1) ?? '');
+              if (exp != null && exp - nowSec < 300) {
+                nearExpiry = true;
+                break;
+              }
+            }
+            if (nearExpiry) {
+              _streamsCache.remove(cacheKey);
+            } else {
+              cached.lastAccessed = DateTime.now();
+              cacheHits++;
+              return cached.data;
+            }
+          } catch (_) {
+            cached.lastAccessed = DateTime.now();
+            cacheHits++;
+            return cached.data;
+          }
         } else {
-          _streamsCache.remove(url);
+          _streamsCache.remove(cacheKey);
         }
       }
     }
@@ -353,7 +378,7 @@ class XdmBackendClient {
               circuit.recordSuccess();
 
               _evictExpiredStreamsCache();
-              _streamsCache[url] = _StreamsCacheEntry(
+              _streamsCache[cacheKey] = _StreamsCacheEntry(
                 data: data,
                 expiry: DateTime.now().add(const Duration(minutes: 10)),
               );
@@ -560,6 +585,32 @@ class XdmBackendClient {
 
   BackendException _handleDioError(Object error,
       [String? failingUrl, bool sawNetworkFailure = false]) {
+    final ex = _buildBackendException(error, failingUrl, sawNetworkFailure);
+    // OBS (Plan 06.1): Route every terminal media-backend failure through
+    // DiagnosticService so extraction outages are observable in the support
+    // screen instead of failing opaquely. Callers still receive the same typed
+    // BackendException, so no call site changes are required.
+    _recordBackendFailure(ex, failingUrl ?? _dio.options.baseUrl);
+    return ex;
+  }
+
+  /// Records a media-backend failure to diagnostics for observability. Never
+  /// throws — telemetry must not break the request path.
+  void _recordBackendFailure(BackendException ex, String backendUrl) {
+    try {
+      DiagnosticService.instance.record(
+        'media',
+        'Backend request failed: ${ex.runtimeType}',
+        error: ex,
+        details: 'backend=$backendUrl message=${ex.message}',
+      );
+    } catch (e) {
+      _log.fine('Failed to record backend failure to diagnostics: $e');
+    }
+  }
+
+  BackendException _buildBackendException(
+      Object error, String? failingUrl, bool sawNetworkFailure) {
     if (error is BackendException) return error;
 
     // When the failover chain saw any network/server failure, prefer a
@@ -716,6 +767,24 @@ class XdmBackendClient {
       }
     } catch (e) {
       _log.warning('Failed to configure SSL for Dio: $e');
+    }
+  }
+
+  static String _normalizeCacheUrl(String rawUrl) {
+    try {
+      final uri = Uri.parse(rawUrl.trim());
+      final queryParams = Map<String, String>.from(uri.queryParameters);
+      queryParams.removeWhere((key, _) =>
+          key == 'hl' ||
+          key == 'gl' ||
+          key == 'feature' ||
+          key == 'si' ||
+          key.startsWith('utm_'));
+      return uri
+          .replace(queryParameters: queryParams.isEmpty ? null : queryParams)
+          .toString();
+    } catch (_) {
+      return rawUrl.trim();
     }
   }
 

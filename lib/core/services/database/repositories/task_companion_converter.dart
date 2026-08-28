@@ -1,7 +1,8 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart' as drift;
 import 'package:flutter/foundation.dart';
 import '../../../../features/downloads/models/download_task.dart';
-import '../../crash_reporting_service.dart';
 import '../app_database.dart';
 
 class TaskCompanionConverter {
@@ -58,6 +59,13 @@ class TaskCompanionConverter {
       previousCycleState: drift.Value(task.previousCycleState?.name),
       infoHash: drift.Value(task.infoHash),
       isCancelled: drift.Value(task.isCancelled),
+      authUsername: drift.Value(task.authUsername),
+      authPassword: drift.Value(task.authPassword),
+      customHeaders: drift.Value(
+        task.customHeaders != null && task.customHeaders!.isNotEmpty
+            ? jsonEncode(task.customHeaders)
+            : null,
+      ),
     );
   }
 
@@ -91,12 +99,7 @@ class TaskCompanionConverter {
       orElse: () {
         debugPrint(
           '[DMX] _rowToTask: unrecognised status "$statusName" for task '
-          '${row.id} — reporting and defaulting to paused.',
-        );
-        CrashReportingService.recordError(
-          FormatException('Unrecognised download task status: "$statusName"'),
-          StackTrace.current,
-          hint: 'recoverable',
+          '${row.id} — defaulting to paused.',
         );
         return DownloadStatus.paused;
       },
@@ -201,7 +204,23 @@ class TaskCompanionConverter {
           files != null && files.isNotEmpty ? downloadedFileBytes : null,
       infoHash: row.infoHash,
       isCancelled: row.isCancelled,
+      authUsername: row.authUsername,
+      authPassword: row.authPassword,
+      customHeaders: _decodeHeaders(row.customHeaders),
     );
+  }
+
+  static Map<String, String>? _decodeHeaders(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map && decoded.isNotEmpty) {
+        return decoded.map((k, v) => MapEntry(k.toString(), v.toString()));
+      }
+    } catch (e) {
+      debugPrint('[DMX] Failed to decode custom_headers JSON: $e');
+    }
+    return null;
   }
 
   static bool isInterruptedActiveRow(DbDownloadTask row) {

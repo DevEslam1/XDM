@@ -55,8 +55,8 @@ class DownloadsSettingsPage extends StatelessWidget with HapticHelper {
                 title: L10n.of(context, 'settings_max_channels'),
                 subtitle: settings.batterySaverMode
                     ? (isRtl
-                        ? 'محدود بـ ${settings.effectiveMaxDownloads} بسبب موفر البطارية'
-                        : 'Limited to ${settings.effectiveMaxDownloads} by Battery Saver')
+                        ? 'محدود بـ ${settings.maxDownloads} بسبب موفر البطارية'
+                        : 'Limited to ${settings.maxDownloads} by Battery Saver')
                     : L10n.of(context, 'settings_max_channels_sub'),
                 value: settings.maxDownloads,
                 items: const [1, 2, 3, 5, 8],

@@ -106,9 +106,8 @@ class HttpPartStatus extends DataStatus {
     required this.downloadedBytes,
   });
 
-  int get totalBytes => (endByte >= startByte && endByte > 0)
-      ? (endByte - startByte + 1)
-      : 0;
+  int get totalBytes =>
+      (endByte >= startByte && endByte > 0) ? (endByte - startByte + 1) : 0;
 
   double get progress =>
       totalBytes > 0 ? (downloadedBytes / totalBytes).clamp(0.0, 1.0) : 0.0;
@@ -123,7 +122,8 @@ class HttpPartStatus extends DataStatus {
           downloadedBytes == other.downloadedBytes;
 
   @override
-  int get hashCode => Object.hash(partIndex, startByte, endByte, downloadedBytes);
+  int get hashCode =>
+      Object.hash(partIndex, startByte, endByte, downloadedBytes);
 }
 
 /// Download status snapshot for a YouTube stream component (video, audio, or muxed).
@@ -192,8 +192,8 @@ class TorrentFileStatus extends DataStatus {
           progressEstimated == other.progressEstimated;
 
   @override
-  int get hashCode =>
-      Object.hash(fileIndex, name, size, downloadedBytes, priority, selected, progressEstimated);
+  int get hashCode => Object.hash(fileIndex, name, size, downloadedBytes,
+      priority, selected, progressEstimated);
 }
 
 /// Formats downloaded / total size into human-readable label.

@@ -17,12 +17,14 @@ class DownloadFilterService {
 
     final filtered = tasks.where((task) {
       if (queryLower.isNotEmpty) {
-        final matchesSearch = task.fileName.toLowerCase().contains(queryLower) ||
-            task.url.toLowerCase().contains(queryLower);
+        final matchesSearch =
+            task.fileName.toLowerCase().contains(queryLower) ||
+                task.url.toLowerCase().contains(queryLower);
         if (!matchesSearch) return false;
       }
 
-      if (categoryFilters.isNotEmpty && !categoryFilters.contains(task.category)) {
+      if (categoryFilters.isNotEmpty &&
+          !categoryFilters.contains(task.category)) {
         return false;
       }
 
@@ -53,7 +55,8 @@ class DownloadFilterService {
           comparison = a.fileSize.compareTo(b.fileSize);
           break;
         case SortOption.fileName:
-          comparison = a.fileName.toLowerCase().compareTo(b.fileName.toLowerCase());
+          comparison =
+              a.fileName.toLowerCase().compareTo(b.fileName.toLowerCase());
           break;
         case SortOption.status:
           comparison = a.status.name.compareTo(b.status.name);
@@ -71,10 +74,13 @@ class DownloadFilterService {
   Map<String, int> computeCategoryCounts(List<DownloadTask> tasks) {
     final counts = <String, int>{
       'All': tasks.length,
-      'Documents': 0,
-      'Compressed': 0,
       'Video': 0,
       'Audio': 0,
+      'Document': 0,
+      'Documents': 0,
+      'Archive': 0,
+      'Compressed': 0,
+      'APK': 0,
       'Software': 0,
       'Other': 0,
       'Torrents': 0,
@@ -83,8 +89,11 @@ class DownloadFilterService {
       if (task.isTorrent) {
         counts['Torrents'] = (counts['Torrents'] ?? 0) + 1;
       }
-      if (counts.containsKey(task.category)) {
-        counts[task.category] = (counts[task.category] ?? 0) + 1;
+      final cat = task.category;
+      if (counts.containsKey(cat)) {
+        counts[cat] = (counts[cat] ?? 0) + 1;
+      } else {
+        counts['Other'] = (counts['Other'] ?? 0) + 1;
       }
     }
     return counts;
@@ -92,17 +101,29 @@ class DownloadFilterService {
 
   Map<String, double> computeCategorySizes(List<DownloadTask> tasks) {
     final sizes = <String, double>{
-      'Documents': 0.0,
-      'Compressed': 0.0,
       'Video': 0.0,
       'Audio': 0.0,
+      'Document': 0.0,
+      'Documents': 0.0,
+      'Archive': 0.0,
+      'Compressed': 0.0,
+      'APK': 0.0,
       'Software': 0.0,
       'Other': 0.0,
     };
     for (final task in tasks) {
-      if (!sizes.containsKey(task.category)) continue;
-      if (task.status == DownloadStatus.failed || task.status == DownloadStatus.queued) continue;
-      sizes[task.category] = (sizes[task.category] ?? 0.0) + task.fileSize / (1024 * 1024);
+      if (task.status == DownloadStatus.failed ||
+          task.status == DownloadStatus.queued) {
+        continue;
+      }
+      // FIX(M-1): Use downloadedBytes (actual disk usage) not fileSize.
+      final sizeMb = task.downloadedBytes / (1024 * 1024);
+      final cat = task.category;
+      if (sizes.containsKey(cat)) {
+        sizes[cat] = (sizes[cat] ?? 0.0) + sizeMb;
+      } else {
+        sizes['Other'] = (sizes['Other'] ?? 0.0) + sizeMb;
+      }
     }
     return sizes;
   }

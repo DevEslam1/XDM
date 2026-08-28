@@ -36,7 +36,8 @@ void main() {
         cycleState: CycleState.downloading.name,
       );
 
-      await StateStore.save(tempFile, state, durable: true, taskId: 'task-dl-1');
+      await StateStore.save(tempFile, state,
+          durable: true, taskId: 'task-dl-1');
 
       final loaded = await StateStore.load(tempFile, taskId: 'task-dl-1');
       expect(loaded, isNotNull);
@@ -61,7 +62,8 @@ void main() {
         cycleState: CycleState.paused.name,
       );
 
-      await StateStore.save(tempFile, state, durable: true, taskId: 'task-pause-1');
+      await StateStore.save(tempFile, state,
+          durable: true, taskId: 'task-pause-1');
 
       final loaded = await StateStore.load(tempFile, taskId: 'task-pause-1');
       expect(loaded, isNotNull);
@@ -82,7 +84,8 @@ void main() {
         cycleState: CycleState.retrying.name,
       );
 
-      await StateStore.save(tempFile, state, durable: true, taskId: 'task-retry-1');
+      await StateStore.save(tempFile, state,
+          durable: true, taskId: 'task-retry-1');
 
       final loaded = await StateStore.load(tempFile, taskId: 'task-retry-1');
       expect(loaded, isNotNull);
@@ -103,7 +106,8 @@ void main() {
         cycleState: CycleState.merging.name,
       );
 
-      await StateStore.save(tempFile, state, durable: true, taskId: 'task-merge-1');
+      await StateStore.save(tempFile, state,
+          durable: true, taskId: 'task-merge-1');
 
       final loaded = await StateStore.load(tempFile, taskId: 'task-merge-1');
       expect(loaded, isNotNull);
@@ -126,7 +130,8 @@ void main() {
         cycleState: CycleState.verifying.name,
       );
 
-      await StateStore.save(tempFile, state, durable: true, taskId: 'task-verify-1');
+      await StateStore.save(tempFile, state,
+          durable: true, taskId: 'task-verify-1');
 
       final loaded = await StateStore.load(tempFile, taskId: 'task-verify-1');
       expect(loaded, isNotNull);
@@ -146,19 +151,23 @@ void main() {
         cycleState: CycleState.fetchingMetadata.name,
       );
 
-      await StateStore.save(tempFile, state, durable: true, taskId: 'task-meta-1');
+      await StateStore.save(tempFile, state,
+          durable: true, taskId: 'task-meta-1');
 
       final loaded = await StateStore.load(tempFile, taskId: 'task-meta-1');
       expect(loaded, isNotNull);
       expect(loaded!.cycleState, equals(CycleState.fetchingMetadata.name));
     });
 
-    test('Recovers from .tmp state file if primary state file is corrupt or missing', () async {
+    test(
+        'Recovers from .tmp state file if primary state file is corrupt or missing',
+        () async {
       final tempFile = p.join(tempDir.path, 'corrupt_test.bin');
       final statePath = StateStore.pathFor(tempFile, taskId: 'task-tmp-1');
       final tmpFile = File('$statePath.tmp');
 
-      await tmpFile.writeAsString('{"v":3,"totalSize":5000000,"threadCount":1,"chunks":[{"start":0,"end":4999999,"downloaded":2500000}],"status":"active","cycleState":"downloading"}');
+      await tmpFile.writeAsString(
+          '{"v":3,"totalSize":5000000,"threadCount":1,"chunks":[{"start":0,"end":4999999,"downloaded":2500000}],"status":"active","cycleState":"downloading"}');
 
       final loaded = await StateStore.load(tempFile, taskId: 'task-tmp-1');
       expect(loaded, isNotNull);

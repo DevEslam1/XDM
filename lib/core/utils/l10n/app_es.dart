@@ -610,4 +610,45 @@ const Map<String, String> esTranslations = {
   'torrent_meta_retry': 'Reintentar obtención de metadatos',
   'torrent_peers_label': 'Pares',
   'torrent_dht_nodes': 'Nodos DHT',
+  // Suscripción (Sub Club)
+  'subscription_title': 'Suscripción',
+  'subscription_subtitle': 'Desbloquea la experiencia completa de XDM',
+  'subscription_free_tier': 'Plan Gratuito',
+  'subscription_free_description':
+      'Funciones limitadas — actualiza para acceso completo',
+  'subscription_premium': 'Premium',
+  'subscription_premium_feature': 'Función Premium',
+  'subscription_upgrade_to_unlock':
+      'Actualiza a Premium para desbloquear esta función',
+  'subscription_upgrade_now': 'Actualizar Ahora',
+  'subscription_view_plans': 'Ver Planes',
+  'subscription_choose_plan': 'Elige Tu Plan',
+  'subscription_subscribe': 'Suscribirse',
+  'subscription_subscribe_now': 'Suscribirse Ahora',
+  'subscription_manage': 'Gestionar',
+  'subscription_manage_description':
+      'Gestiona tu suscripción en la App Store o Play Store.',
+  'subscription_restore': 'Restaurar Compras',
+  'subscription_restore_success': 'Compras restauradas exitosamente',
+  'subscription_restore_failed': 'No se encontraron compras para restaurar',
+  'subscription_status_active': 'Premium Activo',
+  'subscription_status_expired': 'Suscripción Expirada',
+  'subscription_expires': 'Expira',
+  'subscription_grace_period':
+      'Tus descargas continuarán hasta que termine el período de gracia.',
+  'subscription_free_limit':
+      'El plan gratuito permite hasta {0} descargas simultáneas',
+  'subscription_max_downloads_reached': 'Límite de Descargas Alcanzado',
+  'subscription_compare_plans': 'Comparar Planes',
+  'subscription_feature': 'Función',
+  'subscription_free': 'Gratis',
+  'subscription_go_premium': 'Obtener Premium',
+  'subscription_paywall_subtitle':
+      'Desbloquea descargas ilimitadas, soporte de torrent y más',
+  'subscription_unlock_feature': 'Desbloquear Esta Función',
+  'subscription_terms':
+      'La suscripción se renueva automáticamente a menos que se cancele al menos 24 horas antes del final del período actual.',
+  'subscription_welcome_premium':
+      '¡Bienvenido a Premium! Disfruta de descargas ilimitadas.',
+  'maybe_later': 'Quizás Después',
 };

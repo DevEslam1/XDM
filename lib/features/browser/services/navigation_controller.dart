@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:logging/logging.dart';
+import 'package:synchronized/synchronized.dart';
 
 import '../../../core/app_theme.dart';
 import '../../../core/services/widget_deep_link.dart';
@@ -169,12 +170,13 @@ class NavigationController extends ChangeNotifier {
 
   /// FIX(D9): Shows a warning dialog explaining why the URL was blocked.
   /// Returns true when the user explicitly overrides the block.
-  Future<bool> _confirmOverrideBlockedUrl(PageClassification classification) {
+  Future<bool> _confirmOverrideBlockedUrl(
+      PageClassification classification) async {
     final context = WidgetDeepLinkHandler.navigatorKey?.currentContext;
     if (context == null) {
       _log.warning(
-          'Blocked URL: ${classification.url} (${classification.reason})');
-      return Future.value(false);
+          'Blocked URL (no navigator context): ${classification.url} (${classification.reason})');
+      return false;
     }
     final isDark = settingsProvider.isDarkMode;
     return showDialog<bool>(

@@ -339,6 +339,12 @@ class DownloadTasks extends Table {
   TextColumn get previousCycleState => text().nullable()();
   TextColumn get infoHash => text().nullable()();
   BoolColumn get isCancelled => boolean().withDefault(const Constant(false))();
+  // HTTP auth + custom headers per download (Plan 06 Task 6.2).
+  // customHeaders is stored as a JSON object string; (de)serialized in
+  // TaskCompanionConverter.
+  TextColumn get authUsername => text().nullable()();
+  TextColumn get authPassword => text().nullable()();
+  TextColumn get customHeaders => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -451,7 +457,8 @@ class AppDatabase extends _$AppDatabase {
         try {
           final walSize = getWalFileSize();
           if (walSize > 0) {
-            _dbLog.fine('Periodic checkpoint check: current WAL size is ${walSize}B');
+            _dbLog.fine(
+                'Periodic checkpoint check: current WAL size is ${walSize}B');
           }
           await checkpointWal();
         } catch (e, st) {
@@ -508,8 +515,7 @@ class AppDatabase extends _$AppDatabase {
   Future<bool> cleanupStaleConnections() async {
     try {
       final result = await customSelect('SELECT 1 as alive;').get();
-      final alive =
-          result.isNotEmpty && result.first.read<int>('alive') == 1;
+      final alive = result.isNotEmpty && result.first.read<int>('alive') == 1;
       if (alive) {
         _dbLog.fine('Database connection pool health check passed.');
       }
@@ -552,7 +558,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 27;
+  int get schemaVersion => 28;
 
   @visibleForTesting
   Future<void> addColumnIfMissingForTesting(
@@ -565,25 +571,40 @@ class AppDatabase extends _$AppDatabase {
     String column,
     String sql,
   ) async {
-    try {
-      final tableInfo = await customSelect('PRAGMA table_info($table)').get();
-      final exists = tableInfo.any((row) =>
-          (row.read<String>('name')).toLowerCase() == column.toLowerCase());
-      if (!exists) {
-        _dbLog.info(
-            'Column $column confirmed missing from $table. Executing: $sql');
-        await safeCustomStatement(sql);
-        _dbLog.info('Column $column successfully added to $table');
-      } else {
-        _dbLog.info(
-            'Column $column confirmed already exists in $table; skipping');
+    int attempts = 0;
+    while (true) {
+      try {
+        attempts++;
+        final tableInfo = await customSelect('PRAGMA table_info($table)').get();
+        final exists = tableInfo.any((row) =>
+            (row.read<String>('name')).toLowerCase() == column.toLowerCase());
+        if (!exists) {
+          _dbLog.info(
+              'Column $column confirmed missing from $table. Executing: $sql');
+          await safeCustomStatement(sql);
+          _dbLog.info('Column $column successfully added to $table');
+        } else {
+          _dbLog.info(
+              'Column $column confirmed already exists in $table; skipping');
+        }
+        return;
+      } catch (e, st) {
+        final errStr = e.toString().toLowerCase();
+        if (attempts < 3 &&
+            (errStr.contains('busy') ||
+                errStr.contains('locked') ||
+                errStr.contains('sqlite_busy'))) {
+          _dbLog.warning(
+              '_addColumnIfMissing encountered busy/locked for $table.$column, retrying in 200ms (attempt $attempts)...');
+          await Future.delayed(const Duration(milliseconds: 200));
+          continue;
+        }
+        _dbLog.severe(
+            '_addColumnIfMissing failed for table: $table, column: $column, sql: $sql',
+            e,
+            st);
+        rethrow;
       }
-    } catch (e, st) {
-      _dbLog.severe(
-          '_addColumnIfMissing failed for table: $table, column: $column, sql: $sql',
-          e,
-          st);
-      rethrow;
     }
   }
 
@@ -648,7 +669,8 @@ class AppDatabase extends _$AppDatabase {
               UPDATE download_tasks SET scheduled_at = SUBSTR(scheduled_at, 1, INSTR(scheduled_at, '+') - 1) WHERE typeof(scheduled_at) = 'text' AND scheduled_at LIKE '%+%';
             ''');
             } catch (e, st) {
-              _dbLog.warning('Migration v2→v3: timezone-strip failed: $e', e, st);
+              _dbLog.warning(
+                  'Migration v2→v3: timezone-strip failed: $e', e, st);
             }
 
             try {
@@ -658,7 +680,8 @@ class AppDatabase extends _$AppDatabase {
               WHERE typeof(created_at) = 'text';
             ''');
             } catch (e, st) {
-              _dbLog.warning('Migration v2→v3: created_at parse failed: $e', e, st);
+              _dbLog.warning(
+                  'Migration v2→v3: created_at parse failed: $e', e, st);
             }
 
             try {
@@ -668,7 +691,8 @@ class AppDatabase extends _$AppDatabase {
               WHERE typeof(updated_at) = 'text';
             ''');
             } catch (e, st) {
-              _dbLog.warning('Migration v2→v3: updated_at parse failed: $e', e, st);
+              _dbLog.warning(
+                  'Migration v2→v3: updated_at parse failed: $e', e, st);
             }
 
             try {
@@ -678,7 +702,8 @@ class AppDatabase extends _$AppDatabase {
               WHERE typeof(completed_at) = 'text';
             ''');
             } catch (e, st) {
-              _dbLog.warning('Migration v2→v3: completed_at parse failed: $e', e, st);
+              _dbLog.warning(
+                  'Migration v2→v3: completed_at parse failed: $e', e, st);
             }
 
             try {
@@ -688,7 +713,8 @@ class AppDatabase extends _$AppDatabase {
               WHERE typeof(scheduled_at) = 'text';
             ''');
             } catch (e, st) {
-              _dbLog.warning('Migration v2→v3: scheduled_at parse failed: $e', e, st);
+              _dbLog.warning(
+                  'Migration v2→v3: scheduled_at parse failed: $e', e, st);
             }
 
             // Straggler fallback for any text values remaining
@@ -702,7 +728,8 @@ class AppDatabase extends _$AppDatabase {
               await customStatement(
                   "UPDATE download_tasks SET scheduled_at = NULL WHERE typeof(scheduled_at) = 'text'");
             } catch (e, st) {
-              _dbLog.warning('Migration v2→v3: straggler fallback failed: $e', e, st);
+              _dbLog.warning(
+                  'Migration v2→v3: straggler fallback failed: $e', e, st);
             }
 
             try {
@@ -711,7 +738,8 @@ class AppDatabase extends _$AppDatabase {
               await customStatement(
                   'UPDATE download_tasks SET updated_at = 0 WHERE updated_at < 0');
             } catch (e, st) {
-              _dbLog.warning('Migration v2→v3: negative clamp failed: $e', e, st);
+              _dbLog.warning(
+                  'Migration v2→v3: negative clamp failed: $e', e, st);
             }
 
             try {
@@ -737,7 +765,8 @@ class AppDatabase extends _$AppDatabase {
               final recoveredFromNow = await customSelect(
                 'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0 AND updated_at = 0',
               ).get();
-              final recoverFromNowCount = recoveredFromNow.first.read<int>('cnt');
+              final recoverFromNowCount =
+                  recoveredFromNow.first.read<int>('cnt');
               if (recoverFromNowCount > 0) {
                 await customStatement(
                   "UPDATE download_tasks SET created_at = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE created_at = 0 AND updated_at = 0",
@@ -1024,12 +1053,65 @@ class AppDatabase extends _$AppDatabase {
                 "UPDATE download_tasks SET is_cancelled = 1 WHERE error_message = 'Transfer cancelled.'");
           }
 
-          if (to > 27) {
+          if (from < 28) {
+            await _addColumnIfMissing('download_tasks', 'auth_username',
+                'ALTER TABLE download_tasks ADD COLUMN auth_username TEXT');
+            await _addColumnIfMissing('download_tasks', 'auth_password',
+                'ALTER TABLE download_tasks ADD COLUMN auth_password TEXT');
+            await _addColumnIfMissing('download_tasks', 'custom_headers',
+                'ALTER TABLE download_tasks ADD COLUMN custom_headers TEXT');
+          }
+
+          if (to > 28) {
             _dbLog.warning(
-                'AppDatabase: Upgrade target version $to is higher than version 27, no specific migrations defined!');
+                'AppDatabase: Upgrade target version $to is higher than version 28, no specific migrations defined!');
+          }
+        },
+        beforeOpen: (details) async {
+          // M4 (Plan 03 Task 3.6): Drift only migrates forward. If the on-disk
+          // DB was written by a newer build (a higher schema version than this
+          // one), applying the older schema over it can brick the task DB.
+          // Detect that here, snapshot the DB, and refuse to open rather than
+          // silently proceeding on a schema we don't understand.
+          final before = details.versionBefore;
+          if (before != null && before > details.versionNow) {
+            await _backupOnDowngrade(before, details.versionNow);
+            throw StateError(
+              'Refusing to open a newer download database (schema v$before) '
+              'with an older app build (schema v${details.versionNow}). A '
+              'timestamped backup was created next to the database; please '
+              'update the app to a compatible version.',
+            );
           }
         },
       );
+
+  /// M4: snapshots the current DB file next to itself before a refused
+  /// downgrade open, so a user who installed an older build over a newer one
+  /// never loses their task database. Best-effort: a backup failure is logged
+  /// but never masks the downgrade refusal.
+  Future<void> _backupOnDowngrade(int fromVersion, int toVersion) async {
+    final path = dbPath;
+    if (path == null) return; // in-memory / test database: nothing to back up
+    try {
+      // Fold the WAL back into the main file so a plain copy is consistent
+      try {
+        await customStatement('PRAGMA wal_checkpoint(TRUNCATE)')
+            .timeout(const Duration(seconds: 2))
+            .catchError((_) => null);
+      } catch (_) {}
+      final backupPath =
+          '$path.v$fromVersion.${DateTime.now().millisecondsSinceEpoch}.bak';
+      final src = File(path);
+      if (await src.exists()) {
+        await src.copy(backupPath);
+        _dbLog.warning(
+            'AppDatabase: downgrade v$fromVersion→v$toVersion detected; backed up DB to $backupPath');
+      }
+    } catch (e, st) {
+      _dbLog.severe('AppDatabase: downgrade backup failed: $e', e, st);
+    }
+  }
 
   Future<void> _createTaskSummaryView() async {
     await safeCustomStatement('''

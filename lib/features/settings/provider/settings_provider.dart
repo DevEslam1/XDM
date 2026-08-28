@@ -13,12 +13,13 @@ import '../../../core/services/quiet_hours.dart';
 import '../../../core/services/xdm_backend_client.dart';
 import 'mixins/torrent_settings_mixin.dart';
 
-// FIX-P2-03: Modular settings mixin references
-export 'mixins/download_settings_mixin.dart';
-export 'mixins/network_settings_mixin.dart';
-export 'mixins/power_settings_mixin.dart';
 export 'mixins/torrent_settings_mixin.dart';
-export 'mixins/ui_settings_mixin.dart';
+
+/// GPU/visual fidelity tier. Maps to the underlying reduceVisuals / enableGlow /
+/// gridOpacity flags so existing consumers keep working while the
+/// Performance & Resources control center exposes a single 3-way control.
+/// Also used by the release-mode jank auto-degrade path (Plan 07 §7.1).
+enum VisualQuality { full, lite, off }
 
 class SettingsProvider extends ChangeNotifier
     with WidgetsBindingObserver, TorrentSettingsMixin {
@@ -39,10 +40,9 @@ class SettingsProvider extends ChangeNotifier
   factory SettingsProvider() => instance;
 
   static SettingsProvider get loadedInstance {
-    assert(
-      _instance != null && _instance!._loaded,
-      'SettingsProvider accessed before load() completed',
-    );
+    if (_instance == null || !_instance!._loaded) {
+      throw StateError('SettingsProvider accessed before load() completed');
+    }
     return _instance!;
   }
 
@@ -114,6 +114,8 @@ class SettingsProvider extends ChangeNotifier
   static const _torrentProxyTypeKey = 'torrent_proxy_type';
   static const _torrentProxyUsernameKey = 'torrent_proxy_username';
   static const _torrentProxyPasswordKey = 'torrent_proxy_password';
+  // FIX(M-5): Proxy password stored in secure storage, not SharedPreferences.
+  static const _secureProxyPasswordKey = 'xdm_proxy_password';
   static const _torrentSslCertPathKey = 'torrent_ssl_cert_path';
   static const _torrentSslKeyPathKey = 'torrent_ssl_key_path';
   static const _torrentSslDhParamsPathKey = 'torrent_ssl_dh_params_path';
@@ -159,6 +161,11 @@ class SettingsProvider extends ChangeNotifier
   static const _useLocalYtFallbackKey = 'use_local_yt_fallback';
   static const _downloadStalledTimeoutMinutesKey =
       'downloadStalledTimeoutMinutes';
+  // Plan 07 §7.7 Performance & Resources control center
+  static const _imageCacheSizeMbKey = 'imageCacheSizeMb';
+  static const _downloadOnlyWhileChargingKey = 'downloadOnlyWhileCharging';
+  static const _pauseOnCellularKey = 'pauseOnCellular';
+  static const _autoReduceEffectsOnJankKey = 'autoReduceEffectsOnJank';
 
   late SharedPreferences _prefs;
   final _secureStorage = const FlutterSecureStorage();
@@ -341,26 +348,6 @@ class SettingsProvider extends ChangeNotifier
       sslKeyPath != null &&
       sslKeyPath!.isNotEmpty;
 
-  TorrentSettingsPack get torrentSettingsPack => TorrentSettingsPack(
-        enableDht: enableDht,
-        enableLsd: enableLsd,
-        enablePex: enablePex,
-        enableUpnp: enableUpnp,
-        maxConnectionsGlobal: torrentConnectionsLimit,
-        maxDownloadRate: effectiveSpeedLimitBytesPerSecond,
-        maxUploadRate: globalTorrentSeedingLimited
-            ? globalTorrentSeedingLimitKbps * 1024
-            : null,
-        forceEncrypt: forceEncrypt,
-        enableUtp: enableUtp,
-        enableTcp: true,
-        socks5ProxyHost:
-            (enableProxy && proxyHost.isNotEmpty) ? proxyHost : null,
-        socks5ProxyPort: (enableProxy && proxyPort > 0) ? proxyPort : null,
-        enforceProxy: enforceProxy,
-        cacheSize: diskCacheSizeMb * 1024 * 1024,
-      );
-
   Future<void> setProxyHost(String value) async {
     proxyHost = value;
     await _prefs.setString(_proxyHostKey, value);
@@ -396,7 +383,7 @@ class SettingsProvider extends ChangeNotifier
     final typeStr =
         type is ProxyType ? type.name : (type?.toString() ?? 'none');
     proxyHost = host;
-    proxyPort = port;
+    proxyPort = port.clamp(1, 65535);
     proxyType = typeStr;
     proxyUsername = username;
     proxyPassword = password;
@@ -404,7 +391,7 @@ class SettingsProvider extends ChangeNotifier
     enforceProxy = enableProxy;
 
     await _prefs.setString(_proxyHostKey, host);
-    await _prefs.setInt(_proxyPortKey, port);
+    await _prefs.setInt(_proxyPortKey, proxyPort);
     await _prefs.setString(_torrentProxyTypeKey, typeStr);
     if (username != null && username.isNotEmpty) {
       await _prefs.setString(_torrentProxyUsernameKey, username);
@@ -412,9 +399,9 @@ class SettingsProvider extends ChangeNotifier
       await _prefs.remove(_torrentProxyUsernameKey);
     }
     if (password != null && password.isNotEmpty) {
-      await _prefs.setString(_torrentProxyPasswordKey, password);
+      await _secureStorage.write(key: _secureProxyPasswordKey, value: password);
     } else {
-      await _prefs.remove(_torrentProxyPasswordKey);
+      await _secureStorage.delete(key: _secureProxyPasswordKey);
     }
     await _prefs.setBool(_enableProxyKey, enableProxy);
     await _prefs.setBool(_enforceProxyKey, enforceProxy);
@@ -494,7 +481,6 @@ class SettingsProvider extends ChangeNotifier
   int get configuredMaxDownloads => _maxDownloads;
   bool get configuredClassicUi => _classicUi;
   int get configuredDefaultThreadCount => _defaultThreadCount;
-  int get effectiveMaxDownloads => batterySaverMode ? 1 : _maxDownloads;
   bool get effectiveClassicUi => batterySaverMode ? true : _classicUi;
   int get effectiveDefaultThreadCount =>
       batterySaverMode ? 2 : _defaultThreadCount;
@@ -532,6 +518,53 @@ class SettingsProvider extends ChangeNotifier
   bool diskWriteBatching = true;
   bool powerBandwidthThrottling = true;
   bool resumeIntegrityCheck = true;
+
+  // Plan 07 §7.7 — Performance & Resources control center.
+  // 0 == auto (defer to DeviceTier). Otherwise an explicit 30–256 MB cap that
+  // main.dart applies to PaintingBinding.instance.imageCache.
+  int imageCacheSizeMb = 0;
+  // Plan 07 §7.6 — background execution gates (enforced by the download
+  // orchestrator; charging/network state comes from PowerMonitor/networkMonitor).
+  bool downloadOnlyWhileCharging = false;
+  bool pauseOnCellular = false;
+  // Plan 07 §7.1 — gate for release-mode gradual GPU degrade on sustained jank.
+  bool autoReduceEffectsOnJank = true;
+
+  /// Current visual-fidelity tier, derived from the underlying visual flags so
+  /// there is a single source of truth (no divergence with the appearance page).
+  VisualQuality get visualQuality {
+    if (_reduceVisuals && !_enableGlow && gridOpacity <= 0) {
+      return VisualQuality.off;
+    }
+    if (_reduceVisuals || !_enableGlow) return VisualQuality.lite;
+    return VisualQuality.full;
+  }
+
+  /// Sets the visual tier, cascading to reduceVisuals / enableGlow / gridOpacity
+  /// (persisted) so all existing consumers of those flags react immediately.
+  Future<void> setVisualQuality(VisualQuality quality) async {
+    switch (quality) {
+      case VisualQuality.full:
+        _reduceVisuals = false;
+        _enableGlow = true;
+        if (gridOpacity <= 0) gridOpacity = 40.0;
+        break;
+      case VisualQuality.lite:
+        _reduceVisuals = true;
+        _enableGlow = false;
+        if (gridOpacity <= 0) gridOpacity = 20.0;
+        break;
+      case VisualQuality.off:
+        _reduceVisuals = true;
+        _enableGlow = false;
+        gridOpacity = 0.0;
+        break;
+    }
+    await _prefs.setBool(_reduceVisualsKey, _reduceVisuals);
+    await _prefs.setBool(_enableGlowKey, _enableGlow);
+    await _prefs.setDouble(_gridOpacityKey, gridOpacity);
+    notifyListeners();
+  }
 
   @override
   void didChangePlatformBrightness() {
@@ -659,13 +692,25 @@ class SettingsProvider extends ChangeNotifier
       enableAnonymousMode =
           _prefs.getBool(_enableAnonymousModeKey) ?? enableAnonymousMode;
       proxyHost = _prefs.getString(_proxyHostKey) ?? proxyHost;
-      proxyPort = _prefs.getInt(_proxyPortKey) ?? proxyPort;
+      proxyPort = (_prefs.getInt(_proxyPortKey) ?? proxyPort).clamp(1, 65535);
       enableProxy = _prefs.getBool(_enableProxyKey) ?? enableProxy;
       enforceProxy = _prefs.getBool(_enforceProxyKey) ?? enforceProxy;
       proxyType = _prefs.getString(_torrentProxyTypeKey) ??
           (enableProxy ? 'socks5' : 'none');
       proxyUsername = _prefs.getString(_torrentProxyUsernameKey);
-      proxyPassword = _prefs.getString(_torrentProxyPasswordKey);
+      // FIX(M-5): Read proxy password from secure storage, migrating from
+      // SharedPreferences on first load.
+      proxyPassword = await _secureStorage.read(key: _secureProxyPasswordKey);
+      if (proxyPassword == null) {
+        // Migrate from plaintext SharedPreferences if present.
+        final legacy = _prefs.getString(_torrentProxyPasswordKey);
+        if (legacy != null && legacy.isNotEmpty) {
+          await _secureStorage.write(
+              key: _secureProxyPasswordKey, value: legacy);
+          proxyPassword = legacy;
+        }
+        await _prefs.remove(_torrentProxyPasswordKey);
+      }
       sslCertPath = _prefs.getString(_torrentSslCertPathKey);
       sslKeyPath = _prefs.getString(_torrentSslKeyPathKey);
       sslDhParamsPath = _prefs.getString(_torrentSslDhParamsPathKey);
@@ -726,6 +771,18 @@ class SettingsProvider extends ChangeNotifier
       downloadStalledTimeoutMinutes =
           _prefs.getInt(_downloadStalledTimeoutMinutesKey) ?? 5;
 
+      imageCacheSizeMb =
+          _prefs.getInt(_imageCacheSizeMbKey) ?? imageCacheSizeMb;
+      if (imageCacheSizeMb != 0) {
+        imageCacheSizeMb = imageCacheSizeMb.clamp(30, 256);
+      }
+      downloadOnlyWhileCharging =
+          _prefs.getBool(_downloadOnlyWhileChargingKey) ??
+              downloadOnlyWhileCharging;
+      pauseOnCellular = _prefs.getBool(_pauseOnCellularKey) ?? pauseOnCellular;
+      autoReduceEffectsOnJank = _prefs.getBool(_autoReduceEffectsOnJankKey) ??
+          autoReduceEffectsOnJank;
+
       PowerMonitor.thermalThreadLimitingEnabled = thermalThreadLimiting;
       PowerMonitor.powerBandwidthThrottlingEnabled = powerBandwidthThrottling;
 
@@ -772,6 +829,32 @@ class SettingsProvider extends ChangeNotifier
     powerBandwidthThrottling = value;
     PowerMonitor.powerBandwidthThrottlingEnabled = value;
     await _prefs.setBool(_powerBandwidthThrottlingKey, value);
+    notifyListeners();
+  }
+
+  /// Image-cache cap in MB. Pass 0 to defer to DeviceTier (auto). Otherwise the
+  /// value is clamped to 30–256 and applied to PaintingBinding by main.dart.
+  Future<void> setImageCacheSizeMb(int value) async {
+    imageCacheSizeMb = value <= 0 ? 0 : value.clamp(30, 256);
+    await _prefs.setInt(_imageCacheSizeMbKey, imageCacheSizeMb);
+    notifyListeners();
+  }
+
+  Future<void> setDownloadOnlyWhileCharging(bool value) async {
+    downloadOnlyWhileCharging = value;
+    await _prefs.setBool(_downloadOnlyWhileChargingKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setPauseOnCellular(bool value) async {
+    pauseOnCellular = value;
+    await _prefs.setBool(_pauseOnCellularKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setAutoReduceEffectsOnJank(bool value) async {
+    autoReduceEffectsOnJank = value;
+    await _prefs.setBool(_autoReduceEffectsOnJankKey, value);
     notifyListeners();
   }
 
@@ -1362,6 +1445,50 @@ class SettingsProvider extends ChangeNotifier
       _openLinksInAppKey,
       _translateTargetLangKey,
       _formAutofillKey,
+      _imageCacheSizeMbKey,
+      _downloadOnlyWhileChargingKey,
+      _pauseOnCellularKey,
+      _autoReduceEffectsOnJankKey,
+      _resumeIntegrityCheckKey,
+      _downloadStalledTimeoutMinutesKey,
+      _textScaleFactorKey,
+      _adaptiveThreadsKey,
+      _autoVerifyChecksumKey,
+      _powerAwareIsolatePoolKey,
+      _thermalThreadLimitingKey,
+      _jankAutoBatterySaverKey,
+      _diskWriteBatchingKey,
+      _powerBandwidthThrottlingKey,
+      // Torrent advanced
+      _enableNatPmpKey,
+      _enableLpdKey,
+      _enablePexKey,
+      _maxActiveTorrentsKey,
+      _maxActiveDownloadsKey,
+      _maxActiveSeedsKey,
+      _queueTorrentsKey,
+      _maxPeerConnectionsPerTorrentKey,
+      _maxHalfOpenConnectionsKey,
+      _enableUtpKey,
+      _enableLsdKey,
+      _diskCacheSizeMbKey,
+      _useOsCacheKey,
+      _seedOnlyWhenChargingKey,
+      _seedOnlyOnWifiKey,
+      _enableIpFilterKey,
+      _ipFilterPathKey,
+      _enableAnonymousModeKey,
+      // Proxy (host/port/type/username cleared; password via secure storage below)
+      _proxyHostKey,
+      _proxyPortKey,
+      _enableProxyKey,
+      _enforceProxyKey,
+      _torrentProxyTypeKey,
+      _torrentProxyUsernameKey,
+      // SSL
+      _torrentSslCertPathKey,
+      _torrentSslKeyPathKey,
+      _torrentSslDhParamsPathKey,
     ];
 
     final removals = <Future<dynamic>>[];
@@ -1372,6 +1499,9 @@ class SettingsProvider extends ChangeNotifier
         removals.add(_prefs.remove(key));
       }
     }
+    // FIX P1-24: Also delete proxy password from secure storage on factory reset.
+    // Previously _secureProxyPasswordKey was not in settingsKeys, so password leaked after reset.
+    removals.add(_secureStorage.delete(key: _secureProxyPasswordKey));
     await Future.wait(removals);
 
     _isDarkMode = true;
@@ -1443,6 +1573,49 @@ class SettingsProvider extends ChangeNotifier
     _historyMaxEntries = 500;
     developerMode = false;
     antiFingerprinting = true;
+    imageCacheSizeMb = 0;
+    downloadOnlyWhileCharging = false;
+    pauseOnCellular = false;
+    autoReduceEffectsOnJank = true;
+    // FIX(H-18): Reset all fields that were missing from resetToDefaults.
+    resumeIntegrityCheck = true;
+    downloadStalledTimeoutMinutes = 5;
+    adaptiveThreads = false;
+    autoVerifyChecksum = false;
+    powerAwareIsolatePool = false;
+    thermalThreadLimiting = false;
+    jankAutoBatterySaver = false;
+    diskWriteBatching = true;
+    powerBandwidthThrottling = false;
+    // Torrent advanced
+    enableNatPmp = true;
+    enableLpd = true;
+    enablePex = true;
+    maxActiveTorrents = 3;
+    maxActiveDownloads = 2;
+    maxActiveSeeds = 2;
+    queueTorrents = true;
+    maxPeerConnectionsPerTorrent = 50;
+    maxHalfOpenConnections = 20;
+    enableUtp = true;
+    enableLsd = true;
+    diskCacheSizeMb = 512;
+    useOsCache = true;
+    seedOnlyWhenCharging = false;
+    seedOnlyOnWifi = false;
+    enableIpFilter = false;
+    ipFilterPath = '';
+    enableAnonymousMode = false;
+    // Proxy
+    proxyHost = '';
+    proxyPort = 1080;
+    enableProxy = false;
+    enforceProxy = false;
+    proxyType = 'none';
+    proxyUsername = null;
+    // FIX(M-5): Clear proxy password from secure storage on reset.
+    await _secureStorage.delete(key: _secureProxyPasswordKey);
+    proxyPassword = null;
 
     await _prefs.setBool(_isDarkModeKey, _isDarkMode);
     await _prefs.setBool(_classicUiKey, _classicUi);
@@ -1512,6 +1685,60 @@ class SettingsProvider extends ChangeNotifier
     await _prefs.setBool(_useLocalYtFallbackKey, useLocalYtFallback);
     await _prefs.setInt(_maxTabsKey, _maxTabs);
     await _prefs.setInt(_historyMaxEntriesKey, _historyMaxEntries);
+    await _prefs.setInt(_imageCacheSizeMbKey, imageCacheSizeMb);
+    await _prefs.setBool(
+        _downloadOnlyWhileChargingKey, downloadOnlyWhileCharging);
+    await _prefs.setBool(_pauseOnCellularKey, pauseOnCellular);
+    await _prefs.setBool(_autoReduceEffectsOnJankKey, autoReduceEffectsOnJank);
+    // FIX(H-18): Persist all fields that were missing from resetToDefaults.
+    await _prefs.setBool(_resumeIntegrityCheckKey, resumeIntegrityCheck);
+    await _prefs.setInt(
+        _downloadStalledTimeoutMinutesKey, downloadStalledTimeoutMinutes);
+    await _prefs.setBool(_adaptiveThreadsKey, adaptiveThreads);
+    await _prefs.setBool(_autoVerifyChecksumKey, autoVerifyChecksum);
+    await _prefs.setBool(_powerAwareIsolatePoolKey, powerAwareIsolatePool);
+    await _prefs.setBool(_thermalThreadLimitingKey, thermalThreadLimiting);
+    await _prefs.setBool(_jankAutoBatterySaverKey, jankAutoBatterySaver);
+    await _prefs.setBool(_diskWriteBatchingKey, diskWriteBatching);
+    await _prefs.setBool(
+        _powerBandwidthThrottlingKey, powerBandwidthThrottling);
+    // Torrent advanced
+    await _prefs.setBool(_enableNatPmpKey, enableNatPmp);
+    await _prefs.setBool(_enableLpdKey, enableLpd);
+    await _prefs.setBool(_enablePexKey, enablePex);
+    await _prefs.setInt(_maxActiveTorrentsKey, maxActiveTorrents);
+    await _prefs.setInt(_maxActiveDownloadsKey, maxActiveDownloads);
+    await _prefs.setInt(_maxActiveSeedsKey, maxActiveSeeds);
+    await _prefs.setBool(_queueTorrentsKey, queueTorrents);
+    await _prefs.setInt(
+        _maxPeerConnectionsPerTorrentKey, maxPeerConnectionsPerTorrent);
+    await _prefs.setInt(_maxHalfOpenConnectionsKey, maxHalfOpenConnections);
+    await _prefs.setBool(_enableUtpKey, enableUtp);
+    await _prefs.setBool(_enableLsdKey, enableLsd);
+    await _prefs.setInt(_diskCacheSizeMbKey, diskCacheSizeMb);
+    await _prefs.setBool(_useOsCacheKey, useOsCache);
+    await _prefs.setBool(_seedOnlyWhenChargingKey, seedOnlyWhenCharging);
+    await _prefs.setBool(_seedOnlyOnWifiKey, seedOnlyOnWifi);
+    await _prefs.setBool(_enableIpFilterKey, enableIpFilter);
+    await _prefs.setString(_ipFilterPathKey, ipFilterPath);
+    await _prefs.setBool(_enableAnonymousModeKey, enableAnonymousMode);
+    // Torrent seeding + concurrency
+    await _prefs.setBool(_sequentialDownloadKey, sequentialDownload);
+    await _prefs.setInt(
+        _maxConcurrentFilesPerTorrentKey, _maxConcurrentFilesPerTorrent);
+    await _prefs.setDouble(_shareRatioLimitKey, shareRatioLimit);
+    await _prefs.setInt(_maxSeedingTimeKey, maxSeedingTimeMinutes);
+    // Proxy
+    await _prefs.setString(_proxyHostKey, proxyHost);
+    await _prefs.setInt(_proxyPortKey, proxyPort);
+    await _prefs.setBool(_enableProxyKey, enableProxy);
+    await _prefs.setBool(_enforceProxyKey, enforceProxy);
+    await _prefs.setString(_torrentProxyTypeKey, proxyType ?? 'none');
+    if (proxyUsername != null && proxyUsername!.isNotEmpty) {
+      await _prefs.setString(_torrentProxyUsernameKey, proxyUsername!);
+    } else {
+      await _prefs.remove(_torrentProxyUsernameKey);
+    }
 
     if (customDownloadPath != null) {
       await _prefs.setString(_customDownloadPathKey, customDownloadPath!);
@@ -1533,6 +1760,8 @@ class SettingsProvider extends ChangeNotifier
         sequentialDownload: sequentialDownload,
         shareRatioLimit: shareRatioLimit,
         maxSeedingTimeMinutes: maxSeedingTimeMinutes,
+        enableUtp: enableUtp,
+        diskCacheSizeBytes: diskCacheSizeMb * 1024 * 1024,
       );
 
   @override

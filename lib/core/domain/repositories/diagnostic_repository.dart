@@ -56,7 +56,8 @@ abstract class DiagnosticRepository {
   void recordProgressLatency(Duration latency);
   void recordDbWriteQueueDepth(int depth);
   void recordMirrorHealthAccess({required bool isHit});
-  void recordTelemetryAlert(String alertName, {String? taskId, String? details});
+  void recordTelemetryAlert(String alertName,
+      {String? taskId, String? details});
   void resetTelemetryMetrics();
   Map<String, dynamic> telemetryMetricsSnapshot();
 }

@@ -29,7 +29,9 @@ void main() {
               'BGTaskSchedulerPermittedIdentifiers must include com.dmx.app.torrent.refresh');
     });
 
-    test('NSAllowsArbitraryLoads is true (supports downloading from arbitrary HTTP/HTTPS URLs)', () {
+    test(
+        'NSAllowsArbitraryLoads is true (supports downloading from arbitrary HTTP/HTTPS URLs)',
+        () {
       if (content.isEmpty) {
         markTestSkipped(
             'ios/Runner/Info.plist not found; skipping on non-iOS builds');
@@ -45,7 +47,8 @@ void main() {
       expect(
         match!.group(1),
         equals('true'),
-        reason: 'NSAllowsArbitraryLoads must be true for download manager file transfers',
+        reason:
+            'NSAllowsArbitraryLoads must be true for download manager file transfers',
       );
     });
 

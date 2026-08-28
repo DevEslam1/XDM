@@ -466,9 +466,6 @@ class FakeITorrentService implements ITorrentService {
   List<TorrentAlertEvent> getRecentAlerts([int? torrentId]) => const [];
 
   @override
-  void applySettingsPack(TorrentSettingsPack pack) {}
-
-  @override
   Future<List<TorrentFileProgress>> getAccurateFileProgress(
       int torrentId, String savePath,
       {Map<int, int>? knownSizes}) async {

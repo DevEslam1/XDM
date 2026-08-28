@@ -113,7 +113,8 @@ class TorrentSessionState {
         return state.copyWith(
           name: event.name.isNotEmpty ? event.name : state.name,
           hasMetadata: true,
-          totalWanted: event.totalWanted > 0 ? event.totalWanted : state.totalWanted,
+          totalWanted:
+              event.totalWanted > 0 ? event.totalWanted : state.totalWanted,
           files: event.files,
           stateLabel: state.isPaused ? 'Paused' : 'Downloading',
         );
@@ -134,22 +135,28 @@ class TorrentSessionState {
 
       case PieceFinishedEvent():
         final newPiecesHave = event.piecesHave;
-        final newPiecesTotal = event.piecesTotal > 0 ? event.piecesTotal : state.piecesTotal;
+        final newPiecesTotal =
+            event.piecesTotal > 0 ? event.piecesTotal : state.piecesTotal;
         final newProgress = state.totalWanted > 0
             ? (event.totalWantedDone / state.totalWanted).clamp(0.0, 1.0)
             : (newPiecesTotal > 0
                 ? (newPiecesHave / newPiecesTotal).clamp(0.0, 1.0)
                 : state.progress.clamp(0.0, 1.0));
-        final isDone = newProgress >= 0.9999 || (newPiecesTotal > 0 && newPiecesHave >= newPiecesTotal);
+        final isDone = newProgress >= 0.9999 ||
+            (newPiecesTotal > 0 && newPiecesHave >= newPiecesTotal);
 
         return state.copyWith(
           totalWantedDone: event.totalWantedDone,
           piecesHave: newPiecesHave,
           piecesTotal: newPiecesTotal,
-          pieceBitfield: event.pieceBitfield.isNotEmpty ? event.pieceBitfield : state.pieceBitfield,
+          pieceBitfield: event.pieceBitfield.isNotEmpty
+              ? event.pieceBitfield
+              : state.pieceBitfield,
           progress: newProgress,
           isFinished: isDone,
-          stateLabel: isDone ? (state.isPaused ? 'Finished' : 'Seeding') : state.stateLabel,
+          stateLabel: isDone
+              ? (state.isPaused ? 'Finished' : 'Seeding')
+              : state.stateLabel,
         );
 
       case SaveResumeDataCompletedEvent():
@@ -177,9 +184,8 @@ class TorrentSessionState {
       case FilePrioritiesChangedEvent():
         final newWanted = event.newTotalWanted;
         final newWantedDone = event.newTotalWantedDone;
-        final newProgress = newWanted > 0
-            ? (newWantedDone / newWanted).clamp(0.0, 1.0)
-            : 1.0;
+        final newProgress =
+            newWanted > 0 ? (newWantedDone / newWanted).clamp(0.0, 1.0) : 1.0;
 
         return state.copyWith(
           filePriorities: event.priorities,
@@ -190,9 +196,11 @@ class TorrentSessionState {
 
       case StatusTickEvent():
         // Stats polling provides coarse rates and counts, while truth for wanted/pieces comes from native telemetry
-        final isDone = event.progress >= 0.9999;
-        final piecesHave = event.piecesHave > 0 ? event.piecesHave : state.piecesHave;
-        final piecesTotal = event.piecesTotal > 0 ? event.piecesTotal : state.piecesTotal;
+        final isDone = event.progress >= 0.999;
+        final piecesHave =
+            event.piecesHave > 0 ? event.piecesHave : state.piecesHave;
+        final piecesTotal =
+            event.piecesTotal > 0 ? event.piecesTotal : state.piecesTotal;
 
         return state.copyWith(
           progress: event.progress,
@@ -204,9 +212,15 @@ class TorrentSessionState {
           numPeers: event.numPeers,
           numSeeds: event.numSeeds,
           stateLabel: event.stateLabel,
-          fileProgress: event.fileProgress.isNotEmpty ? event.fileProgress : state.fileProgress,
-          filePriorities: event.filePriorities.isNotEmpty ? event.filePriorities : state.filePriorities,
-          pieceBitfield: event.piecesBitfield.isNotEmpty ? event.piecesBitfield : state.pieceBitfield,
+          fileProgress: event.fileProgress.isNotEmpty
+              ? event.fileProgress
+              : state.fileProgress,
+          filePriorities: event.filePriorities.isNotEmpty
+              ? event.filePriorities
+              : state.filePriorities,
+          pieceBitfield: event.piecesBitfield.isNotEmpty
+              ? event.piecesBitfield
+              : state.pieceBitfield,
           piecesHave: piecesHave,
           piecesTotal: piecesTotal,
           isFinished: isDone,

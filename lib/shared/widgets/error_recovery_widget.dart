@@ -1,5 +1,6 @@
 import 'package:dmx/core/app_theme.dart';
 import 'package:dmx/core/services/error_taxonomy.dart';
+import 'package:dmx/core/utils/localization.dart';
 import 'package:dmx/shared/design/dmx_design.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -175,7 +176,7 @@ class _ErrorRecoveryWidgetState extends State<ErrorRecoveryWidget> {
                   ElevatedButton.icon(
                     onPressed: widget.onRetry,
                     icon: const Icon(Icons.refresh_rounded, size: 18),
-                    label: const Text('Retry'),
+                    label: Text(L10n.of(context, 'retry')),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: categoryColor,
                       foregroundColor: Colors.white,
@@ -186,13 +187,13 @@ class _ErrorRecoveryWidgetState extends State<ErrorRecoveryWidget> {
                   OutlinedButton.icon(
                     onPressed: widget.onOpenSettings,
                     icon: const Icon(Icons.settings_rounded, size: 18),
-                    label: const Text('Open Settings'),
+                    label: Text(L10n.of(context, 'open_settings')),
                   ),
                 if (widget.onContactSupport != null)
                   TextButton.icon(
                     onPressed: widget.onContactSupport,
                     icon: const Icon(Icons.help_outline_rounded, size: 18),
-                    label: const Text('Contact Support'),
+                    label: Text(L10n.of(context, 'contact_support')),
                   ),
                 TextButton.icon(
                   onPressed: () {
@@ -205,12 +206,16 @@ class _ErrorRecoveryWidgetState extends State<ErrorRecoveryWidget> {
                     setState(() => _copied = true);
                     Future.delayed(
                       const Duration(seconds: 2),
-                      () => setState(() => _copied = false),
+                      () {
+                        if (mounted) setState(() => _copied = false);
+                      },
                     );
                   },
                   icon: Icon(_copied ? Icons.check_rounded : Icons.copy_rounded,
                       size: 18),
-                  label: Text(_copied ? 'Copied' : 'Copy Details'),
+                  label: Text(_copied
+                      ? L10n.of(context, 'copied')
+                      : L10n.of(context, 'copy_details')),
                 ),
               ],
             ),
@@ -222,7 +227,9 @@ class _ErrorRecoveryWidgetState extends State<ErrorRecoveryWidget> {
                 child: Row(
                   children: [
                     Text(
-                      _expanded ? 'Hide Error Details' : 'Show Error Details',
+                      _expanded
+                          ? L10n.of(context, 'hide_error_details')
+                          : L10n.of(context, 'show_error_details'),
                       style: TextStyle(
                         fontSize: 12,
                         color: Theme.of(context).primaryColor,

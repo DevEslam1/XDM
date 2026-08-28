@@ -48,6 +48,10 @@ class PowerMonitor {
   static final ValueNotifier<double> throttleFactorNotifier =
       ValueNotifier<double>(1.0);
 
+  /// Notifies subscribers immediately whenever [isCharging] changes.
+  static final ValueNotifier<bool> isChargingNotifier =
+      ValueNotifier<bool>(false);
+
   static bool thermalThreadLimitingEnabled = true;
   static bool powerBandwidthThrottlingEnabled = true;
 
@@ -169,6 +173,7 @@ class PowerMonitor {
   static void _notifyThrottleFactor() {
     batterySaverModeNotifier.value = batterySaverMode;
     throttleFactorNotifier.value = throttleFactor;
+    isChargingNotifier.value = isCharging;
   }
 
   /// Master "aggression" scalar: 1.0 = full power, 0.3 = conserve hard.
@@ -226,6 +231,7 @@ class PowerMonitor {
   }
 
   static Future<void> _pollThermalOnce() async {
+    if (kIsWeb) return;
     try {
       if (Platform.isAndroid) {
         final status = await _channel.invokeMethod<String>('getThermalStatus');

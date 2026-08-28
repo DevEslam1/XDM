@@ -103,13 +103,14 @@ class DownloadIsolatePool implements MemoryPressureListener {
   }
 
   bool _shuttingDown = false;
+  bool _draining = false;
   int _seq = 0;
   int get maxJobsPerWorker =>
       PowerMonitor.batterySaverMode == BatterySaverMode.aggressive ? 1 : 2;
   int get workerCount {
     final live = _workers.length;
     if (live <= 0) return 0;
-    if (_powerAware &&
+    if (_powerAwareActive &&
         PowerMonitor.batterySaverMode == BatterySaverMode.aggressive) {
       return 1;
     }
@@ -122,8 +123,14 @@ class DownloadIsolatePool implements MemoryPressureListener {
   Timer? _bgIdleReaper;
   bool _foregroundListenerAttached = false;
 
+  bool get _powerAwareActive =>
+      _powerAware && SettingsProvider.instance.powerAwareIsolatePool;
+
   int get effectiveMaxSize {
     if (DownloadEngine.isInBackground) return 1;
+    if (!_powerAwareActive) {
+      return _maxPoolSize != null ? min(_size, _maxPoolSize!) : _size;
+    }
     if (PowerMonitor.screenOff || PowerMonitor.isLowEndDevice) return 1;
     if (PowerMonitor.batterySaverMode == BatterySaverMode.aggressive ||
         PowerMonitor.thermal == ThermalStatus.severe ||
@@ -137,13 +144,11 @@ class DownloadIsolatePool implements MemoryPressureListener {
       return _maxPoolSize != null ? min(modCap, _maxPoolSize!) : modCap;
     }
 
-    if (_powerAware) {
-      if (PowerMonitor.isCharging) {
-        return _maxPoolSize != null ? min(_size, _maxPoolSize!) : _size;
-      }
-      if (PowerMonitor.batteryLevel < 20) {
-        return 1;
-      }
+    if (PowerMonitor.isCharging) {
+      return _maxPoolSize != null ? min(_size, _maxPoolSize!) : _size;
+    }
+    if (PowerMonitor.batteryLevel < 20) {
+      return 1;
     }
     return _maxPoolSize != null ? min(_size, _maxPoolSize!) : _size;
   }
@@ -177,16 +182,18 @@ class DownloadIsolatePool implements MemoryPressureListener {
   }
 
   void _stopBgIdleReaper() {
-    TickManager.instance.unregisterTick('isolate_pool_idle_check');
+    TickManager.instance.unregisterTick('isolate_pool_bg_reaper');
     _bgIdleReaper?.cancel();
     _bgIdleReaper = null;
   }
 
   void _startBgIdleReaper() {
     _stopBgIdleReaper();
-    // FIX-02: Consolidate into TickManager
+    // FIX P0-11: Use distinct tick id. Previously both bg-reaper and
+    // idle-check used 'isolate_pool_idle_check', causing overwrite —
+    // one timer silently lost, leaking or killing workers.
     TickManager.instance.registerTick(
-      id: 'isolate_pool_idle_check',
+      id: 'isolate_pool_bg_reaper',
       interval: const Duration(seconds: 60),
       priority: TickPriority.normal,
       callback: (_) {
@@ -228,7 +235,8 @@ class DownloadIsolatePool implements MemoryPressureListener {
       interval: const Duration(minutes: 5),
       priority: TickPriority.critical,
       callback: (_) {
-        _jobCrashCounts.removeWhere((taskId, _) => !_isJobActiveOrQueued(taskId));
+        _jobCrashCounts
+            .removeWhere((taskId, _) => !_isJobActiveOrQueued(taskId));
       },
     );
   }
@@ -253,7 +261,7 @@ class DownloadIsolatePool implements MemoryPressureListener {
     if (_shuttingDown || _workers.length <= 1) return;
     final now = DateTime.now();
     final toRemove = <_Worker>[];
-    final isPowerConstrained = _powerAware &&
+    final isPowerConstrained = _powerAwareActive &&
         (PowerMonitor.batterySaverMode == BatterySaverMode.aggressive ||
             PowerMonitor.screenOff ||
             _workers.length > effectiveMaxSize);
@@ -347,10 +355,11 @@ class DownloadIsolatePool implements MemoryPressureListener {
     job.priority = priority;
     final slots = maxJobsPerWorker;
     _Worker? worker;
+    int minLoad = slots;
     for (final w in _workers) {
-      if (!w.dead && w.commandPort != null && w.activeJobs < slots) {
+      if (!w.dead && w.commandPort != null && w.activeJobs < minLoad) {
+        minLoad = w.activeJobs;
         worker = w;
-        break;
       }
     }
     if (worker == null) {
@@ -395,33 +404,39 @@ class DownloadIsolatePool implements MemoryPressureListener {
   }
 
   void _drain() {
-    while (_queue.isNotEmpty) {
-      final slots = maxJobsPerWorker;
-      _Worker? worker;
-      for (final w in _workers) {
-        if (!w.dead && w.commandPort != null && w.activeJobs < slots) {
-          worker = w;
-          break;
+    if (_draining) return;
+    _draining = true;
+    try {
+      while (_queue.isNotEmpty) {
+        final slots = maxJobsPerWorker;
+        _Worker? worker;
+        for (final w in _workers) {
+          if (!w.dead && w.commandPort != null && w.activeJobs < slots) {
+            worker = w;
+            break;
+          }
         }
-      }
-      if (worker == null) {
-        if (_workers.length < effectiveMaxSize) {
-          _maybeExpandWorkers();
+        if (worker == null) {
+          if (_workers.length < effectiveMaxSize) {
+            _maybeExpandWorkers();
+          }
+          return;
         }
-        return;
+        final job = _removeHighestPriority();
+        if (job == null) return;
+        worker.activeJobs++;
+        worker.pending.add(job);
+        worker.lastActiveTime = DateTime.now();
+        job._worker = worker;
+        worker.commandPort!.send({
+          't': 'job',
+          'jobId': job.command.taskId,
+          'reply': job._incoming.sendPort,
+          'cmd': job.command.toMap(),
+        });
       }
-      final job = _removeHighestPriority();
-      if (job == null) return;
-      worker.activeJobs++;
-      worker.pending.add(job);
-      worker.lastActiveTime = DateTime.now();
-      job._worker = worker;
-      worker.commandPort!.send({
-        't': 'job',
-        'jobId': job.command.taskId,
-        'reply': job._incoming.sendPort,
-        'cmd': job.command.toMap(),
-      });
+    } finally {
+      _draining = false;
     }
   }
 
@@ -519,15 +534,24 @@ class DownloadIsolatePool implements MemoryPressureListener {
         } catch (_) {}
       }
       worker.dead = true;
-      final jobs = List<PoolJob>.from(worker.pending);
+      // FIX(H-3): Only error the TARGET task's jobs. Previously every pending
+      // job on the worker was error-killed, so a healthy sibling task sharing
+      // the same worker was also marked "forceCancelled" → DB writes
+      // status=failed → user sees a perfectly fine task jump to failed state.
+      final remainingPending =
+          worker.pending.where((j) => j.command.taskId != taskId).toList();
       worker.pending.clear();
       worker.activeJobs = 0;
-      for (final job in jobs) {
+      for (final job in targetJobs) {
         job._deliverError(
           'forceCancelled',
           'Worker isolate killed due to cancel timeout',
           null,
         );
+      }
+      // Re-queue surviving sibling jobs to a fresh worker.
+      for (final job in remainingPending) {
+        _queue.add(job);
       }
       // Use beforeNextEvent first to allow isolate to finish any in-flight buffer flush,
       // with a 2-second fallback timer before hard killing.
@@ -586,6 +610,7 @@ class DownloadIsolatePool implements MemoryPressureListener {
     _bgIdleReaper = null;
     TickManager.instance.unregisterTick('isolate_pool_crash_sweep');
     TickManager.instance.unregisterTick('isolate_pool_idle_check');
+    TickManager.instance.unregisterTick('isolate_pool_bg_reaper');
     if (_foregroundListenerAttached) {
       DownloadEngine.appInForegroundNotifier
           .removeListener(_onForegroundChanged);
@@ -602,6 +627,22 @@ class DownloadIsolatePool implements MemoryPressureListener {
 
   void forceKillAll() {
     _shuttingDown = true;
+    _idleCheckTimer?.cancel();
+    _idleCheckTimer = null;
+    _sweepCrashCountsTimer?.cancel();
+    _sweepCrashCountsTimer = null;
+    _bgIdleReaper?.cancel();
+    _bgIdleReaper = null;
+    TickManager.instance.unregisterTick('isolate_pool_crash_sweep');
+    TickManager.instance.unregisterTick('isolate_pool_idle_check');
+    TickManager.instance.unregisterTick('isolate_pool_bg_reaper');
+    if (_foregroundListenerAttached) {
+      try {
+        DownloadEngine.appInForegroundNotifier
+            .removeListener(_onForegroundChanged);
+      } catch (_) {}
+      _foregroundListenerAttached = false;
+    }
     _queue.clear();
     for (final w in _workers) {
       w.dead = true;

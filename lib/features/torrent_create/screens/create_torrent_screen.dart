@@ -113,6 +113,22 @@ class _CreateTorrentScreenState extends State<CreateTorrentScreen> {
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
 
+    // The 1.9.2 bridge has no create_torrent export, so createTorrent is a
+    // no-op that can still leave a pre-existing output file on disk and read
+    // as "success". Refuse honestly instead of reporting a torrent was built.
+    if (!TorrentService.createTorrentSupported) {
+      ThemedSnackbar.show(
+        context,
+        message: isRtl
+            ? 'إنشاء التورنت غير متاح في نسخة المحرك الحالية'
+            : 'Torrent creation is not available on this engine build',
+        color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+        icon: Icons.info_outline,
+        isDarkMode: isDark,
+      );
+      return;
+    }
+
     final source = _sourceController.text.trim();
     var output = _outputController.text.trim();
 
@@ -220,6 +236,40 @@ class _CreateTorrentScreenState extends State<CreateTorrentScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            if (!TorrentService.createTorrentSupported) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: (isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber)
+                      .withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color:
+                        (isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber)
+                            .withValues(alpha: 0.4),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline,
+                        size: 18,
+                        color: isDark
+                            ? AppTheme.neonAmber
+                            : AppTheme.lightNeonAmber),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        isRtl
+                            ? 'إنشاء التورنت غير مدعوم في نسخة المحرك الحالية.'
+                            : 'Torrent creation is not supported on this engine build.',
+                        style: TextStyle(color: mutedClr, fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
             _SectionLabel(
               text: isRtl ? 'مسار المصدر' : 'Source Path',
               color: textClr,

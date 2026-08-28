@@ -65,3 +65,65 @@ class TorrentTrackerOptimizer {
     trackerManager.autoAddDefaultsIfSparse(torrentId);
   }
 }
+
+/// Health metrics for a single BitTorrent tracker.
+class TrackerHealth {
+  int successes = 0;
+  int failures = 0;
+  double avgSeeds = 0.0;
+  double avgLatencyMs = 0.0;
+  DateTime lastAnnounce = DateTime.fromMillisecondsSinceEpoch(0);
+
+  double get score {
+    if (failures >= 5) return 0.0; // Tracker unresponsive
+    final reliability = successes / (successes + failures + 1);
+    final seedScore = (avgSeeds / 100.0).clamp(0.0, 1.0);
+    final latencyScore = 1.0 / (1.0 + avgLatencyMs / 500.0);
+    return (reliability * 0.5) + (seedScore * 0.3) + (latencyScore * 0.2);
+  }
+}
+
+/// Smart tracker tier manager that ranks trackers by health and manages announces.
+class SmartTrackerManager {
+  final Map<String, TrackerHealth> _trackerHealth = {};
+
+  TrackerHealth healthFor(String url) =>
+      _trackerHealth.putIfAbsent(url, () => TrackerHealth());
+
+  void recordTrackerResult(
+    String url, {
+    required bool success,
+    int seeds = 0,
+    double latencyMs = 0,
+  }) {
+    final health = healthFor(url);
+    health.lastAnnounce = DateTime.now();
+    if (success) {
+      health.successes++;
+      health.failures = 0;
+      health.avgSeeds = 0.7 * seeds + 0.3 * health.avgSeeds;
+      health.avgLatencyMs = 0.7 * latencyMs + 0.3 * health.avgLatencyMs;
+    } else {
+      health.failures++;
+    }
+  }
+
+  /// Calculates announce delay based on failure backoff.
+  Duration computeBackoffDelay(String url) {
+    final health = _trackerHealth[url];
+    if (health == null || health.failures <= 0) return Duration.zero;
+    final exponent = health.failures.clamp(1, 6);
+    return Duration(seconds: 2 * (1 << (exponent - 1)));
+  }
+
+  /// Returns trackers sorted by composite health score.
+  List<TorrentTrackerInfo> rankTrackers(List<TorrentTrackerInfo> trackers) {
+    final sorted = List<TorrentTrackerInfo>.from(trackers);
+    sorted.sort((a, b) {
+      final scoreA = healthFor(a.url).score;
+      final scoreB = healthFor(b.url).score;
+      return scoreB.compareTo(scoreA);
+    });
+    return sorted;
+  }
+}

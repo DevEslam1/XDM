@@ -87,6 +87,19 @@ class DownloadCommand {
     this.ytCounterpartTaskId,
     this.throttleFactor = 1.0,
     this.urlExpiresHint = false,
+    this.authUsername,
+    this.authPassword,
+    this.customHeaders,
+    this.httpsOnly = false,
+    this.proxyType,
+    this.proxyHost,
+    this.proxyPort,
+    this.proxyUsername,
+    this.proxyPassword,
+    this.diskWriteBatching = true,
+    this.stalledTimeoutMinutes = 5,
+    this.resumeIntegrityCheck = true,
+    this.initialDownloadedBytes = 0,
   })  : initialSpeedLimit = speedLimit ?? initialSpeedLimit,
         initialActiveCount = activeCount ?? initialActiveCount,
         speedLimitKbps = speedLimit ?? speedLimitKbps;
@@ -116,6 +129,25 @@ class DownloadCommand {
   final int? ytCounterpartDownloadedBytes;
   final String? ytCounterpartTaskId;
   final bool urlExpiresHint;
+  // Per-download HTTP auth + custom headers (Plan 06 6.2), and per-session
+  // network policy (proxy + HTTPS-only, Plan 06 6.3 / Plan 05 S3) threaded to
+  // the worker isolate, which cannot read SettingsProvider.instance.
+  final String? authUsername;
+  final String? authPassword;
+  final Map<String, String>? customHeaders;
+  final bool httpsOnly;
+  final String? proxyType; // 'http' | 'socks5' | null
+  final String? proxyHost;
+  final int? proxyPort;
+  final String? proxyUsername;
+  final String? proxyPassword;
+  // 7.3-writer: batched (paced) disk flushing vs a tighter cadence.
+  final bool diskWriteBatching;
+  // FIX(P2.5): Thread settings to the worker isolate which cannot access
+  // SettingsProvider.instance.
+  final int stalledTimeoutMinutes;
+  final bool resumeIntegrityCheck;
+  final int initialDownloadedBytes;
 
   Map<String, dynamic> toMap() => {
         'taskId': taskId,
@@ -125,6 +157,7 @@ class DownloadCommand {
         'localFilePath': localFilePath,
         'knownFileSize': knownFileSize,
         'supportsResume': supportsResume,
+        'initialDownloadedBytes': initialDownloadedBytes,
         'threadCount': threadCount,
         'customUserAgent': customUserAgent,
         'referer': referer,
@@ -145,6 +178,18 @@ class DownloadCommand {
           'ytCounterpartTaskId': ytCounterpartTaskId,
         'throttleFactor': throttleFactor,
         'urlExpiresHint': urlExpiresHint,
+        'authUsername': authUsername,
+        'authPassword': authPassword,
+        if (customHeaders != null) 'customHeaders': customHeaders,
+        'httpsOnly': httpsOnly,
+        'proxyType': proxyType,
+        'proxyHost': proxyHost,
+        'proxyPort': proxyPort,
+        'proxyUsername': proxyUsername,
+        'proxyPassword': proxyPassword,
+        'diskWriteBatching': diskWriteBatching,
+        'stalledTimeoutMinutes': stalledTimeoutMinutes,
+        'resumeIntegrityCheck': resumeIntegrityCheck,
       };
 
   factory DownloadCommand.fromMap(Map<String, dynamic> m) => DownloadCommand(
@@ -179,6 +224,20 @@ class DownloadCommand {
         ytCounterpartDownloadedBytes:
             (m['ytCounterpartDownloadedBytes'] as num?)?.toInt(),
         ytCounterpartTaskId: m['ytCounterpartTaskId'] as String?,
+        authUsername: m['authUsername'] as String?,
+        authPassword: m['authPassword'] as String?,
+        customHeaders: (m['customHeaders'] as Map?)
+            ?.map((k, v) => MapEntry(k.toString(), v.toString())),
+        httpsOnly: m['httpsOnly'] as bool? ?? false,
+        proxyType: m['proxyType'] as String?,
+        proxyHost: m['proxyHost'] as String?,
+        proxyPort: (m['proxyPort'] as num?)?.toInt(),
+        proxyUsername: m['proxyUsername'] as String?,
+        proxyPassword: m['proxyPassword'] as String?,
+        diskWriteBatching: m['diskWriteBatching'] as bool? ?? true,
+        stalledTimeoutMinutes:
+            (m['stalledTimeoutMinutes'] as num?)?.toInt() ?? 5,
+        resumeIntegrityCheck: m['resumeIntegrityCheck'] as bool? ?? true,
       );
 }
 

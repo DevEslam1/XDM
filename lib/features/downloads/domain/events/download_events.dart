@@ -116,8 +116,7 @@ final class TaskCompleted extends DownloadEvent {
   }) : timestamp = timestamp ?? DateTime.now();
 
   @override
-  String toString() =>
-      'TaskCompleted(taskId: $taskId, finalSize: $finalSize)';
+  String toString() => 'TaskCompleted(taskId: $taskId, finalSize: $finalSize)';
 }
 
 /// Event emitted when a command is rejected by validation or state rules.
@@ -133,8 +132,7 @@ final class TaskRejected extends DownloadEvent {
   }) : timestamp = timestamp ?? DateTime.now();
 
   @override
-  String toString() =>
-      'TaskRejected(command: $command, reason: $reason)';
+  String toString() => 'TaskRejected(command: $command, reason: $reason)';
 }
 
 /// Event emitted when a task is admitted or enqueued.

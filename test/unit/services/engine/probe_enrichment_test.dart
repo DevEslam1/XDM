@@ -7,7 +7,9 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('Probe Enrichment: identity probe measures Range support, TTFB, and initial goodput', () async {
+  test(
+      'Probe Enrichment: identity probe measures Range support, TTFB, and initial goodput',
+      () async {
     final receivePort = ReceivePort();
     const cmd = DownloadCommand(
       taskId: 'probe_test_1',
@@ -24,7 +26,10 @@ void main() {
     job.stateForTesting = TransferState(
       totalSize: 10000,
       threadCount: 2,
-      chunks: [ChunkState(start: 0, end: 4999), ChunkState(start: 5000, end: 9999)],
+      chunks: [
+        ChunkState(start: 0, end: 4999),
+        ChunkState(start: 5000, end: 9999)
+      ],
       url: cmd.url,
     );
 

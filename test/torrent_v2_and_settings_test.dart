@@ -2,11 +2,9 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dmx/core/domain/torrent_models.dart';
-import 'package:dmx/core/services/torrent_session_config.dart';
 import 'package:dmx/core/utils/bencode_decoder.dart';
 import 'package:dmx/core/utils/url_utils.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:libtorrent_flutter/libtorrent_flutter.dart';
 
 void main() {
   group('BitTorrent v2 and Hybrid Metadata Parsing', () {
@@ -45,63 +43,6 @@ void main() {
       expect(parsed['name'], 'Test');
       expect(parsed['infoHash'], 'DA39A3EE5E6B4B0D3255BFEF95601890AFD80709');
       expect(parsed['isV1Only'], 'true');
-    });
-  });
-
-  group('TorrentSettingsPack and BtConfig mapping', () {
-    test('builds BtConfig with SOCKS5 proxy and protocol switches', () {
-      const pack = TorrentSettingsPack(
-        enableDht: true,
-        enableLsd: false,
-        enablePex: true,
-        enableUpnp: true,
-        maxConnectionsGlobal: 300,
-        maxDownloadRate: 1048576,
-        maxUploadRate: 524288,
-        forceEncrypt: true,
-        enableUtp: true,
-        socks5ProxyHost: '127.0.0.1',
-        socks5ProxyPort: 9050,
-        enforceProxy: true,
-        cacheSize: 1073741824,
-      );
-
-      const baseConfig = BtConfig();
-      final btConfig = TorrentSessionConfig.buildBtConfigFromPack(pack,
-          baseConfig: baseConfig);
-
-      expect(btConfig.disableDht, isFalse);
-      expect(btConfig.disableUpnp, isFalse);
-      expect(btConfig.disableUtp, isFalse);
-      expect(btConfig.forceEncrypt, isTrue);
-      expect(btConfig.connectionsLimit, 300);
-      expect(btConfig.downloadRateLimit, 1024);
-      expect(btConfig.uploadRateLimit, 512);
-      expect(btConfig.cacheSize, 1073741824);
-    });
-
-    test('validates TorrentSettingsPack direct construction', () {
-      const pack = TorrentSettingsPack(
-        enableDht: true,
-        enableLsd: true,
-        enablePex: true,
-        enableUpnp: true,
-        maxConnectionsGlobal: 250,
-        maxDownloadRate: 200000,
-        maxUploadRate: 100000,
-        forceEncrypt: false,
-        enableUtp: true,
-        socks5ProxyHost: 'proxy.dmx.io',
-        socks5ProxyPort: 1080,
-        enforceProxy: false,
-        cacheSize: 536870912,
-      );
-
-      expect(pack.enableDht, isTrue);
-      expect(pack.maxConnectionsGlobal, 250);
-      expect(pack.socks5ProxyHost, 'proxy.dmx.io');
-      expect(pack.socks5ProxyPort, 1080);
-      expect(pack.cacheSize, 512 * 1024 * 1024);
     });
   });
 

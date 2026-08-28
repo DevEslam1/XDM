@@ -7,7 +7,8 @@ import 'package:flutter/foundation.dart';
 /// file paths, or personal data. Only records aggregated ratios and counters.
 class ProductionTelemetryService {
   ProductionTelemetryService._();
-  static final ProductionTelemetryService instance = ProductionTelemetryService._();
+  static final ProductionTelemetryService instance =
+      ProductionTelemetryService._();
 
   static bool optInEnabled = false;
 

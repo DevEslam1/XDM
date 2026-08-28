@@ -98,11 +98,13 @@ class UserScriptManager extends ChangeNotifier implements ScriptRepository {
         RegExp(r'\bFunction\b').hasMatch(stripped) ||
         stripped.contains('new Function') ||
         stripped.contains('importScripts(') ||
-        stripped.contains('importScripts ')) {
+        stripped.contains('importScripts ') ||
+        stripped.contains('Function.prototype.bind') ||
+        RegExp(r'\.bind\s*\(').hasMatch(stripped)) {
       _log.warning(
-          'Security Violation: Dynamic code execution (eval/Function) detected in script "${script.name}"');
+          'Security Violation: Dynamic code execution (eval/Function/bind) detected in script "${script.name}"');
       throw Exception(
-          'Dynamic code execution (eval, new Function) is prohibited for security.');
+          'Dynamic code execution (eval, new Function, Function.bind) is prohibited for security.');
     }
 
     if (stripped.contains('document.cookie') ||
@@ -144,7 +146,8 @@ class UserScriptManager extends ChangeNotifier implements ScriptRepository {
         stripped.contains('Object.create')) {
       _log.warning(
           'Security Violation: Prototype pollution in script "${script.name}"');
-      throw Exception('Prototype access or property redefinition is prohibited.');
+      throw Exception(
+          'Prototype access or property redefinition is prohibited.');
     }
 
     if (stripped.contains('navigator.sendBeacon')) {
@@ -159,10 +162,11 @@ class UserScriptManager extends ChangeNotifier implements ScriptRepository {
       throw Exception('Dynamic imports are prohibited in UserScripts.');
     }
 
-    final hasWindowComputed = (stripped.contains('window[') || RegExp(r'window\s*\[').hasMatch(stripped)) &&
+    final hasWindowComputed = (stripped.contains('window[') ||
+            RegExp(r'window\s*\[').hasMatch(stripped)) &&
         (stripped.contains('eval') || stripped.contains('Function'));
-    final hasObfuscatedEval =
-        hasWindowComputed || RegExp(r'window\s*\[\s*["\x27]ev').hasMatch(stripped);
+    final hasObfuscatedEval = hasWindowComputed ||
+        RegExp(r'window\s*\[\s*["\x27]ev').hasMatch(stripped);
     final hasObfuscatedFunction =
         RegExp(r'window\s*\[\s*["\x27]Function').hasMatch(stripped);
     final hasGlobalThis = stripped.contains('globalThis[') ||

@@ -16,7 +16,9 @@ void main() {
   });
 
   test('Database migration and initial setup sanity check', () async {
-    expect(db.schemaVersion, equals(27));
+    // Keep in sync with AppDatabase.schemaVersion so a schema bump fails
+    // loudly here instead of silently drifting.
+    expect(db.schemaVersion, equals(28));
 
     // Verify bookmarks table and operations work correctly
     await db.customStatement('''

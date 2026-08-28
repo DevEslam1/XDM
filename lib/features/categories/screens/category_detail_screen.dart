@@ -47,8 +47,9 @@ class CategoryDetailScreen extends StatelessWidget {
                 t.status == DownloadStatus.failed))
         .toList();
 
-    final totalSizeBytes =
-        categoryTasks.fold<double>(0, (sum, t) => sum + t.fileSize.toDouble());
+    // FIX(M-1): Use downloadedBytes for failed tasks that haven't completed.
+    final totalSizeBytes = categoryTasks.fold<double>(
+        0, (sum, t) => sum + t.downloadedBytes.toDouble());
     final totalSizeMb = totalSizeBytes / (1024 * 1024);
     final fileCount = categoryTasks.length;
 

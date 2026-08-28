@@ -1,3 +1,4 @@
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/features/downloads/provider/network_monitor.dart';
@@ -37,6 +38,7 @@ void main() {
     late Map<String, int> torrentIds;
     late Map<String, CancelToken> cancelTokens;
     late bool wifiOnly;
+    late bool pauseOnCellular;
     late List<DownloadTask> setTaskCalls;
     late int pumpQueueCount;
 
@@ -47,6 +49,7 @@ void main() {
       torrentIds = {};
       cancelTokens = {};
       wifiOnly = false;
+      pauseOnCellular = false;
       setTaskCalls = [];
       pumpQueueCount = 0;
 
@@ -55,6 +58,7 @@ void main() {
         torrentIds: () => torrentIds,
         cancelTokens: () => cancelTokens,
         wifiOnly: () => wifiOnly,
+        pauseOnCellular: () => pauseOnCellular,
         setTask: (updated) async {
           setTaskCalls.add(updated);
           // Apply the update back into the task list.
@@ -186,6 +190,82 @@ void main() {
           (t) => t.id == 'w2' && t.status == DownloadStatus.queued,
         );
         expect(queued, isEmpty);
+      });
+    });
+
+    group('pause-on-cellular gating', () {
+      test('active tasks are paused on cellular when pauseOnCellular is on',
+          () async {
+        pauseOnCellular = true;
+        tasks.add(_task('c1', DownloadStatus.downloading));
+        cancelTokens['c1'] = CancelToken();
+        monitor.setConnectivityForTesting([ConnectivityResult.mobile]);
+
+        await monitor.checkNetworkConnectivity();
+
+        expect(tasks.first.status, DownloadStatus.paused);
+        expect(tasks.first.errorMessage, DownloadStatusMessages.waitingWifi);
+      });
+
+      test('cellular downloads are allowed when pauseOnCellular is off',
+          () async {
+        pauseOnCellular = false;
+        wifiOnly = false;
+        tasks.add(_task('c2', DownloadStatus.downloading));
+        cancelTokens['c2'] = CancelToken();
+        monitor.setConnectivityForTesting([ConnectivityResult.mobile]);
+
+        await monitor.checkNetworkConnectivity();
+
+        // No pause on cellular when neither gate is enabled.
+        final paused = setTaskCalls.where(
+          (t) => t.id == 'c2' && t.status == DownloadStatus.paused,
+        );
+        expect(paused, isEmpty);
+        expect(tasks.first.status, DownloadStatus.downloading);
+      });
+
+      test('tasks are not paused on wifi when pauseOnCellular is on', () async {
+        pauseOnCellular = true;
+        tasks.add(_task('c3', DownloadStatus.downloading));
+        cancelTokens['c3'] = CancelToken();
+        monitor.setConnectivityForTesting([ConnectivityResult.wifi]);
+
+        await monitor.checkNetworkConnectivity();
+
+        final paused = setTaskCalls.where(
+          (t) => t.id == 'c3' && t.status == DownloadStatus.paused,
+        );
+        expect(paused, isEmpty);
+        expect(tasks.first.status, DownloadStatus.downloading);
+      });
+
+      test('cellular-paused tasks resume when wifi returns', () async {
+        pauseOnCellular = true;
+        tasks.add(_task(
+          'c4',
+          DownloadStatus.paused,
+          errorMessage: DownloadStatusMessages.waitingWifi,
+        ));
+        monitor.setConnectivityForTesting([ConnectivityResult.wifi]);
+
+        await monitor.checkNetworkConnectivity();
+
+        expect(tasks.first.status, DownloadStatus.queued);
+      });
+
+      test('wifiOnly still pauses on cellular regardless of pauseOnCellular',
+          () async {
+        wifiOnly = true;
+        pauseOnCellular = false;
+        tasks.add(_task('c5', DownloadStatus.downloading));
+        cancelTokens['c5'] = CancelToken();
+        monitor.setConnectivityForTesting([ConnectivityResult.mobile]);
+
+        await monitor.checkNetworkConnectivity();
+
+        expect(tasks.first.status, DownloadStatus.paused);
+        expect(tasks.first.errorMessage, DownloadStatusMessages.waitingWifi);
       });
     });
 

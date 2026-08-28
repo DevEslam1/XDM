@@ -3,6 +3,7 @@ import 'dart:collection';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
+import 'package:synchronized/synchronized.dart';
 
 import 'power_monitor.dart';
 import 'tick_manager.dart';
@@ -22,6 +23,7 @@ class BandwidthGovernor {
   double _burstFactor;
   double _availableTokens = 0;
   DateTime _lastRefill = DateTime.now().subtract(const Duration(seconds: 1));
+  final Lock _tokenLock = Lock();
   // FIX-08: Change from 50ms to 16ms for 60fps refill precision
   int _lastRefillMs = 0;
   static const int _minRefillIntervalMs = 16;
@@ -48,16 +50,17 @@ class BandwidthGovernor {
   @visibleForTesting
   Timer? get domainCleanupTimerForTesting => _domainCleanupTimer;
 
+  String get _tickId => 'bandwidth_governor_cleanup_${identityHashCode(this)}';
+
   void _startDomainCleanup() {
     _domainCleanupTimer?.cancel();
     _domainCleanupTimer = Timer.periodic(
       const Duration(minutes: 5),
       (_) => _cleanupStaleDomainStates(),
     );
-    TickManager.instance.unregisterTick('bandwidth_governor_cleanup');
-    // FIX-02: Consolidate into TickManager
+    TickManager.instance.unregisterTick(_tickId);
     TickManager.instance.registerTick(
-      id: 'bandwidth_governor_cleanup',
+      id: _tickId,
       interval: const Duration(minutes: 5),
       priority: TickPriority.normal,
       callback: (_) {
@@ -75,7 +78,7 @@ class BandwidthGovernor {
   /// Releases all per-task and per-domain tracking state and cancels timers.
   void dispose() {
     PowerMonitor.throttleFactorNotifier.removeListener(onPowerStateChanged);
-    TickManager.instance.unregisterTick('bandwidth_governor_cleanup');
+    TickManager.instance.unregisterTick(_tickId);
     _domainCleanupTimer?.cancel();
     _domainCleanupTimer = null;
     _taskLimits.clear();
@@ -163,8 +166,9 @@ class BandwidthGovernor {
 
   /// Returns how many milliseconds the caller should sleep before writing
   /// [bytes] to stay within the configured limit.
+  // FIX 10/10: Guard token bucket with Lock to prevent async yield races.
   Future<int> acquire(int bytes, {String? taskId}) async {
-    return acquireNonBlocking(bytes, taskId: taskId);
+    return _tokenLock.synchronized(() => acquireNonBlocking(bytes, taskId: taskId));
   }
 
   /// Blocking variant of [acquire] that awaits the calculated delay (if any)
@@ -195,7 +199,9 @@ class BandwidthGovernor {
   int _acquireTaskLimited(int bytes, String taskId) {
     final rawLimit = _taskLimits[taskId]!;
     final taskLimit = (rawLimit * throttleFactor).round();
-    if (taskLimit <= 0) return _maxThrottleWaitMs;
+    // FIX P1-1: Unlimited (0) must not throttle. Previously returned 1000ms,
+    // capping throughput to ~pieceSize/s instead of unlimited.
+    if (taskLimit <= 0) return 0;
     final now = DateTime.now();
     final last =
         _taskLastRefill[taskId] ?? now.subtract(const Duration(seconds: 1));
@@ -286,5 +292,52 @@ class _DomainState {
     if (_speedHistory.length > 20) {
       _speedHistory.removeFirst();
     }
+  }
+}
+
+/// Cross-engine bandwidth arbitration between HTTP downloads and Torrent swarms (Phase 5.4).
+class BandwidthArbiter {
+  BandwidthArbiter({BandwidthGovernor? httpGovernor})
+      : _httpGovernor = httpGovernor ?? BandwidthGovernor();
+
+  final BandwidthGovernor _httpGovernor;
+
+  BandwidthGovernor get httpGovernor => _httpGovernor;
+
+  /// Arbitrates [totalLimitBps] fairly between active HTTP downloads and Torrent downloads.
+  /// Returns a tuple of `(httpLimitBps, torrentLimitBps)`.
+  (int, int) arbitrate({
+    required int httpActiveCount,
+    required int torrentActiveCount,
+    required int totalLimitBps,
+  }) {
+    if (totalLimitBps <= 0) {
+      _httpGovernor.setGlobalLimit(0);
+      return (0, 0); // Unlimited
+    }
+
+    if (httpActiveCount <= 0 && torrentActiveCount <= 0) {
+      return (0, 0);
+    }
+
+    int httpShare;
+    int torrentShare;
+
+    if (httpActiveCount > 0 && torrentActiveCount > 0) {
+      // Dynamic 70/30 split when both engines are active
+      httpShare = (totalLimitBps * 0.70).toInt();
+      torrentShare = totalLimitBps - httpShare;
+    } else if (httpActiveCount > 0) {
+      httpShare = totalLimitBps;
+      torrentShare = 0;
+    } else {
+      httpShare = 0;
+      torrentShare = totalLimitBps;
+    }
+
+    // Apply HTTP share to HTTP governor
+    _httpGovernor.setGlobalLimit(httpShare);
+
+    return (httpShare, torrentShare);
   }
 }

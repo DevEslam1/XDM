@@ -19,7 +19,8 @@ void main() {
 
   setUp(() async {
     HttpOverrides.global = null;
-    tempDir = await Directory.systemTemp.createTemp('http_characterization_test_');
+    tempDir =
+        await Directory.systemTemp.createTemp('http_characterization_test_');
     originalPayload = Uint8List.fromList(
       List.generate(fileSize, (i) => (i * 31 + 7) % 256),
     );
@@ -35,7 +36,9 @@ void main() {
     }
   });
 
-  test('Money Test (D2): Stale journal after server identity change resets cleanly without zero-holes', () async {
+  test(
+      'Money Test (D2): Stale journal after server identity change resets cleanly without zero-holes',
+      () async {
     var currentEtag = '"v1"';
     var serverPayload = originalPayload;
 
@@ -66,7 +69,8 @@ void main() {
           final slice = serverPayload.sublist(start, end + 1);
           request.response.statusCode = HttpStatus.partialContent;
           request.response.headers.set('ETag', currentEtag);
-          request.response.headers.set('Content-Range', 'bytes $start-$end/${serverPayload.length}');
+          request.response.headers.set(
+              'Content-Range', 'bytes $start-$end/${serverPayload.length}');
           request.response.headers.set('Content-Length', slice.length);
           request.response.headers.set('Accept-Ranges', 'bytes');
           request.response.add(slice);
@@ -147,7 +151,9 @@ void main() {
     expect(await File('$tempFilePath.journal').exists(), isFalse);
   });
 
-  test('J3 & J4: Temp file externally truncated mid-multi-chunk does not produce sparse zero-holes', () async {
+  test(
+      'J3 & J4: Temp file externally truncated mid-multi-chunk does not produce sparse zero-holes',
+      () async {
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     server.listen((HttpRequest request) async {
       final rangeHeader = request.headers.value('range');
@@ -162,7 +168,8 @@ void main() {
 
           final slice = originalPayload.sublist(start, end + 1);
           request.response.statusCode = HttpStatus.partialContent;
-          request.response.headers.set('Content-Range', 'bytes $start-$end/${originalPayload.length}');
+          request.response.headers.set(
+              'Content-Range', 'bytes $start-$end/${originalPayload.length}');
           request.response.headers.set('Content-Length', slice.length);
           request.response.headers.set('Accept-Ranges', 'bytes');
           request.response.add(slice);
@@ -230,7 +237,8 @@ void main() {
     expect(actualSha256, equals(originalSha256));
   });
 
-  test('J2: Journal is cleared after loadAndReconcileState replays it', () async {
+  test('J2: Journal is cleared after loadAndReconcileState replays it',
+      () async {
     final tempFilePath = '${tempDir.path}/replay_clear.tmp';
     final state = TransferState(
       totalSize: 1000,
@@ -274,7 +282,9 @@ void main() {
     expect(await File('$tempFilePath.journal').exists(), isFalse);
   });
 
-  test('Zombie Sweep: isInterruptedActiveRow converts active states to paused/interrupted on startup', () {
+  test(
+      'Zombie Sweep: isInterruptedActiveRow converts active states to paused/interrupted on startup',
+      () {
     final runningRow = DbDownloadTask(
       id: 'task-1',
       url: 'https://example.com/file.zip',
@@ -315,7 +325,8 @@ void main() {
     expect(TaskCompanionConverter.isInterruptedActiveRow(runningRow), isTrue);
     expect(TaskCompanionConverter.isInterruptedActiveRow(queuedRow), isFalse);
     expect(TaskCompanionConverter.isInterruptedActiveRow(pausedRow), isFalse);
-    expect(TaskCompanionConverter.isInterruptedActiveRow(completedRow), isFalse);
+    expect(
+        TaskCompanionConverter.isInterruptedActiveRow(completedRow), isFalse);
     expect(TaskCompanionConverter.isInterruptedActiveRow(failedRow), isFalse);
   });
 }

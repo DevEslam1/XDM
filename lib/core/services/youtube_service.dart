@@ -571,7 +571,8 @@ class YoutubeService {
     return results;
   }
 
-  static Future<List<Map<String, dynamic>>> getStreams(String url) async {
+  static Future<List<Map<String, dynamic>>> getStreams(String url,
+      {bool forceRefresh = false}) async {
     final videoId = extractVideoId(url) ?? (url.length == 11 ? url : null);
     final targetUrl =
         videoId != null ? 'https://www.youtube.com/watch?v=$videoId' : url;
@@ -586,6 +587,7 @@ class YoutubeService {
       final results = await _resolveWithRetry(
         targetUrl,
         cookies: settings.sendBrowserCookiesToBackend ? currentCookies : null,
+        forceRefresh: forceRefresh,
       ).timeout(const Duration(seconds: 45), onTimeout: () {
         throw const BackendTimeoutException('Total retry budget exceeded');
       });
@@ -669,6 +671,7 @@ class YoutubeService {
   static Future<List<Map<String, dynamic>>?> _resolveStreamsWithFallback(
     String url, {
     String? cookies,
+    bool forceRefresh = false,
   }) async {
     // Circuit breaker check: if 3 consecutive timeouts occurred, skip backend for 30s
     if (_circuitBreakerUntil != null &&
@@ -683,6 +686,7 @@ class YoutubeService {
             url,
             cookies: cookies,
             oauthToken: YoutubeService.oauthToken,
+            forceRefresh: forceRefresh,
           )
           .timeout(const Duration(seconds: 35));
       _consecutiveTimeouts = 0;
@@ -710,10 +714,12 @@ class YoutubeService {
   }
 
   // Retry stream resolution for transient errors and cold starts
+  // FIX P1-18: Support forceRefresh to bypass 10m cache for expired 403 URLs.
   static Future<List<Map<String, dynamic>>?> _resolveWithRetry(
     String url, {
     String? cookies,
     int maxRetries = 3,
+    bool forceRefresh = false,
   }) async {
     final stopwatch = Stopwatch()..start();
     int effectiveRetries = maxRetries;
@@ -722,7 +728,8 @@ class YoutubeService {
         throw const BackendTimeoutException('Total retry budget exceeded');
       }
       try {
-        final result = await _resolveStreamsWithFallback(url, cookies: cookies);
+        final result = await _resolveStreamsWithFallback(url,
+            cookies: cookies, forceRefresh: forceRefresh);
         if (result != null && result.isNotEmpty) return result;
 
         // result is null or empty — apply backoff before next attempt
@@ -1022,7 +1029,8 @@ class YoutubeService {
       if (videoId == null) return null;
 
       try {
-        final streams = await getStreams(downloadPageUrl);
+        // FIX P1-18: Force refresh to bypass stale 10m cache that may contain expired expire= URL.
+        final streams = await getStreams(downloadPageUrl, forceRefresh: true);
         if (streams.isNotEmpty) {
           Uri? oldUri;
           try {
@@ -1110,7 +1118,8 @@ class YoutubeService {
               return {
                 'url': sameType.first['src'] as String?,
                 'audioUrl': sameType.first['audioSrc'] as String?,
-                'videoSize': sameType.first['videoSize'] ?? sameType.first['size'],
+                'videoSize':
+                    sameType.first['videoSize'] ?? sameType.first['size'],
                 'audioSize': sameType.first['audioSize'],
               };
             }
@@ -1180,7 +1189,8 @@ class YoutubeService {
             }
           }
 
-          final combined = streams.where((s) => s['type'] == 'combined').toList();
+          final combined =
+              streams.where((s) => s['type'] == 'combined').toList();
           if (combined.isNotEmpty) {
             final best = combined.firstWhere(
               (s) => s['src'] != null,

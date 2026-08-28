@@ -85,8 +85,7 @@ class TorrentSpeedGraph extends StatelessWidget {
     final spots = data
         .asMap()
         .entries
-        .map((e) => FlSpot(
-            e.key.toDouble(),
+        .map((e) => FlSpot(e.key.toDouble(),
             (e.value.isFinite && e.value >= 0) ? e.value / 1024 : 0.0))
         .toList();
     if (spots.length == 1) {

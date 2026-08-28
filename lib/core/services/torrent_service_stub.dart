@@ -21,6 +21,20 @@ class TorrentService {
   static bool fileProgressSupported = false;
   static bool filePrioritiesSupported = false;
   static bool resumeDataSupported = false;
+  static bool get trackersSupported => false;
+  static bool get createTorrentSupported => false;
+  static bool get ipFilterSupported => false;
+  static bool get sequentialDownloadSupported => false;
+  static bool get superSeedingSupported => false;
+  static bool get pieceDeadlineSupported => false;
+  static bool get webSeedsSupported => false;
+  static bool get proxySupported => false;
+  static bool get sslSupported => false;
+  static bool get peerExchangeSupported => false;
+  static bool get localPeerDiscoverySupported => false;
+  static bool get natPmpSupported => false;
+  static bool get anonymousModeSupported => false;
+  static bool get perTorrentConnectionLimitSupported => false;
   static bool get sequentialDownloadEnabled => false;
   static double get shareRatioLimit => 2.0;
   static int get maxSeedingTimeMinutes => 0;
@@ -157,7 +171,6 @@ class TorrentService {
   static Future<List<PeerConnectionQuality>> getPeers(int torrentId) async =>
       const [];
   static List<TorrentAlertEvent> getRecentAlerts([int? torrentId]) => const [];
-  static void applySettingsPack(TorrentSettingsPack pack) {}
   static void setSequentialDownload(int torrentId, bool enabled) {}
   static void prioritizeFile(int torrentId, int fileIndex,
       {int priority = 7}) {}
@@ -330,8 +343,6 @@ class TorrentServiceImpl implements ITorrentService {
   Stream<TorrentAlertEvent> get alertUpdates => const Stream.empty();
   @override
   List<TorrentAlertEvent> getRecentAlerts([int? torrentId]) => const [];
-  @override
-  void applySettingsPack(TorrentSettingsPack pack) {}
 
   @override
   Future<List<TorrentFileProgress>> getAccurateFileProgress(

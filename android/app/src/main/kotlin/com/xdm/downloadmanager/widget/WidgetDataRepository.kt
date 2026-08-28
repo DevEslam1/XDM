@@ -19,53 +19,53 @@ object WidgetDataRepository {
     const val TAB_DOWNLOADING = "downloading"
     const val TAB_COMPLETED = "completed"
 
+    @Volatile
     private var lastBroadcastTime = 0L
+    @Volatile
     private var lastTotalProgress = 0.0
+    @Volatile
     private var lastTotalDownloaded = 0L
+    @Volatile
     private var lastActiveCount = -1
+    @Volatile
+    private var lastFailedCount = -1
 
     fun save(context: Context, json: String, force: Boolean = false) {
-        var cappedJson = json
-        try {
-            val obj = org.json.JSONObject(json)
-            val arr = obj.optJSONArray("tasks")
-            if (arr != null && arr.length() > 20) {
-                val newArr = org.json.JSONArray()
-                for (i in 0 until 20) {
-                    newArr.put(arr.getJSONObject(i))
-                }
-                obj.put("tasks", newArr)
-                cappedJson = obj.toString()
-            }
-        } catch (_: Exception) {}
-
+        // Persist synchronously with commit() so receivers read fresh prefs immediately (W-6)
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
-            .putString(KEY_DASHBOARD, cappedJson)
-            .apply()
+            .putString(KEY_DASHBOARD, json)
+            .commit()
 
-        val dashboard = WidgetDashboard.fromJson(cappedJson)
+        val dashboard = WidgetDashboard.fromJson(json)
         val now = System.currentTimeMillis()
         val totalProgress = dashboard?.tasks?.sumOf { it.progress } ?: 0.0
         val totalDownloaded = dashboard?.totalDownloadedBytes ?: 0L
         val activeCount = dashboard?.totalActiveCount ?: 0
+        val failedCount = dashboard?.failedCount ?: 0
 
-        val progressDelta = Math.abs(totalProgress - lastTotalProgress)
-        val bytesDelta = Math.abs(totalDownloaded - lastTotalDownloaded)
-        val stateChanged = activeCount != lastActiveCount || (dashboard?.hasFailures == true)
+        // Synchronize static throttle state against concurrent races (W-2 b)
+        synchronized(this) {
+            val progressDelta = Math.abs(totalProgress - lastTotalProgress)
+            val bytesDelta = Math.abs(totalDownloaded - lastTotalDownloaded)
+            // Compare failedCount integer delta (W-2 a) instead of boolean hasFailures
+            val stateChanged = activeCount != lastActiveCount || failedCount != lastFailedCount
 
-        val shouldBroadcast = force || stateChanged || (now - lastBroadcastTime >= 1000L && (progressDelta >= 0.01 || bytesDelta >= 64 * 1024))
+            val shouldBroadcast = force || stateChanged || (now - lastBroadcastTime >= 2000L && (progressDelta >= 0.01 || bytesDelta >= 64 * 1024))
 
-        if (shouldBroadcast) {
-            lastBroadcastTime = now
-            lastTotalProgress = totalProgress
-            lastTotalDownloaded = totalDownloaded
-            lastActiveCount = activeCount
+            if (shouldBroadcast) {
+                lastBroadcastTime = now
+                lastTotalProgress = totalProgress
+                lastTotalDownloaded = totalDownloaded
+                lastActiveCount = activeCount
+                lastFailedCount = failedCount
 
-            // Wake all placed widgets so they re-render with fresh data.
-            val intent = Intent(DMXWidgetProvider.ACTION_UPDATE_WIDGETS)
-            intent.setPackage(context.packageName)
-            context.sendBroadcast(intent)
+                // Wake all placed widgets so they re-render with fresh data.
+                val intent = Intent(context, WidgetActionReceiver::class.java).apply {
+                    action = WidgetActionReceiver.ACTION_UPDATE_WIDGETS
+                }
+                context.sendBroadcast(intent)
+            }
         }
     }
 

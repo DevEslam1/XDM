@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/app_theme.dart';
+import '../../../core/domain/torrent_models.dart' show ProxyType;
+import '../../../core/services/dio_client_pool.dart';
 import '../../../core/services/xdm_backend_client.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
@@ -23,6 +25,11 @@ class NetworkSettingsPage extends StatefulWidget {
 class _NetworkSettingsPageState extends State<NetworkSettingsPage>
     with HapticHelper {
   late final TextEditingController _backendUrlController;
+  // Task 2: proxy configuration controllers.
+  late final TextEditingController _proxyHostController;
+  late final TextEditingController _proxyPortController;
+  late final TextEditingController _proxyUsernameController;
+  late final TextEditingController _proxyPasswordController;
   // FIX-5: State variable for testing backend health
   bool _testingBackend = false;
   bool _updatingAdblock = false;
@@ -42,13 +49,78 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
     super.initState();
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     _backendUrlController = TextEditingController(text: settings.backendUrl);
+    _proxyHostController = TextEditingController(text: settings.proxyHost);
+    _proxyPortController =
+        TextEditingController(text: settings.proxyPort.toString());
+    _proxyUsernameController =
+        TextEditingController(text: settings.proxyUsername ?? '');
+    _proxyPasswordController =
+        TextEditingController(text: settings.proxyPassword ?? '');
+    // Push saved policy into the main-isolate DioNetworkPolicy on page load so
+    // pooled HTTP clients honor httpsOnly + the HTTP proxy even before the user
+    // touches a control here. (Full coverage needs an app-startup seam in
+    // main.dart / settings load, which is out of this file's lane.)
+    _syncPolicyFromSettings(settings);
     _loadLastAdblockUpdateTime();
   }
 
   @override
   void dispose() {
     _backendUrlController.dispose();
+    _proxyHostController.dispose();
+    _proxyPortController.dispose();
+    _proxyUsernameController.dispose();
+    _proxyPasswordController.dispose();
     super.dispose();
+  }
+
+  /// Mirrors the persisted httpsOnly + proxy settings into [DioNetworkPolicy]
+  /// (main-isolate state read by [DioClientPool] at request time).
+  void _syncPolicyFromSettings(SettingsProvider settings) {
+    DioNetworkPolicy.instance.update(
+      httpsOnly: settings.httpsOnly,
+      enableProxy: settings.enableProxy,
+      proxyType: ProxyType.fromString(settings.proxyType),
+      proxyHost: settings.proxyHost,
+      proxyPort: settings.proxyPort,
+      proxyUsername: settings.proxyUsername ?? '',
+      proxyPassword: settings.proxyPassword ?? '',
+    );
+  }
+
+  /// Persists a proxy configuration change and mirrors it into
+  /// [DioNetworkPolicy] for the HTTP download path. Credentials are always read
+  /// from the controllers so no field is lost when another one changes. Only
+  /// [ProxyType.http] is honored by dart:io's HttpClient; SOCKS5 stays
+  /// torrent-only (routed natively by libtorrent).
+  void _updateProxy(
+    SettingsProvider settings, {
+    ProxyType? type,
+    String? host,
+    int? port,
+  }) {
+    final newType = type ?? ProxyType.fromString(settings.proxyType);
+    final newHost = host ?? _proxyHostController.text.trim();
+    final newPort = port ??
+        int.tryParse(_proxyPortController.text.trim()) ??
+        settings.proxyPort;
+    final newUser = _proxyUsernameController.text.trim();
+    final newPass = _proxyPasswordController.text;
+    settings.setProxySettings(
+      host: newHost,
+      port: newPort,
+      type: newType,
+      username: newUser.isEmpty ? null : newUser,
+      password: newPass.isEmpty ? null : newPass,
+    );
+    DioNetworkPolicy.instance.update(
+      enableProxy: newType != ProxyType.none && newHost.isNotEmpty,
+      proxyType: newType,
+      proxyHost: newHost,
+      proxyPort: newPort,
+      proxyUsername: newUser,
+      proxyPassword: newPass,
+    );
   }
 
   @override
@@ -176,6 +248,11 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
                 value: settings.httpsOnly,
                 onChanged: (val) {
                   settings.setHttpsOnly(val);
+                  // Task 3: mirror into the request-time policy so pooled Dio
+                  // clients actually refuse insecure http:// requests. Re-push
+                  // the full snapshot (not a bare httpsOnly update) so proxy
+                  // fields stay intact.
+                  _syncPolicyFromSettings(settings);
                   triggerHaptic(settings);
                 },
               ),
@@ -192,6 +269,85 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
                   settings.setAntiFingerprinting(val);
                   triggerHaptic(settings);
                 },
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Task 2: HTTP/SOCKS proxy configuration. HTTP proxies are applied to
+          // regular downloads via DioNetworkPolicy -> DioClientPool; SOCKS5 is
+          // routed natively by libtorrent for torrents only.
+          SettingsSectionHeader(
+            title: isRtl ? 'الخادم الوكيل (Proxy)' : 'Proxy',
+            accentColor: accent,
+            isDark: isDark,
+          ),
+          SettingsSectionGroup(
+            accentColor: accent,
+            children: [
+              DropdownTile<ProxyType>(
+                accentColor: accent,
+                title: isRtl ? 'نوع الوكيل' : 'Proxy Type',
+                subtitle: isRtl
+                    ? 'HTTP يُطبّق على التنزيلات؛ SOCKS5 للتورنت'
+                    : 'HTTP applies to downloads; SOCKS5 is torrent-only',
+                value: ProxyType.fromString(settings.proxyType),
+                items: ProxyType.values,
+                itemLabels: {
+                  for (final t in ProxyType.values) t: t.displayName,
+                },
+                onChanged: (val) {
+                  if (val != null) _updateProxy(settings, type: val);
+                },
+              ),
+              if (ProxyType.fromString(settings.proxyType) == ProxyType.socks5)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                  child: Text(
+                    isRtl
+                        ? 'ملاحظة: تنزيلات HTTP/HTTPS العادية لا تمر عبر SOCKS5 — يُستخدم للتورنت فقط.'
+                        : 'Note: regular HTTP/HTTPS downloads do not route through SOCKS5 — it is applied to torrents only.',
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 11,
+                      height: 1.3,
+                      color:
+                          isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+                    ),
+                  ),
+                ),
+              TextFieldTile(
+                accentColor: accent,
+                title: isRtl ? 'المضيف' : 'Host',
+                subtitle: isRtl ? 'مثال: 127.0.0.1' : 'e.g. 127.0.0.1',
+                controller: _proxyHostController,
+                onChanged: (_) => _updateProxy(settings),
+                onSubmitted: (_) => _updateProxy(settings),
+              ),
+              TextFieldTile(
+                accentColor: accent,
+                title: isRtl ? 'المنفذ' : 'Port',
+                subtitle: isRtl ? 'مثال: 1080' : 'e.g. 1080',
+                controller: _proxyPortController,
+                keyboardType: TextInputType.number,
+                onChanged: (_) => _updateProxy(settings),
+                onSubmitted: (_) => _updateProxy(settings),
+              ),
+              TextFieldTile(
+                accentColor: accent,
+                title: isRtl ? 'اسم المستخدم (اختياري)' : 'Username (optional)',
+                subtitle: isRtl ? 'مصادقة الوكيل' : 'Proxy authentication',
+                controller: _proxyUsernameController,
+                onChanged: (_) => _updateProxy(settings),
+                onSubmitted: (_) => _updateProxy(settings),
+              ),
+              TextFieldTile(
+                accentColor: accent,
+                title: isRtl ? 'كلمة المرور (اختياري)' : 'Password (optional)',
+                subtitle: isRtl ? 'مصادقة الوكيل' : 'Proxy authentication',
+                controller: _proxyPasswordController,
+                obscureText: true,
+                onChanged: (_) => _updateProxy(settings),
+                onSubmitted: (_) => _updateProxy(settings),
               ),
             ],
           ),

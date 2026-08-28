@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:dmx/core/interfaces/i_torrent_service.dart';
+import 'package:dmx/core/services/permission_service.dart';
 import 'package:flutter/foundation.dart';
 import '../../../core/di/injection.dart';
 import '../../../core/services/torrent_resume_store.dart';
@@ -107,7 +108,13 @@ class TorrentSessionManager {
         : (task.localFilePath.isNotEmpty
             ? File(task.localFilePath).parent.path
             : '');
-    final saveDir = rawSaveDir.isNotEmpty ? rawSaveDir : Directory.current.path;
+    // FIX(P2.7): When both savePath and localFilePath are empty (e.g. task
+    // created from stale DB state or partial merge), fall back to the canonical
+    // user download directory instead of Directory.current which is undefined
+    // on desktop and unpredictable on Android (app bundle root).
+    final saveDir = rawSaveDir.isNotEmpty
+        ? rawSaveDir
+        : await PermissionService().defaultDownloadDirectory();
     int newId = -1;
     if (task.url.startsWith('magnet:')) {
       newId = _torrentService.addMagnet(task.url, saveDir);
@@ -139,7 +146,8 @@ class TorrentSessionManager {
     if (task.pausedByUser || task.pauseReason == PauseReason.user) return;
     final tid = _torrentIds[task.id];
     if (tid != null && _torrentService.isTorrentAlive(tid)) {
-      _torrentService.resumeTorrent(tid);
+      // FIX(P2.6): Await the resume call so errors propagate to the caller.
+      await _torrentService.resumeTorrent(tid);
     }
   }
 
@@ -155,7 +163,7 @@ class TorrentSessionManager {
 
   /// Removes a torrent from the session.
   void removeTorrent(int torrentId,
-      {bool deleteFiles = false, bool deleteResumeData = true}) {
+      {bool deleteFiles = false, bool deleteResumeData = false}) {
     _torrentService.removeTorrent(torrentId,
         deleteFiles: deleteFiles, deleteResumeData: deleteResumeData);
     _latestStats.remove(torrentId);

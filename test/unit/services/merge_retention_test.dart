@@ -54,8 +54,8 @@ void main() {
           reason: 'Audio part must be preserved after failed merge');
 
       // Verify canResumeMerge allows Retry Merge without re-downloading
-      final canRetry = await FFmpegMuxService.canResumeMerge(
-          videoPart.path, audioPart.path);
+      final canRetry =
+          await FFmpegMuxService.canResumeMerge(videoPart.path, audioPart.path);
       expect(canRetry, isTrue);
     });
 

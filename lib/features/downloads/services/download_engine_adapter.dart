@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'package:dmx/core/services/logging_service.dart';
 import '../../../core/interfaces/i_download_engine.dart';
 import '../../../core/services/torrent_service.dart';
@@ -36,13 +36,15 @@ class DownloadEngineAdapter implements TaskEnginePort {
   }
 
   @override
-  Future<void> startEngineTask(String taskId, {bool ignoreQueueLimit = false}) async {
+  Future<void> startEngineTask(String taskId,
+      {bool ignoreQueueLimit = false}) async {
     final task = _findTask(taskId);
     if (task == null) return;
     try {
       _pumpQueueCallback();
     } catch (e, st) {
-      LoggingService.logger('DownloadEngineAdapter').warning('startEngineTask failed for ', e, st);
+      LoggingService.logger('DownloadEngineAdapter')
+          .warning('startEngineTask failed for ', e, st);
     }
   }
 
@@ -64,13 +66,15 @@ class DownloadEngineAdapter implements TaskEnginePort {
           await TorrentService.pauseTorrent(torrentId);
         }
       } catch (e, st) {
-        LoggingService.logger('DownloadEngineAdapter').warning('Torrent pause failed for ', e, st);
+        LoggingService.logger('DownloadEngineAdapter')
+            .warning('Torrent pause failed for ', e, st);
       }
     }
   }
 
   @override
-  Future<void> cancelEngineTask(String taskId, {bool deleteFiles = false}) async {
+  Future<void> cancelEngineTask(String taskId,
+      {bool deleteFiles = false}) async {
     final task = _findTask(taskId);
     if (task == null) return;
     // The same applies to cancel/delete while a magnet is still resolving.
@@ -81,7 +85,8 @@ class DownloadEngineAdapter implements TaskEnginePort {
           TorrentService.removeTorrent(torrentId, deleteFiles: deleteFiles);
         }
       } catch (e, st) {
-        LoggingService.logger('DownloadEngineAdapter').warning('Torrent cancel failed for ', e, st);
+        LoggingService.logger('DownloadEngineAdapter')
+            .warning('Torrent cancel failed for ', e, st);
       }
     }
   }
@@ -92,7 +97,8 @@ class DownloadEngineAdapter implements TaskEnginePort {
   }
 
   @override
-  Future<void> deleteEngineTask(String taskId, {bool deleteFiles = false}) async {
+  Future<void> deleteEngineTask(String taskId,
+      {bool deleteFiles = false}) async {
     await cancelEngineTask(taskId, deleteFiles: deleteFiles);
   }
 

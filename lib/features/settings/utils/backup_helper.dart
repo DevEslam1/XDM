@@ -355,15 +355,21 @@ abstract final class BackupHelper {
       password: password,
     );
     if (!context.mounted) return;
+    final errorMessage = isEncrypted
+        ? (isRtl
+            ? 'فشل استيراد النسخة الاحتياطية (تأكد من صحة كلمة المرور)'
+            : 'Failed to import backup (incorrect password)')
+        : (isRtl
+            ? 'فشل استيراد النسخة الاحتياطية (الملف تالف أو غير صالح)'
+            : 'Failed to import backup (corrupted or invalid file)');
+
     ThemedSnackbar.show(
       context,
       message: success
           ? (isRtl
               ? 'تم استيراد النسخة الاحتياطية بنجاح'
               : 'Backup imported successfully')
-          : (isRtl
-              ? 'فشل استيراد النسخة الاحتياطية (تأكد من صحة كلمة المرور)'
-              : 'Failed to import backup (check password)'),
+          : errorMessage,
       color: success
           ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
           : (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed),

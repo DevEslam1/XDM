@@ -76,8 +76,10 @@ import Flutter
             let taskId = (args["taskId"] as? String) ?? (args["id"] as? String) ?? UUID().uuidString
             let urlStr = args["url"] as? String ?? ""
             let destPath = (args["destinationPath"] as? String) ?? (args["savePath"] as? String) ?? ""
-            startDownload(taskId: taskId, urlString: urlStr, destinationPath: destPath)
-            scheduleBackgroundProcessing()
+            serialQueue.async { [weak self] in
+                self?.startDownload(taskId: taskId, urlString: urlStr, destinationPath: destPath)
+                self?.scheduleBackgroundProcessing()
+            }
             result(true)
             
         case "pauseNativeDownload", "pause":
@@ -86,7 +88,9 @@ import Flutter
                 result(false)
                 return
             }
-            pauseDownload(taskId: taskId)
+            serialQueue.async { [weak self] in
+                self?.pauseDownload(taskId: taskId)
+            }
             result(true)
             
         case "resumeNativeDownload", "resume":
@@ -97,8 +101,10 @@ import Flutter
                 result(false)
                 return
             }
-            resumeDownload(taskId: taskId, urlString: urlStr, destinationPath: destPath)
-            scheduleBackgroundProcessing()
+            serialQueue.async { [weak self] in
+                self?.resumeDownload(taskId: taskId, urlString: urlStr, destinationPath: destPath)
+                self?.scheduleBackgroundProcessing()
+            }
             result(true)
             
         case "cancelNativeDownload", "cancel":
@@ -107,11 +113,15 @@ import Flutter
                 result(false)
                 return
             }
-            cancelDownload(taskId: taskId)
+            serialQueue.async { [weak self] in
+                self?.cancelDownload(taskId: taskId)
+            }
             result(true)
             
         case "getActiveTasksCount":
-            result(activeTasks.count)
+            serialQueue.async { [weak self] in
+                result(self?.activeTasks.count ?? 0)
+            }
             
         default:
             result(FlutterMethodNotImplemented)
@@ -229,58 +239,67 @@ import Flutter
     // MARK: - URLSessionDownloadDelegate
     
     public func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
-        guard let taskId = taskIdMap[downloadTask.taskIdentifier] else { return }
-        sendEvent([
-            "event": "progress",
-            "taskId": taskId,
-            "downloadedBytes": totalBytesWritten,
-            "totalBytes": totalBytesExpectedToWrite
-        ])
+        serialQueue.sync { [weak self] in
+            guard let self = self, let taskId = self.taskIdMap[downloadTask.taskIdentifier] else { return }
+            self.sendEvent([
+                "event": "progress",
+                "taskId": taskId,
+                "downloadedBytes": totalBytesWritten,
+                "totalBytes": totalBytesExpectedToWrite
+            ])
+        }
     }
     
     public func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-        guard let taskId = taskIdMap[downloadTask.taskIdentifier],
-              let destPath = taskMetadata[taskId]?["destinationPath"] else { return }
-        
-        let destURL = URL(fileURLWithPath: destPath)
-        do {
-            let fileManager = FileManager.default
-            if fileManager.fileExists(atPath: destPath) {
-                try fileManager.removeItem(at: destURL)
+        serialQueue.async { [weak self] in
+            guard let self = self,
+                  let taskId = self.taskIdMap[downloadTask.taskIdentifier],
+                  let destPath = self.taskMetadata[taskId]?["destinationPath"] else { return }
+            
+            let destURL = URL(fileURLWithPath: destPath)
+            do {
+                let fileManager = FileManager.default
+                if fileManager.fileExists(atPath: destPath) {
+                    try fileManager.removeItem(at: destURL)
+                }
+                try fileManager.moveItem(at: location, to: destURL)
+                self.sendEvent([
+                    "event": "completed",
+                    "taskId": taskId,
+                    "path": destPath
+                ])
+            } catch {
+                self.sendEvent([
+                    "event": "failed",
+                    "taskId": taskId,
+                    "error": error.localizedDescription
+                ])
             }
-            try fileManager.moveItem(at: location, to: destURL)
-            sendEvent([
-                "event": "completed",
-                "taskId": taskId,
-                "path": destPath
-            ])
-        } catch {
-            sendEvent([
-                "event": "failed",
-                "taskId": taskId,
-                "error": error.localizedDescription
-            ])
+            
+            self.activeTasks.removeValue(forKey: taskId)
+            self.taskMetadata.removeValue(forKey: taskId)
+            self.taskIdMap.removeValue(forKey: downloadTask.taskIdentifier)
+            self.removeResumeData(taskId: taskId)
+            self.persistState()
         }
-        
-        activeTasks.removeValue(forKey: taskId)
-        taskMetadata.removeValue(forKey: taskId)
-        removeResumeData(taskId: taskId)
-        persistState()
     }
     
     public func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        guard let taskId = taskIdMap[task.taskIdentifier] else { return }
-        if let error = error {
-            let nsErr = error as NSError
-            if nsErr.domain == NSURLErrorDomain && nsErr.code == NSURLErrorCancelled {
-                // Cancelled manually or saved resume data
-                return
+        serialQueue.async { [weak self] in
+            guard let self = self, let taskId = self.taskIdMap[task.taskIdentifier] else { return }
+            if let error = error {
+                let nsErr = error as NSError
+                if nsErr.domain == NSURLErrorDomain && nsErr.code == NSURLErrorCancelled {
+                    // Cancelled manually or saved resume data
+                    return
+                }
+                self.sendEvent([
+                    "event": "failed",
+                    "taskId": taskId,
+                    "error": error.localizedDescription
+                ])
             }
-            sendEvent([
-                "event": "failed",
-                "taskId": taskId,
-                "error": error.localizedDescription
-            ])
+            self.taskIdMap.removeValue(forKey: task.taskIdentifier)
         }
     }
     

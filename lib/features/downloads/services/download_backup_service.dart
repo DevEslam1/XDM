@@ -74,7 +74,8 @@ class DownloadBackupService {
         final encrypter = encrypt_lib.Encrypter(encrypt_lib.AES(encrypt_lib.Key(
           Uint8List.fromList(keyBytes),
         )));
-        final encrypted = encrypt_lib.Encrypted(Uint8List.fromList(cipherBytes));
+        final encrypted =
+            encrypt_lib.Encrypted(Uint8List.fromList(cipherBytes));
         return encrypter.decrypt(
           encrypted,
           iv: encrypt_lib.IV(Uint8List.fromList(ivBytes)),
@@ -107,11 +108,13 @@ class DownloadBackupService {
       if (!isAuthenticated && bytes.length < magic.length + 16) return null;
       if (!isAuthenticated && !_hasMagic(bytes, magic)) return null;
 
-      if (isAuthenticated && bytes.length < authenticatedMagic.length + 16 + 32) {
+      if (isAuthenticated &&
+          bytes.length < authenticatedMagic.length + 16 + 32) {
         return null;
       }
 
-      final payload = isAuthenticated ? bytes.sublist(0, bytes.length - 32) : bytes;
+      final payload =
+          isAuthenticated ? bytes.sublist(0, bytes.length - 32) : bytes;
       if (isAuthenticated) {
         final keyBytes = sha256.convert(utf8.encode(password)).bytes;
         final expectedMac = Hmac(sha256, keyBytes).convert(payload).bytes;
@@ -206,7 +209,8 @@ class DownloadBackupService {
         final expectedChecksum = decoded['checksum'] as String?;
         if (expectedChecksum != null && expectedChecksum.isNotEmpty) {
           final tasksJson = jsonEncode(tasks);
-          final actualChecksum = sha256.convert(utf8.encode(tasksJson)).toString();
+          final actualChecksum =
+              sha256.convert(utf8.encode(tasksJson)).toString();
           if (actualChecksum != expectedChecksum) return null;
         }
         list = tasks;
@@ -221,7 +225,9 @@ class DownloadBackupService {
       final parsed = <DownloadTask>[];
       for (final item in list) {
         if (item is! Map) return null;
-        if (!item.containsKey('id') || !item.containsKey('url') || !item.containsKey('fileName')) {
+        if (!item.containsKey('id') ||
+            !item.containsKey('url') ||
+            !item.containsKey('fileName')) {
           return null;
         }
         final Map<String, dynamic> map = Map<String, dynamic>.from(item);

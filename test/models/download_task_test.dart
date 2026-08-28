@@ -40,14 +40,17 @@ void main() {
       expect(taskA == taskC, isFalse);
     });
 
-    test('progress is clamped to range 0.0 - 1.0 or -1.0 for unknown size', () {
+    test(
+        'progress is clamped to range 0.0 - 1.0 or 0.0 with isIndeterminate for unknown size',
+        () {
       final knownSizeTask =
           createTestTask(id: 'task-1', fileSize: 1000, downloadedBytes: 500);
       expect(knownSizeTask.progress, equals(0.5));
 
       final unknownSizeTask =
           createTestTask(id: 'task-2', fileSize: 0, downloadedBytes: 500);
-      expect(unknownSizeTask.progress, equals(-1.0));
+      expect(unknownSizeTask.progress, equals(0.0));
+      expect(unknownSizeTask.isIndeterminate, isTrue);
 
       final completedTask = createTestTask(
         id: 'task-3',

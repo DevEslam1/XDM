@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:dmx/core/services/logging_service.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
 
@@ -18,7 +19,7 @@ class WidgetDataService {
     required int speedBytesPerSec,
     required int completedCount,
   }) async {
-    if (!Platform.isIOS) return;
+    if (kIsWeb || !Platform.isIOS) return;
 
     final now = DateTime.now();
     if (now.difference(_lastPush) < _minPushInterval) return;
@@ -38,7 +39,7 @@ class WidgetDataService {
 
   /// Force widget timeline reload (e.g., on download complete).
   static Future<void> forceReload() async {
-    if (!Platform.isIOS) return;
+    if (kIsWeb || !Platform.isIOS) return;
 
     try {
       await _channel.invokeMethod('reloadWidget');

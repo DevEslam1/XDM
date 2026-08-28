@@ -111,7 +111,8 @@ class TaskExecutor {
   }
 
   /// Core task command handler executed sequentially within a task's mailbox.
-  Future<void> _executeTaskCommand(String taskId, DownloadCommand command) async {
+  Future<void> _executeTaskCommand(
+      String taskId, DownloadCommand command) async {
     final sm = stateMachineFor(taskId);
 
     switch (command) {
@@ -154,11 +155,7 @@ class TaskExecutor {
         if (sm.currentState == DomainDownloadState.paused) {
           return;
         }
-        await enginePort.pauseEngineTask(
-          taskId,
-          reason: pauseCmd.reason,
-          userInitiated: pauseCmd.userInitiated,
-        );
+        final prevState = sm.currentState;
         sm.transition(
           DomainDownloadState.paused,
           command: pauseCmd,
@@ -166,13 +163,29 @@ class TaskExecutor {
           caller: 'TaskExecutor',
           engine: 'TaskEnginePort',
         );
-        emitEvent(
-          TaskPausedConfirmed(
-            taskId: taskId,
+        try {
+          await enginePort.pauseEngineTask(
+            taskId,
             reason: pauseCmd.reason,
             userInitiated: pauseCmd.userInitiated,
-          ),
-        );
+          );
+          emitEvent(
+            TaskPausedConfirmed(
+              taskId: taskId,
+              reason: pauseCmd.reason,
+              userInitiated: pauseCmd.userInitiated,
+            ),
+          );
+        } catch (e) {
+          sm.transition(
+            prevState,
+            command: pauseCmd,
+            reason: 'Rollback on pause error: $e',
+            caller: 'TaskExecutor',
+            engine: 'TaskEnginePort',
+          );
+          rethrow;
+        }
 
       case final ResumeTask resumeCmd:
         if (sm.currentState == DomainDownloadState.downloading ||
@@ -189,6 +202,11 @@ class TaskExecutor {
         await enginePort.pumpQueue();
 
       case final CancelTask cancelCmd:
+        if (sm.currentState == DomainDownloadState.failed ||
+            sm.currentState == DomainDownloadState.idle ||
+            sm.currentState == DomainDownloadState.completed) {
+          return;
+        }
         await enginePort.cancelEngineTask(
           taskId,
           deleteFiles: cancelCmd.deleteFiles,

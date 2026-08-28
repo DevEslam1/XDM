@@ -3,11 +3,12 @@
 /// Higher values improve speed on fast connections but increase server load.
 const List<int> kAvailableThreadOptions = [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16];
 
-String kAppVersion = '3.0.0+1';
+String _kAppVersion = '3.0.0+1';
+String get kAppVersion => _kAppVersion;
 
 void setAppVersion(String version) {
   if (version.isNotEmpty) {
-    kAppVersion = version;
+    _kAppVersion = version;
   }
 }
 

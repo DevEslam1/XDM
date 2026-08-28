@@ -37,10 +37,10 @@ class TorrentStatsDashboard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final totalDownloaded = stats?.totalPayloadDownload ?? task.downloadedBytes;
-    final totalUploaded = (stats?.totalPayloadUpload != null &&
-            stats!.totalPayloadUpload > 0)
-        ? stats!.totalPayloadUpload
-        : task.uploadedBytes;
+    final totalUploaded =
+        (stats?.totalPayloadUpload != null && stats!.totalPayloadUpload > 0)
+            ? stats!.totalPayloadUpload
+            : task.uploadedBytes;
     final totalSize = task.resolvedFileSize;
     final ratio = totalDownloaded > 0
         ? totalUploaded / totalDownloaded
@@ -92,16 +92,15 @@ class TorrentStatsDashboard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
+                // Piece counts are estimated from total size / 256 KB on the
+                // 1.9.2 bridge (no real bitfield export), so they are labelled
+                // estimated rather than presented as an exact piece map.
+                // "Availability" (distributedCopies) is hardcoded 0.0 by the
+                // bridge, so it is omitted instead of shown as a fake 0.00x.
                 Expanded(
                   child: _buildStat(
-                    'Pieces',
-                    '${stats!.piecesHave}/${stats!.piecesTotal}',
-                  ),
-                ),
-                Expanded(
-                  child: _buildStat(
-                    'Availability',
-                    '${stats!.distributedCopies.toStringAsFixed(2)}x',
+                    'Pieces (est.)',
+                    '~${stats!.piecesHave}/${stats!.piecesTotal}',
                   ),
                 ),
               ],

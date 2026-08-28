@@ -4,9 +4,14 @@ import 'package:dio/dio.dart';
 
 /// Retries idempotent (GET/HEAD) requests on transient failures:
 /// connection errors, 429/5xx. Exponential backoff with jitter, max 2
-/// retries. Never retries a cancelled request and never retries when the
-/// caller supplied an explicit `Range` continuation mid-stream (those are
-/// handled by the chunk executor's own resume logic).
+/// retries. Never retries a cancelled request.
+///
+/// Ranged GETs are retried too: a `bytes=N-` request is idempotent (the same
+/// range yields the same bytes), and this interceptor only fires during the
+/// connection/header phase — before any body bytes reach the consumer — so a
+/// retry simply re-opens the stream at the requested offset. Mid-stream drops
+/// (after bytes have been delivered) surface to the chunk executor, which owns
+/// resume via its own Range continuation.
 class ProfessionalRetryInterceptor extends Interceptor {
   ProfessionalRetryInterceptor(this._dio, {this.maxRetries = 2});
 
@@ -32,13 +37,7 @@ class ProfessionalRetryInterceptor extends Interceptor {
             err.response != null &&
             _retryableStatus.contains(err.response!.statusCode));
 
-    final hasRangeHeader =
-        opts.headers.containsKey('Range') || opts.headers.containsKey('range');
-
-    if (!isMethodSafe ||
-        !isTransient ||
-        attempt >= maxRetries ||
-        hasRangeHeader) {
+    if (!isMethodSafe || !isTransient || attempt >= maxRetries) {
       handler.next(err);
       return;
     }

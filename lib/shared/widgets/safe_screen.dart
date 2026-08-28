@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import '../../../core/app_theme.dart';
 
 /// Reusable error boundary widget providing fallback UI for screens.
-class SafeScreen extends StatelessWidget {
+/// Uses a GlobalKey to allow child widgets to signal errors via [SafeScreen.reportError].
+class SafeScreen extends StatefulWidget {
   final Widget child;
   final String screenName;
 
@@ -12,11 +13,22 @@ class SafeScreen extends StatelessWidget {
     required this.screenName,
   });
 
+  /// Report an error to the nearest [SafeScreen] ancestor.
+  static void reportError(BuildContext context, Object error) {
+    final state = context.findAncestorStateOfType<_ErrorBoundaryState>();
+    state?.captureError(error);
+  }
+
+  @override
+  State<SafeScreen> createState() => _SafeScreenState();
+}
+
+class _SafeScreenState extends State<SafeScreen> {
   @override
   Widget build(BuildContext context) {
     return _ErrorBoundary(
-      screenName: screenName,
-      child: child,
+      screenName: widget.screenName,
+      child: widget.child,
     );
   }
 }
@@ -36,6 +48,14 @@ class _ErrorBoundary extends StatefulWidget {
 
 class _ErrorBoundaryState extends State<_ErrorBoundary> {
   Object? _error;
+
+  void captureError(Object error) {
+    if (mounted) {
+      setState(() {
+        _error = error;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

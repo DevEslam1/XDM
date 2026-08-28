@@ -1,13 +1,96 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
+import 'package:dmx/core/domain/torrent_models.dart' show ProxyType;
 import 'package:dmx/core/services/download_engine.dart';
 import 'package:dmx/core/services/engine/engine_utils.dart';
 import 'package:dmx/core/services/logging_service.dart';
 import 'package:dmx/core/services/power_monitor.dart';
 import 'package:dmx/core/services/service_registry.dart';
 import 'package:flutter/foundation.dart';
+
+/// Process-wide network policy (HTTPS-only enforcement + HTTP proxy) applied to
+/// every Dio built by [DioClientPool]. Push-populated from the settings layer
+/// (see `network_settings_page.dart`; a startup application seam is documented
+/// there too). NOTE: this is main-isolate state only — the isolate-based HTTP
+/// transfer path (`http_transfer_job` → `buildTransferDio`) does NOT consult it
+/// and must receive settings via its TransferCommand instead.
+class DioNetworkPolicy {
+  DioNetworkPolicy._();
+
+  /// Singleton snapshot mutated by the settings layer and read at request time.
+  static final DioNetworkPolicy instance = DioNetworkPolicy._();
+
+  bool httpsOnly = false;
+  bool proxyEnabled = false;
+  ProxyType proxyType = ProxyType.none;
+  String proxyHost = '';
+  int proxyPort = 0;
+  String? proxyUsername;
+  String? proxyPassword;
+
+  /// Whether an HTTP(S) proxy is fully configured and usable by dart:io's
+  /// [HttpClient]. SOCKS5 is intentionally excluded: dart:io HttpClient cannot
+  /// route through SOCKS without an extra dependency (torrents already handle
+  /// SOCKS5 natively via libtorrent).
+  bool get httpProxyActive =>
+      proxyEnabled &&
+      proxyType == ProxyType.http &&
+      proxyHost.isNotEmpty &&
+      proxyPort > 0;
+
+  void update({
+    bool? httpsOnly,
+    bool? enableProxy,
+    ProxyType? proxyType,
+    String? proxyHost,
+    int? proxyPort,
+    String? proxyUsername,
+    String? proxyPassword,
+  }) {
+    if (httpsOnly != null) this.httpsOnly = httpsOnly;
+    if (enableProxy != null) proxyEnabled = enableProxy;
+    if (proxyType != null) this.proxyType = proxyType;
+    if (proxyHost != null) this.proxyHost = proxyHost;
+    if (proxyPort != null) this.proxyPort = proxyPort;
+    // Only touch credentials when explicitly supplied: pass an empty string to
+    // clear, a non-empty string to set, or omit (null) to leave unchanged. This
+    // lets callers update an unrelated field (e.g. update(httpsOnly: x)) without
+    // clobbering stored proxy credentials.
+    if (proxyUsername != null) {
+      this.proxyUsername = proxyUsername.isEmpty ? null : proxyUsername;
+    }
+    if (proxyPassword != null) {
+      this.proxyPassword = proxyPassword.isEmpty ? null : proxyPassword;
+    }
+  }
+}
+
+/// Refuses insecure `http://` requests while [DioNetworkPolicy.httpsOnly] is on.
+/// Reads the flag dynamically so a single instance stays correct across policy
+/// changes and pooled-client reuse.
+class _HttpsOnlyInterceptor extends Interceptor {
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    if (DioNetworkPolicy.instance.httpsOnly &&
+        options.uri.scheme.toLowerCase() == 'http') {
+      handler.reject(
+        DioException(
+          requestOptions: options,
+          type: DioExceptionType.connectionError,
+          error: 'HTTPS-only is enabled: refused insecure http:// request to '
+              '${options.uri.host}. Disable HTTPS-only in Network settings or '
+              'use an https:// URL.',
+        ),
+      );
+      return;
+    }
+    handler.next(options);
+  }
+}
 
 /// Manages a bounded pool of Dio clients with LRU eviction and background-aware cleanup.
 /// Task 1.2: Specialized Service for Dio instance management.
@@ -148,6 +231,9 @@ class DioClientPool implements DisposableService, MemoryPressureListener {
           oauthToken: oauthToken,
           pooled: cached,
         );
+        // buildTransferDio re-sets createHttpClient on every acquire, so proxy
+        // config must be re-layered here (the httpsOnly interceptor persists).
+        _applyProxy(cached, url);
         return cached;
       }
     }
@@ -184,6 +270,15 @@ class DioClientPool implements DisposableService, MemoryPressureListener {
       oauthToken: oauthToken,
     );
 
+    // Enforce HTTPS-only (Task 3) and apply the HTTP proxy (Task 2). The
+    // interceptor is added once per client (it reads the policy dynamically);
+    // proxy config is (re)applied on every acquire since buildTransferDio
+    // rebuilds the underlying HttpClient factory.
+    if (!client.interceptors.any((i) => i is _HttpsOnlyInterceptor)) {
+      client.interceptors.add(_HttpsOnlyInterceptor());
+    }
+    _applyProxy(client, url);
+
     _activeClients.add(client);
     _reservedClients.add(client);
     _clientCreationTimes[client] = DateTime.now();
@@ -193,6 +288,36 @@ class DioClientPool implements DisposableService, MemoryPressureListener {
     }
 
     return client;
+  }
+
+  /// Reconfigures [client]'s underlying dart:io [HttpClient] to route through
+  /// the configured HTTP proxy, preserving the debug-certificate override that
+  /// [buildTransferDio] installs. No-op unless an HTTP proxy is fully
+  /// configured (SOCKS5 is not supported on the dart HTTP path).
+  void _applyProxy(Dio client, String? url) {
+    final policy = DioNetworkPolicy.instance;
+    if (!policy.httpProxyActive) return;
+    final adapter = client.httpClientAdapter;
+    if (adapter is! IOHttpClientAdapter) return;
+    final host = policy.proxyHost;
+    final port = policy.proxyPort;
+    final user = policy.proxyUsername;
+    final pass = policy.proxyPassword;
+    adapter.validateCertificate = null;
+    adapter.createHttpClient = () {
+      final httpClient = HttpClient();
+      httpClient.badCertificateCallback = DebugCertOverride.getCallback(url);
+      httpClient.findProxy = (_) => 'PROXY $host:$port';
+      if (user != null && user.isNotEmpty) {
+        httpClient.addProxyCredentials(
+          host,
+          port,
+          '',
+          HttpClientBasicCredentials(user, pass ?? ''),
+        );
+      }
+      return httpClient;
+    };
   }
 
   @visibleForTesting

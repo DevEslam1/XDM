@@ -41,21 +41,23 @@ class ConnectionManager implements DisposableService, MemoryPressureListener {
   }
 
   Future<void> prewarm(String url) async {
+    SecureSocket? socket;
     try {
       final uri = Uri.parse(url);
       if (uri.scheme != 'https') return;
-      final socket = await SecureSocket.connect(
+      socket = await SecureSocket.connect(
         uri.host,
         uri.hasPort ? uri.port : 443,
         timeout: _probeTimeout,
         supportedProtocols: const ['h2', 'http/1.1'],
       );
       final isH2 = socket.selectedProtocol == 'h2';
-      await socket.close();
       _recordProbe(uri.host, isH2);
     } catch (e, st) {
       LoggingService.logger('ConnectionManager')
           .warning('Operation failed', e, st);
+    } finally {
+      socket?.close();
     }
   }
 
@@ -86,17 +88,19 @@ class ConnectionManager implements DisposableService, MemoryPressureListener {
         }
       }
       var result = false;
+      SecureSocket? socket;
       try {
-        final socket = await SecureSocket.connect(
+        socket = await SecureSocket.connect(
           host,
           uri.hasPort ? uri.port : 443,
           timeout: _probeTimeout,
           supportedProtocols: const ['h2', 'http/1.1'],
         );
         result = socket.selectedProtocol == 'h2';
-        await socket.close();
       } catch (_) {
         result = false;
+      } finally {
+        socket?.close();
       }
       _recordProbe(host, result);
       return result;

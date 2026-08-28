@@ -100,7 +100,8 @@ class TorrentProvider extends ChangeNotifier {
     final isBg = PowerMonitor.screenOff ||
         !DownloadEngine.appInForeground ||
         DownloadEngine.isInBackground;
-    final interval = isBg ? const Duration(seconds: 60) : const Duration(seconds: 30);
+    final interval =
+        isBg ? const Duration(seconds: 60) : const Duration(seconds: 30);
     _staleDetector = Timer.periodic(interval, (_) {
       if (_disposed || !_torrentService.isInitialized) return;
       final active = _torrentService.activeTorrentIds;

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/app_theme.dart';
+import '../../../core/services/torrent_seeding_manager.dart';
+import '../../../core/services/torrent_service.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
 import '../provider/settings_provider.dart';
@@ -47,6 +49,7 @@ class TorrentSettingsPage extends StatelessWidget with HapticHelper {
                 value: settings.enableDht,
                 onChanged: (val) {
                   settings.setEnableDht(val);
+                  TorrentService.reconfigureSession();
                   triggerHaptic(settings);
                 },
               ),
@@ -59,46 +62,50 @@ class TorrentSettingsPage extends StatelessWidget with HapticHelper {
                 value: settings.enableUpnp,
                 onChanged: (val) {
                   settings.setEnableUpnp(val);
+                  TorrentService.reconfigureSession();
                   triggerHaptic(settings);
                 },
               ),
-              SwitchTile(
-                accentColor: accent,
-                title: isRtl ? 'تمكين NAT-PMP' : 'Enable NAT-PMP',
-                subtitle: isRtl
-                    ? 'توجيه المنافذ لأجهزة الراوتر المدعومة'
-                    : 'NAT Port Mapping Protocol for Apple/supported routers',
-                value: settings.enableNatPmp,
-                onChanged: (val) {
-                  settings.setEnableNatPmp(val);
-                  triggerHaptic(settings);
-                },
-              ),
-              SwitchTile(
-                accentColor: accent,
-                title:
-                    isRtl ? 'تمكين LPD' : 'Enable LPD (Local Peer Discovery)',
-                subtitle: isRtl
-                    ? 'اكتشاف الأقران المتاحين على الشبكة المحلية'
-                    : 'Discover peers on local area network',
-                value: settings.enableLpd,
-                onChanged: (val) {
-                  settings.setEnableLpd(val);
-                  triggerHaptic(settings);
-                },
-              ),
-              SwitchTile(
-                accentColor: accent,
-                title: isRtl ? 'تمكين PEX' : 'Enable PEX (Peer Exchange)',
-                subtitle: isRtl
-                    ? 'تبادل الأقران مباشرة مع المتصلين'
-                    : 'Exchange peer list directly with connected swarm peers',
-                value: settings.enablePex,
-                onChanged: (val) {
-                  settings.setEnablePex(val);
-                  triggerHaptic(settings);
-                },
-              ),
+              if (TorrentService.natPmpSupported)
+                SwitchTile(
+                  accentColor: accent,
+                  title: isRtl ? 'تمكين NAT-PMP' : 'Enable NAT-PMP',
+                  subtitle: isRtl
+                      ? 'توجيه المنافذ لأجهزة الراوتر المدعومة'
+                      : 'NAT Port Mapping Protocol for Apple/supported routers',
+                  value: settings.enableNatPmp,
+                  onChanged: (val) {
+                    settings.setEnableNatPmp(val);
+                    triggerHaptic(settings);
+                  },
+                ),
+              if (TorrentService.localPeerDiscoverySupported)
+                SwitchTile(
+                  accentColor: accent,
+                  title:
+                      isRtl ? 'تمكين LPD' : 'Enable LPD (Local Peer Discovery)',
+                  subtitle: isRtl
+                      ? 'اكتشاف الأقران المتاحين على الشبكة المحلية'
+                      : 'Discover peers on local area network',
+                  value: settings.enableLpd,
+                  onChanged: (val) {
+                    settings.setEnableLpd(val);
+                    triggerHaptic(settings);
+                  },
+                ),
+              if (TorrentService.peerExchangeSupported)
+                SwitchTile(
+                  accentColor: accent,
+                  title: isRtl ? 'تمكين PEX' : 'Enable PEX (Peer Exchange)',
+                  subtitle: isRtl
+                      ? 'تبادل الأقران مباشرة مع المتصلين'
+                      : 'Exchange peer list directly with connected swarm peers',
+                  value: settings.enablePex,
+                  onChanged: (val) {
+                    settings.setEnablePex(val);
+                    triggerHaptic(settings);
+                  },
+                ),
               SwitchTile(
                 accentColor: accent,
                 title: isRtl ? 'إجبار التشفير' : 'Force Encryption',
@@ -108,21 +115,24 @@ class TorrentSettingsPage extends StatelessWidget with HapticHelper {
                 value: settings.forceEncrypt,
                 onChanged: (val) {
                   settings.setForceEncrypt(val);
+                  TorrentService.reconfigureSession();
                   triggerHaptic(settings);
                 },
               ),
-              SwitchTile(
-                accentColor: accent,
-                title: isRtl ? 'التحميل المتسلسل' : 'Sequential Download',
-                subtitle: isRtl
-                    ? 'تحميل القطع بترتيب متسلسل لمعاينة الفيديو أثناء التحميل'
-                    : 'Download pieces linearly start-to-end for video streaming',
-                value: settings.sequentialDownload,
-                onChanged: (val) {
-                  settings.setSequentialDownload(val);
-                  triggerHaptic(settings);
-                },
-              ),
+              if (TorrentService.sequentialDownloadSupported)
+                SwitchTile(
+                  accentColor: accent,
+                  title: isRtl ? 'التحميل المتسلسل' : 'Sequential Download',
+                  subtitle: isRtl
+                      ? 'تحميل القطع بترتيب متسلسل لمعاينة الفيديو أثناء التحميل'
+                      : 'Download pieces linearly start-to-end for video streaming',
+                  value: settings.sequentialDownload,
+                  onChanged: (val) {
+                    settings.setSequentialDownload(val);
+                    TorrentService.reconfigureSession();
+                    triggerHaptic(settings);
+                  },
+                ),
               SwitchTile(
                 accentColor: accent,
                 title: 'Enable uTP Protocol',
@@ -130,19 +140,21 @@ class TorrentSettingsPage extends StatelessWidget with HapticHelper {
                 value: settings.enableUtp,
                 onChanged: (val) {
                   settings.setEnableUtp(val);
+                  TorrentService.reconfigureSession();
                   triggerHaptic(settings);
                 },
               ),
-              SwitchTile(
-                accentColor: accent,
-                title: 'Enable LSD (Local Service Discovery)',
-                subtitle: 'Discover local subnet BitTorrent clients',
-                value: settings.enableLsd,
-                onChanged: (val) {
-                  settings.setEnableLsd(val);
-                  triggerHaptic(settings);
-                },
-              ),
+              if (TorrentService.localPeerDiscoverySupported)
+                SwitchTile(
+                  accentColor: accent,
+                  title: 'Enable LSD (Local Service Discovery)',
+                  subtitle: 'Discover local subnet BitTorrent clients',
+                  value: settings.enableLsd,
+                  onChanged: (val) {
+                    settings.setEnableLsd(val);
+                    triggerHaptic(settings);
+                  },
+                ),
               SliderTile(
                 accentColor: accent,
                 title: isRtl ? 'أقصى عدد للاتصالات' : 'Global Connection Limit',
@@ -154,19 +166,21 @@ class TorrentSettingsPage extends StatelessWidget with HapticHelper {
                 onChanged: (val) {
                   settings.setTorrentConnectionsLimit(val.round());
                 },
+                onChangeEnd: (_) => TorrentService.reconfigureSession(),
               ),
-              SliderTile(
-                accentColor: accent,
-                title: 'Max Connections per Torrent',
-                subtitle: '${settings.maxPeerConnectionsPerTorrent} peers',
-                value: settings.maxPeerConnectionsPerTorrent.toDouble(),
-                min: 5,
-                max: 500,
-                divisions: 99,
-                onChanged: (val) {
-                  settings.setMaxPeerConnectionsPerTorrent(val.round());
-                },
-              ),
+              if (TorrentService.perTorrentConnectionLimitSupported)
+                SliderTile(
+                  accentColor: accent,
+                  title: 'Max Connections per Torrent',
+                  subtitle: '${settings.maxPeerConnectionsPerTorrent} peers',
+                  value: settings.maxPeerConnectionsPerTorrent.toDouble(),
+                  min: 5,
+                  max: 500,
+                  divisions: 99,
+                  onChanged: (val) {
+                    settings.setMaxPeerConnectionsPerTorrent(val.round());
+                  },
+                ),
             ],
           ),
           const SizedBox(height: 12),
@@ -189,6 +203,9 @@ class TorrentSettingsPage extends StatelessWidget with HapticHelper {
                 value: settings.globalTorrentSeeding,
                 onChanged: (val) {
                   settings.setGlobalTorrentSeeding(val);
+                  // Apply the master switch immediately: when turned off this
+                  // stops active seeds without waiting for the periodic tick.
+                  TorrentSeedingManager.instance.checkSeedingPolicies();
                   triggerHaptic(settings);
                 },
               ),
@@ -352,27 +369,30 @@ class TorrentSettingsPage extends StatelessWidget with HapticHelper {
                 onChanged: (val) {
                   settings.setDiskCacheSizeMb(val.round());
                 },
+                onChangeEnd: (_) => TorrentService.reconfigureSession(),
               ),
-              SwitchTile(
-                accentColor: accent,
-                title: 'Enable IP Filter / Blocklist',
-                subtitle: 'Block known bad/malicious peers via P2P blocklist',
-                value: settings.enableIpFilter,
-                onChanged: (val) {
-                  settings.setEnableIpFilter(val);
-                  triggerHaptic(settings);
-                },
-              ),
-              SwitchTile(
-                accentColor: accent,
-                title: 'Anonymous Mode',
-                subtitle: 'Conceal client identity & user-agent strings',
-                value: settings.enableAnonymousMode,
-                onChanged: (val) {
-                  settings.setEnableAnonymousMode(val);
-                  triggerHaptic(settings);
-                },
-              ),
+              if (TorrentService.ipFilterSupported)
+                SwitchTile(
+                  accentColor: accent,
+                  title: 'Enable IP Filter / Blocklist',
+                  subtitle: 'Block known bad/malicious peers via P2P blocklist',
+                  value: settings.enableIpFilter,
+                  onChanged: (val) {
+                    settings.setEnableIpFilter(val);
+                    triggerHaptic(settings);
+                  },
+                ),
+              if (TorrentService.anonymousModeSupported)
+                SwitchTile(
+                  accentColor: accent,
+                  title: 'Anonymous Mode',
+                  subtitle: 'Conceal client identity & user-agent strings',
+                  value: settings.enableAnonymousMode,
+                  onChanged: (val) {
+                    settings.setEnableAnonymousMode(val);
+                    triggerHaptic(settings);
+                  },
+                ),
             ],
           ),
         ],

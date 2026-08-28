@@ -109,7 +109,8 @@ void main() {
   });
 
   group('Requirement 3: DetailsViewModel self-refresh and disposal', () {
-    test('DetailsViewModel refreshes spots and cancels timer on dispose', () async {
+    test('DetailsViewModel refreshes spots and cancels timer on dispose',
+        () async {
       final task = createTestTask(
         id: 'speed-task-1',
         status: DownloadStatus.downloading,
@@ -117,7 +118,8 @@ void main() {
       );
 
       await provider.restoreTask(task);
-      provider.speedHistories[task.id] = Queue<double>()..addAll([100.0, 200.0, 300.0]);
+      provider.speedHistories[task.id] = Queue<double>()
+        ..addAll([100.0, 200.0, 300.0]);
 
       final vm = DetailsViewModel(
         taskId: 'speed-task-1',
@@ -140,8 +142,12 @@ void main() {
     });
   });
 
-  group('Requirement 2 & 4: Speed History & Upload History tracking in DownloadProvider', () {
-    test('getSpeedHistory and getUploadSpeedHistory return empty list by default', () {
+  group(
+      'Requirement 2 & 4: Speed History & Upload History tracking in DownloadProvider',
+      () {
+    test(
+        'getSpeedHistory and getUploadSpeedHistory return empty list by default',
+        () {
       expect(provider.getSpeedHistory('non-existent'), isEmpty);
       expect(provider.getUploadSpeedHistory('non-existent'), isEmpty);
     });

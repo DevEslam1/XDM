@@ -30,6 +30,9 @@ class TaskQueueManager {
         newIndex >= tasks.length) {
       return;
     }
+    if (tasks[oldIndex].status == DownloadStatus.downloading) {
+      return;
+    }
     final task = tasks.removeAt(oldIndex);
     tasks.insert(newIndex, task);
     for (int i = 0; i < tasks.length; i++) {

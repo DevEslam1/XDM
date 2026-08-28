@@ -139,7 +139,10 @@ class TorrentResumeStore {
       }
 
       final actualBlob = blob ?? Uint8List(0);
-      if (actualBlob.isEmpty && !degradedFallback && files == null && pieceBitfield == null) {
+      if (actualBlob.isEmpty &&
+          !degradedFallback &&
+          files == null &&
+          pieceBitfield == null) {
         return false;
       }
 
@@ -151,34 +154,65 @@ class TorrentResumeStore {
       final blobTmp = File('${dir.path}/$fileName.tmp');
       final metaTmp = File('${dir.path}/$key.meta.json.tmp');
 
-      final digest = sha256.convert(actualBlob).toString();
+      // FIX P0-3/P0-4: Correct crash-safe order is blob-first, meta-second.
+      // Previously meta was written/renamed first - crash between renames left
+      // new meta (sha=empty) pointing at old blob -> sha mismatch -> valid
+      // resume deleted. Also avoid overwriting valid blob with 0-byte degraded file.
+      String effectiveDigest;
+      bool shouldWriteBlob = hasNativeResumeData && actualBlob.isNotEmpty;
+      Uint8List effectiveBlob = actualBlob;
 
-      final meta = jsonEncode({
+      if (!shouldWriteBlob && degradedFallback) {
+        if (await blobFile.exists()) {
+          try {
+            final existing = await blobFile.readAsBytes();
+            if (existing.isNotEmpty && existing.length <= 16 * 1024 * 1024) {
+              effectiveDigest = sha256.convert(existing).toString();
+              shouldWriteBlob = false;
+              effectiveBlob = existing;
+            } else {
+              effectiveDigest = sha256.convert(actualBlob).toString();
+            }
+          } catch (_) {
+            effectiveDigest = sha256.convert(actualBlob).toString();
+          }
+        } else {
+          effectiveDigest = sha256.convert(actualBlob).toString();
+        }
+      } else {
+        effectiveDigest = sha256.convert(actualBlob).toString();
+      }
+
+      // Re-encode meta with effective digest (preserve existing blob digest when degraded)
+      final correctedMeta = jsonEncode({
         'sourceUrl': sourceUrl,
         'torrentId': torrentId,
-        'sha256': digest,
+        'sha256': effectiveDigest,
         'savedAt': DateTime.now().millisecondsSinceEpoch,
-        'bytes': actualBlob.length,
-        'hasNativeResumeData': hasNativeResumeData,
-        if (hasNativeResumeData) 'nativeResumeBlob': base64Encode(actualBlob),
+        'bytes': shouldWriteBlob ? actualBlob.length : effectiveBlob.length,
+        'hasNativeResumeData': hasNativeResumeData && shouldWriteBlob,
+        if (hasNativeResumeData && shouldWriteBlob) 'nativeResumeBlob': base64Encode(actualBlob),
         if (files != null) 'files': files,
-        if (pieceBitfield != null) 'piecesBitfield': pieceBitfield.map((b) => b ? 1 : 0).toList(),
+        if (pieceBitfield != null)
+          'piecesBitfield': pieceBitfield.map((b) => b ? 1 : 0).toList(),
         if (fileProgress != null) 'fileProgress': fileProgress,
         if (piecesTotal != null) 'piecesTotal': piecesTotal,
         if (piecesDone != null) 'piecesDone': piecesDone,
         if (degradedFallback) 'degradedFallback': true,
       });
 
-      // FIX-M12: Write metadata JSON first, then binary resume blob
-      await metaTmp.writeAsString(meta, flush: true);
+      // Write blob FIRST (crash-safe: meta references blob sha)
+      if (shouldWriteBlob) {
+        await blobTmp.writeAsBytes(actualBlob, flush: true);
+        final raf = await blobTmp.open(mode: FileMode.append);
+        await raf.flush();
+        await raf.close();
+      }
+
+      await metaTmp.writeAsString(correctedMeta, flush: true);
       final mraf = await metaTmp.open(mode: FileMode.append);
       await mraf.flush();
       await mraf.close();
-
-      await blobTmp.writeAsBytes(actualBlob, flush: true);
-      final raf = await blobTmp.open(mode: FileMode.append);
-      await raf.flush();
-      await raf.close();
 
       Future<void> safeRename(File tempFile, String targetPath) async {
         for (var attempt = 1; attempt <= 3; attempt++) {
@@ -222,12 +256,20 @@ class TorrentResumeStore {
         }
       }
 
+      // Rename blob first, then meta (meta references blob)
+      if (shouldWriteBlob) {
+        await safeRename(blobTmp, blobFile.path);
+      } else {
+        try { if (await blobTmp.exists()) await blobTmp.delete(); } catch (_) {}
+      }
       await safeRename(metaTmp, metaFile.path);
-      await safeRename(blobTmp, blobFile.path);
 
-      // FIX P1-8: Verify that renamed file actually exists on disk
-      if (!await blobFile.exists()) {
+      if (shouldWriteBlob && !await blobFile.exists()) {
         debugPrint('[TorrentResumeStore] rename verification failed');
+        return false;
+      }
+      if (!await metaFile.exists()) {
+        debugPrint('[TorrentResumeStore] meta rename verification failed');
         return false;
       }
 
@@ -299,7 +341,8 @@ class TorrentResumeStore {
         );
       }
     } catch (e, st) {
-      debugPrint('[TorrentResumeStore] saveAll failed, scheduling retry: $e\n$st');
+      debugPrint(
+          '[TorrentResumeStore] saveAll failed, scheduling retry: $e\n$st');
       // FIX-2: Retry once after 5s if batch save fails
       Timer(const Duration(seconds: 5), () async {
         try {
@@ -505,21 +548,24 @@ class TorrentResumeStore {
   /// Parses saved pieces metadata. If a bitfield exists and [piecesTotal] > 0,
   /// validates whether a recheck is needed by comparing stored [piecesDone]
   /// with the native engine's actual pieces after resume.
-  static Future<bool> needsRecheckAfterResume(String sourceUrl, int actualPiecesDone) async {
+  static Future<bool> needsRecheckAfterResume(
+      String sourceUrl, int actualPiecesDone) async {
     try {
       final dir = await _dir();
       final key = _stableKey(sourceUrl);
       final metaFile = File('${dir.path}/$key.meta.json');
       if (!await metaFile.exists()) return false;
-      
+
       final meta = jsonDecode(await metaFile.readAsString());
       if (meta is! Map) return false;
-      
+
       final bitfieldRaw = meta['piecesBitfield'];
       final piecesTotal = meta['piecesTotal'];
       final storedPiecesDone = meta['piecesDone'];
-      
-      if (bitfieldRaw != null && piecesTotal != null && (piecesTotal as num).toInt() > 0) {
+
+      if (bitfieldRaw != null &&
+          piecesTotal != null &&
+          (piecesTotal as num).toInt() > 0) {
         return (storedPiecesDone as num?)?.toInt() != actualPiecesDone;
       }
       return false;

@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:dmx/core/services/logging_service.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../../core/interfaces/i_connectivity.dart';
 import '../../../core/services/torrent_service.dart';
@@ -21,6 +22,7 @@ class NetworkMonitor implements IConnectivity {
     required Map<String, CancelToken> Function() cancelTokens,
     Map<String, Future<void>> Function()? activeFutures,
     required bool Function() wifiOnly,
+    bool Function()? pauseOnCellular,
     required Future<void> Function(DownloadTask updated) setTask,
     required void Function() pumpQueue,
     Future<void> Function(NetworkChanged event)? onNetworkChanged,
@@ -29,6 +31,7 @@ class NetworkMonitor implements IConnectivity {
         _cancelTokens = cancelTokens,
         _activeFutures = activeFutures ?? (() => <String, Future<void>>{}),
         _wifiOnly = wifiOnly,
+        _pauseOnCellular = pauseOnCellular ?? (() => false),
         _setTask = setTask,
         _pumpQueue = pumpQueue,
         _onNetworkChanged = onNetworkChanged;
@@ -38,6 +41,7 @@ class NetworkMonitor implements IConnectivity {
   final Map<String, CancelToken> Function() _cancelTokens;
   final Map<String, Future<void>> Function() _activeFutures;
   final bool Function() _wifiOnly;
+  final bool Function() _pauseOnCellular;
   // ignore: unused_field
   final Future<void> Function(DownloadTask updated) _setTask;
   final void Function() _pumpQueue;
@@ -83,7 +87,17 @@ class NetworkMonitor implements IConnectivity {
     _tasksPausedDueToWifiOnly.add(taskId);
   }
 
+  @visibleForTesting
+  void setConnectivityForTesting(List<ConnectivityResult> results) {
+    _currentConnectivity = results;
+    _hasResolvedInitialConnectivity = true;
+  }
+
   void init() {
+    // FIX(C-7): Idempotent — init() was previously never called anywhere, so
+    // the whole connectivity-change pipeline (pause on disconnect,
+    // wifi-only enforcement, auto-resume on reconnect) was dead at runtime.
+    if (_connectivitySubscription != null) return;
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
       results,
     ) {
@@ -143,9 +157,8 @@ class NetworkMonitor implements IConnectivity {
     }
     _checkingNetwork = true;
     try {
-      final hasNoNet =
-          _currentConnectivity.contains(ConnectivityResult.none) ||
-              _currentConnectivity.isEmpty;
+      final hasNoNet = _currentConnectivity.contains(ConnectivityResult.none) ||
+          _currentConnectivity.isEmpty;
 
       if (_onNetworkChanged != null) {
         await _onNetworkChanged!(
@@ -164,7 +177,7 @@ class NetworkMonitor implements IConnectivity {
         await _resumeFromNetworkDisconnect(skipPump: skipPump);
       }
 
-      if (!_wifiOnly()) {
+      if (!_wifiOnly() && !_pauseOnCellular()) {
         await _resumeWaitingForWifi(skipPump: skipPump);
         return;
       }
@@ -172,7 +185,11 @@ class NetworkMonitor implements IConnectivity {
       final hasWifi = _currentConnectivity.contains(ConnectivityResult.wifi) ||
           _currentConnectivity.contains(ConnectivityResult.ethernet);
 
-      if (!hasWifi) {
+      // wifiOnly pauses on anything that isn't Wi-Fi/Ethernet; pauseOnCellular
+      // (without wifiOnly) pauses only when the active link is cellular.
+      final mustPause = _wifiOnly() ? !hasWifi : isCellular;
+
+      if (mustPause) {
         await _pauseForWifiOnly();
       } else {
         await _resumeWaitingForWifi(skipPump: skipPump);

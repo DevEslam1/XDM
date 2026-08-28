@@ -169,8 +169,8 @@ void main() {
       // Sum = 99, total is 100 -> diff = 1
       TorrentFileProgressEstimator.reconcileEstimatedFiles(files, 100);
 
-      final total = files.fold<int>(
-          0, (sum, f) => sum + (f['downloadedBytes'] as int));
+      final total =
+          files.fold<int>(0, (sum, f) => sum + (f['downloadedBytes'] as int));
       expect(total, equals(100));
     });
   });

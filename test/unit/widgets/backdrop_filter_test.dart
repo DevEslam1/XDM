@@ -15,7 +15,8 @@ void main() {
   group('DmxBackdropFilter Tests', () {
     setUp(() async {
       setupTestPluginMocks();
-      SharedPreferences.setMockInitialValues({'classicUi': false, 'reduceVisuals': false});
+      SharedPreferences.setMockInitialValues(
+          {'classicUi': false, 'reduceVisuals': false});
       await SettingsProvider.instance.load();
       await SettingsProvider.instance.setClassicUi(false);
       await SettingsProvider.instance.setReduceVisuals(false);
@@ -24,7 +25,8 @@ void main() {
       DownloadEngine.appInForeground = true;
       PowerMonitor.screenOff = false;
       PowerMonitor.isLowEndDevice = false;
-      PowerMonitor.setBatteryForTesting(level: 100, state: BatteryState.charging);
+      PowerMonitor.setBatteryForTesting(
+          level: 100, state: BatteryState.charging);
       PowerMonitor.setThermalForTesting(ThermalStatus.none);
     });
 

@@ -1,0 +1,30 @@
+{
+  "sizeClasses": [
+    { "minWidthDp": 100, "expected": "mini" },
+    { "minWidthDp": 249, "expected": "mini" },
+    { "minWidthDp": 250, "expected": "wide" },
+    { "minWidthDp": 399, "expected": "wide" },
+    { "minWidthDp": 400, "expected": "list" },
+    { "minWidthDp": 549, "expected": "list" },
+    { "minWidthDp": 550, "expected": "dashboard" }
+  ],
+  "formatSpeed": [
+    { "bytesPerSec": 0, "expected": "0 B/s" },
+    { "bytesPerSec": 512, "expected": "512 B/s" },
+    { "bytesPerSec": 1048576, "expected": "1.0 MB/s" },
+    { "bytesPerSec": 5242880, "expected": "5.0 MB/s" }
+  ],
+  "formatBytes": [
+    { "bytes": 0, "expected": "0 B" },
+    { "bytes": 1024, "expected": "1.0 KB" },
+    { "bytes": 1073741824, "expected": "1.0 GB" }
+  ],
+  "smartEta": [
+    { "status": "paused", "speed": 1000, "total": 2000, "downloaded": 1000, "expected": "--" },
+    { "status": "downloading", "speed": 0, "total": 2000, "downloaded": 1000, "expected": "--" },
+    { "status": "downloading", "speed": 1000, "total": 1000, "downloaded": 1000, "expected": "Almost done" },
+    { "status": "downloading", "speed": 10, "total": 500, "downloaded": 0, "expected": "Almost done" },
+    { "status": "downloading", "speed": 10, "total": 1200, "downloaded": 0, "expected": "~2m left" },
+    { "status": "downloading", "speed": 10, "total": 72000, "downloaded": 0, "expected": "~2h" }
+  ]
+}

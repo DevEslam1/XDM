@@ -78,13 +78,15 @@ void main() {
       expect(boosted[0].queueOrder, 0);
     });
 
-    test('pumpQueue prioritizes app updates and priority before admission', () async {
+    test('pumpQueue prioritizes app updates and priority before admission',
+        () async {
       final started = <String>[];
 
       final tasks = [
         createTask(id: 'low', status: DownloadStatus.queued, priority: 0),
         createTask(id: 'high', status: DownloadStatus.queued, priority: 10),
-        createTask(id: 'update', status: DownloadStatus.queued, isAppUpdate: true),
+        createTask(
+            id: 'update', status: DownloadStatus.queued, isAppUpdate: true),
       ];
 
       engine.pumpQueue(tasks, (task) async {

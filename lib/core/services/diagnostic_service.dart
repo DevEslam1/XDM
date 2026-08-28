@@ -205,7 +205,8 @@ class DiagnosticService implements DiagnosticRepository {
   }
 
   @override
-  void recordTelemetryAlert(String alertName, {String? taskId, String? details}) {
+  void recordTelemetryAlert(String alertName,
+      {String? taskId, String? details}) {
     switch (alertName) {
       case 'resume_range_ignored':
         _resumeRangeIgnoredCount++;
@@ -222,7 +223,8 @@ class DiagnosticService implements DiagnosticRepository {
       default:
         break;
     }
-    record('telemetry_alert', alertName, details: 'taskId=$taskId ${details ?? ''}'.trim());
+    record('telemetry_alert', alertName,
+        details: 'taskId=$taskId ${details ?? ''}'.trim());
     _snapshotDirty = true;
   }
 
@@ -245,7 +247,7 @@ class DiagnosticService implements DiagnosticRepository {
   @override
   Map<String, dynamic> telemetryMetricsSnapshot() {
     if (!_snapshotDirty && _cachedSnapshot != null) {
-      return _cachedSnapshot!;
+      return Map.unmodifiable(_cachedSnapshot!);
     }
     _cachedSnapshot = {
       'isolateMessageBytes': _isolateBytesTransferred,
@@ -262,6 +264,6 @@ class DiagnosticService implements DiagnosticRepository {
       'watchdogSkipPaused': _watchdogSkipPausedCount,
     };
     _snapshotDirty = false;
-    return _cachedSnapshot!;
+    return Map.unmodifiable(_cachedSnapshot!);
   }
 }

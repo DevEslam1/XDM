@@ -284,7 +284,7 @@ class ScriptInjector {
             if (val.length > 0) fields[name] = val;
           });
           var keys = Object.keys(fields);
-          if (keys.length > 0 && window.XDM_Autofill && window.XDM_Autofill.postMessage) {
+          if (keys.length > 0 && window.XDM_Autofill && typeof window.XDM_Autofill.postMessage === 'function') {
             window.XDM_Autofill.postMessage(JSON.stringify({ url: window.location.href, fields: fields }));
           }
         } catch (err) {}

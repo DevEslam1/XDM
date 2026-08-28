@@ -52,14 +52,23 @@ List<TorrentFileItem> _cachedDetailsNativeFiles(int torrentId) {
   final fresh = TorrentService.getFiles(torrentId);
   _detailsNativeFilesCache[torrentId] = fresh;
   _detailsNativeFilesCacheAt[torrentId] = now;
+  // Evict stale entries when cache exceeds max size
   if (_detailsNativeFilesCache.length > 32) {
     final staleIds = _detailsNativeFilesCacheAt.entries
-        .where((entry) => now.difference(entry.value) > const Duration(minutes: 2))
+        .where(
+            (entry) => now.difference(entry.value) > const Duration(minutes: 2))
         .map((entry) => entry.key)
         .toList();
     for (final staleId in staleIds) {
       _detailsNativeFilesCache.remove(staleId);
       _detailsNativeFilesCacheAt.remove(staleId);
+    }
+    // Force evict oldest if still over limit
+    while (_detailsNativeFilesCache.length > 32) {
+      final oldest = _detailsNativeFilesCacheAt.entries
+          .reduce((a, b) => a.value.isBefore(b.value) ? a : b);
+      _detailsNativeFilesCache.remove(oldest.key);
+      _detailsNativeFilesCacheAt.remove(oldest.key);
     }
   }
   return fresh;
@@ -318,10 +327,10 @@ class _DetailsScreenState extends State<DetailsScreen>
                                         statusColor: statusColor,
                                         speedText: speedTextInsideCircle,
                                         etaText: isSeeding
-                                            ? provider.getSeedingSummary(task.id)
+                                            ? provider
+                                                .getSeedingSummary(task.id)
                                             : (task.status ==
-                                                        DownloadStatus
-                                                            .downloading)
+                                                    DownloadStatus.downloading)
                                                 ? L10n.translateStatus(
                                                     context,
                                                     task.status,
@@ -617,8 +626,8 @@ class _TelemetryHero extends StatelessWidget {
                             Text(
                               // FIX: [Audit] Deduplicated files label via TorrentFileNormalizer helper
                               task.isTorrent
-                                  ? TorrentFileNormalizer.formatSummaryFromFiles(
-                                      task.torrentFiles)
+                                  ? TorrentFileNormalizer
+                                      .formatSummaryFromFiles(task.torrentFiles)
                                   : '${task.threadCount} CH',
                               style: AppTheme.microLabel(
                                 isDark: isDark,
@@ -991,9 +1000,8 @@ class _ActionRail extends StatelessWidget with HapticHelper {
               } else {
                 ThemedSnackbar.show(
                   context,
-                  message: isRtl
-                      ? 'فشل حذف التنزيل'
-                      : 'Failed to delete download',
+                  message:
+                      isRtl ? 'فشل حذف التنزيل' : 'Failed to delete download',
                   color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
                   icon: Icons.error_outline,
                   isDarkMode: isDark,
@@ -1875,6 +1883,9 @@ class _SpeedGraphPanelState extends State<_SpeedGraphPanel> {
                         sideTitles: SideTitles(
                           showTitles: true,
                           reservedSize: 18,
+                          // FIX(M-3): Let interval handle tick spacing.
+                          // Remove the independent %5 filter that fought the
+                          // interval and suppressed most labels.
                           interval: math.max(1.0, (maxLen / 4).floorToDouble()),
                           getTitlesWidget: (value, meta) {
                             final idx = value.toInt();
@@ -1882,9 +1893,6 @@ class _SpeedGraphPanelState extends State<_SpeedGraphPanel> {
                               return const SizedBox.shrink();
                             }
                             final secAgo = (maxLen - 1 - idx);
-                            if (secAgo % 5 != 0 && idx != 0) {
-                              return const SizedBox.shrink();
-                            }
                             return Padding(
                               padding: const EdgeInsets.only(top: 4),
                               child: Text(
@@ -2361,13 +2369,14 @@ class _TorrentStatsPanelState extends State<_TorrentStatsPanel> {
         task.seedingEnabled;
 
     final dlSpeed = task.speed;
-    final ulSpeed = task.isTorrent ? provider.getTorrentUploadSpeed(task.id) : 0.0;
+    final ulSpeed =
+        task.isTorrent ? provider.getTorrentUploadSpeed(task.id) : 0.0;
 
     // Resolve through TorrentIdResolver alone: it already prefers task.torrentId
     // but validates it against the live session first, so short-circuiting on
     // task.torrentId here would reintroduce the stale-handle bug.
-    final torrentId =
-        TorrentIdResolver.resolve(task, providerMap: provider.providerTorrentIds);
+    final torrentId = TorrentIdResolver.resolve(task,
+        providerMap: provider.providerTorrentIds);
     final stats = torrentId != null
         ? provider.providerLatestTorrentStats[torrentId]
         : null;
@@ -2431,7 +2440,8 @@ class _TorrentStatsPanelState extends State<_TorrentStatsPanel> {
               ),
               const SizedBox(height: 14),
             ],
-            if (isActive && (task.resolvedFileSize > 0 || task.downloadedBytes > 0)) ...[
+            if (isActive &&
+                (task.resolvedFileSize > 0 || task.downloadedBytes > 0)) ...[
               Stack(
                 children: [
                   Container(
@@ -2461,7 +2471,7 @@ class _TorrentStatsPanelState extends State<_TorrentStatsPanel> {
                   ),
                   if (task.totalPieces != null && task.totalPieces! > 0)
                     Text(
-                      '${task.completedPieces ?? 0}/${task.totalPieces} pieces',
+                      '~${task.completedPieces ?? 0}/${task.totalPieces} pieces (est.)',
                       style: TextStyle(
                         fontSize: 10,
                         color: mutedClr,
@@ -2566,30 +2576,34 @@ class _TorrentStatsPanelState extends State<_TorrentStatsPanel> {
               ],
             ),
             if (torrentId != null) ...[
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: () =>
-                      TorrentAdvancedSettingsSheet.show(context, torrentId),
-                  icon:
-                      const Icon(Icons.tune, size: 14, color: AppTheme.neonCyan),
-                  label: Text(
-                    isRtl
-                        ? 'إعدادات متقدمة (Web Seeds / Proxy / SSL)'
-                        : 'Advanced Controls (Web Seeds / Proxy / SSL)',
-                    style:
-                        const TextStyle(fontSize: 11, color: AppTheme.neonCyan),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(
-                        color: AppTheme.neonCyan.withValues(alpha: 0.3)),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+              if (TorrentService.webSeedsSupported ||
+                  TorrentService.proxySupported ||
+                  TorrentService.sslSupported) ...[
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () =>
+                        TorrentAdvancedSettingsSheet.show(context, torrentId),
+                    icon: const Icon(Icons.tune,
+                        size: 14, color: AppTheme.neonCyan),
+                    label: Text(
+                      isRtl
+                          ? 'إعدادات متقدمة (Web Seeds / Proxy / SSL)'
+                          : 'Advanced Controls (Web Seeds / Proxy / SSL)',
+                      style: const TextStyle(
+                          fontSize: 11, color: AppTheme.neonCyan),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(
+                          color: AppTheme.neonCyan.withValues(alpha: 0.3)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                   ),
                 ),
-              ),
+              ],
               if (_showTrackers) ...[
                 const SizedBox(height: 12),
                 TrackerPanel(
@@ -2820,7 +2834,8 @@ class _TorrentFilesPanel extends StatelessWidget with HapticHelper {
         if (!currentTask.isTorrent) {
           return const SizedBox.shrink();
         }
-        final List<Map<String, dynamic>> files = List<Map<String, dynamic>>.from(
+        final List<Map<String, dynamic>> files =
+            List<Map<String, dynamic>>.from(
           dynamicTorrentFiles ?? currentTask.torrentFiles ?? const [],
         );
         final bool hasNoRealLengths = files.isEmpty ||
@@ -2831,7 +2846,8 @@ class _TorrentFilesPanel extends StatelessWidget with HapticHelper {
                 0);
         if (hasNoRealLengths) {
           final tid = task.torrentId ??
-              TorrentIdResolver.resolve(task, providerMap: provider.providerTorrentIds);
+              TorrentIdResolver.resolve(task,
+                  providerMap: provider.providerTorrentIds);
           if (tid != null) {
             try {
               // Keep the build path out of the synchronous native query. The
@@ -2844,18 +2860,16 @@ class _TorrentFilesPanel extends StatelessWidget with HapticHelper {
                   ..clear()
                   ..addAll(
                     nativeFiles.map((f) {
-                      final dl = f.safeDownloadedBytes < 0
-                          ? 0
-                          : f.safeDownloadedBytes;
+                      final dl =
+                          f.safeDownloadedBytes < 0 ? 0 : f.safeDownloadedBytes;
                       return <String, dynamic>{
                         'name': f.name,
                         'length': f.size,
                         'downloadedBytes': dl,
                         'selected': f.selected,
                         'priority': f.priority,
-                        'progress': f.size > 0
-                            ? (dl / f.size).clamp(0.0, 1.0)
-                            : 0.0,
+                        'progress':
+                            f.size > 0 ? (dl / f.size).clamp(0.0, 1.0) : 0.0,
                         'isComplete': f.size > 0 && dl >= f.size,
                         'progressEstimated': false,
                       };
@@ -2881,7 +2895,8 @@ class _TorrentFilesPanel extends StatelessWidget with HapticHelper {
               final current = updatedFiles[i];
               final length = (current['length'] as num?)?.toInt() ?? 0;
               final wasSelected = isTorrentFileSelected(current);
-              final currentDl = (current['downloadedBytes'] as num?)?.toInt() ?? 0;
+              final currentDl =
+                  (current['downloadedBytes'] as num?)?.toInt() ?? 0;
               final isComplete = wasSelected &&
                   length > 0 &&
                   currentDl >= length &&
@@ -2891,7 +2906,8 @@ class _TorrentFilesPanel extends StatelessWidget with HapticHelper {
                 'selected': true,
                 'priority': 4,
                 if (!isComplete) ...{
-                  'downloadedBytes': (wasSelected && currentDl > 0) ? currentDl : 0,
+                  'downloadedBytes':
+                      (wasSelected && currentDl > 0) ? currentDl : 0,
                   'progress': (wasSelected && length > 0 && currentDl > 0)
                       ? (currentDl / length).clamp(0.0, 1.0)
                       : 0.0,
@@ -2959,7 +2975,8 @@ class _TorrentFilesPanel extends StatelessWidget with HapticHelper {
                 'isComplete': false,
                 'progressEstimated': false,
               } else if (!isComplete) ...{
-                'downloadedBytes': (wasSelected && currentDl > 0) ? currentDl : 0,
+                'downloadedBytes':
+                    (wasSelected && currentDl > 0) ? currentDl : 0,
                 'progress': (wasSelected && length > 0 && currentDl > 0)
                     ? (currentDl / length).clamp(0.0, 1.0)
                     : 0.0,
@@ -3206,7 +3223,8 @@ class _MetadataPanel extends StatelessWidget with HapticHelper {
               _MetaRow(
                 label: isRtl ? 'بروتوكول التورنت' : 'BITTORRENT PROTOCOL',
                 // FIX: [Audit] Accurately distinguish BitTorrent v1, v2, and Hybrid protocols
-                value: (task.url.contains('urn:btih') && task.url.contains('urn:btmh'))
+                value: (task.url.contains('urn:btih') &&
+                        task.url.contains('urn:btmh'))
                     ? 'BitTorrent Hybrid (v1 + v2 / BEP 52)'
                     : task.url.contains('urn:btmh')
                         ? 'BitTorrent v2 (BEP 52)'

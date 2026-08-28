@@ -16,6 +16,7 @@ import '../../../core/interfaces/i_download_engine.dart';
 import '../../../core/services/download_engine.dart';
 import '../../../core/services/permission_service.dart';
 import '../../../core/services/site_intelligence/site_intelligence_service.dart';
+import '../../../core/services/xdm_backend_exceptions.dart';
 import '../../../core/services/youtube_service.dart';
 import '../../../core/utils/bencode_decoder.dart';
 import '../../../core/utils/constants.dart';
@@ -95,6 +96,13 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
   final TextEditingController _extController = TextEditingController();
   final TextEditingController _pathController = TextEditingController();
   final FocusNode _urlFocus = FocusNode();
+  // HTTP Basic auth + arbitrary custom request headers (Plan 06 Task 6.2).
+  // Each header row owns its own key/value controllers so rows can be added
+  // and removed independently.
+  final TextEditingController _authUsernameController = TextEditingController();
+  final TextEditingController _authPasswordController = TextEditingController();
+  bool _obscureAuthPassword = true;
+  final List<_CustomHeaderRow> _customHeaderRows = [];
   String _selectedCategory = 'Auto';
   int _selectedThreads = 5;
   bool _wifiOnly = false;
@@ -311,12 +319,277 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     _nameController.dispose();
     _extController.dispose();
     _pathController.dispose();
+    _authUsernameController.dispose();
+    _authPasswordController.dispose();
+    for (final row in _customHeaderRows) {
+      row.dispose();
+    }
     _urlFocus.dispose();
     _ytDebounceTimer?.cancel();
     _analysisDebounceTimer?.cancel();
     stopPausableLoop();
     _scanController.dispose();
     super.dispose();
+  }
+
+  // The three collectors below are consumed at the provider.addDownload()
+  // call sites once DownloadTask gains auth/header params in the provider
+  // (the model + DB already persist them). Kept here so the exact collection
+  // logic lives with the UI that owns the controllers. See the seam comment at
+  // the primary submit call (search: AUTH/HEADER SEAM).
+
+  /// Collects the non-empty custom header rows into a map, or null if none.
+  /// Rows with a blank key are skipped. Later rows win on duplicate keys.
+  Map<String, String>? _collectCustomHeaders() {
+    final map = <String, String>{};
+    for (final row in _customHeaderRows) {
+      final key = row.keyController.text.trim();
+      if (key.isEmpty) continue;
+      map[key] = row.valueController.text;
+    }
+    return map.isEmpty ? null : map;
+  }
+
+  String? get _authUsernameOrNull {
+    final v = _authUsernameController.text.trim();
+    return v.isEmpty ? null : v;
+  }
+
+  String? get _authPasswordOrNull {
+    final v = _authPasswordController.text;
+    return v.isEmpty ? null : v;
+  }
+
+  /// Shared input decoration for the advanced-section credential/header fields,
+  /// matching the referrer/path field styling.
+  InputDecoration _advInputDecoration({
+    required String hint,
+    required Color fillColor,
+    required Color hintColor,
+    required Color borderColor,
+    required Color focusColor,
+    required bool isDark,
+    Widget? suffixIcon,
+  }) {
+    final errClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: TextStyle(color: hintColor, fontSize: 11),
+      filled: true,
+      fillColor: fillColor,
+      isDense: true,
+      suffixIcon: suffixIcon,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide:
+            BorderSide(color: borderColor.withValues(alpha: 0.5), width: 0.8),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide:
+            BorderSide(color: borderColor.withValues(alpha: 0.5), width: 0.8),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide:
+            BorderSide(color: focusColor.withValues(alpha: 0.5), width: 1.2),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide:
+            BorderSide(color: errClr.withValues(alpha: 0.6), width: 1.0),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide:
+            BorderSide(color: errClr.withValues(alpha: 0.8), width: 1.2),
+      ),
+    );
+  }
+
+  /// Builds the HTTP Basic-auth + custom-headers block shown in the advanced
+  /// options section. Values are collected via [_authUsernameOrNull],
+  /// [_authPasswordOrNull] and [_collectCustomHeaders] when submitting.
+  Widget _buildCredentialsSection({
+    required bool isRtl,
+    required bool isDark,
+    required Color textClr,
+    required Color mutedClr,
+    required Color panelBg,
+    required Color borderClr,
+    required Color blueClr,
+  }) {
+    final hintClr = mutedClr.withValues(alpha: 0.6);
+    final monoStyle =
+        TextStyle(color: textClr, fontSize: 12, fontFamily: 'monospace');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 12),
+        _SectionLabel(
+          text: isRtl
+              ? 'مصادقة HTTP (اختياري)'
+              : 'HTTP AUTHENTICATION (OPTIONAL)',
+          color: mutedClr,
+        ),
+        const SizedBox(height: 8),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: _authUsernameController,
+                style: monoStyle,
+                autocorrect: false,
+                enableSuggestions: false,
+                decoration: _advInputDecoration(
+                  hint: isRtl ? 'اسم المستخدم' : 'Username',
+                  fillColor: panelBg,
+                  hintColor: hintClr,
+                  borderColor: borderClr,
+                  focusColor: blueClr,
+                  isDark: isDark,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextFormField(
+                controller: _authPasswordController,
+                style: monoStyle,
+                obscureText: _obscureAuthPassword,
+                autocorrect: false,
+                enableSuggestions: false,
+                decoration: _advInputDecoration(
+                  hint: isRtl ? 'كلمة المرور' : 'Password',
+                  fillColor: panelBg,
+                  hintColor: hintClr,
+                  borderColor: borderClr,
+                  focusColor: blueClr,
+                  isDark: isDark,
+                  suffixIcon: IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints:
+                        const BoxConstraints(minWidth: 36, minHeight: 36),
+                    icon: Icon(
+                      _obscureAuthPassword
+                          ? Icons.visibility_off_rounded
+                          : Icons.visibility_rounded,
+                      size: 16,
+                      color: mutedClr,
+                    ),
+                    onPressed: () => setState(
+                        () => _obscureAuthPassword = !_obscureAuthPassword),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _SectionLabel(
+          text: isRtl ? 'ترويسات مخصصة (اختياري)' : 'CUSTOM HEADERS (OPTIONAL)',
+          color: mutedClr,
+          trailing: GestureDetector(
+            onTap: () =>
+                setState(() => _customHeaderRows.add(_CustomHeaderRow())),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.add_rounded, size: 15, color: blueClr),
+                const SizedBox(width: 2),
+                Text(
+                  isRtl ? 'إضافة' : 'ADD',
+                  style: TextStyle(
+                    color: blueClr,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        for (final row in _customHeaderRows) ...[
+          const SizedBox(height: 8),
+          _buildHeaderRow(
+            row: row,
+            isRtl: isRtl,
+            isDark: isDark,
+            monoStyle: monoStyle,
+            hintClr: hintClr,
+            mutedClr: mutedClr,
+            panelBg: panelBg,
+            borderClr: borderClr,
+            blueClr: blueClr,
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildHeaderRow({
+    required _CustomHeaderRow row,
+    required bool isRtl,
+    required bool isDark,
+    required TextStyle monoStyle,
+    required Color hintClr,
+    required Color mutedClr,
+    required Color panelBg,
+    required Color borderClr,
+    required Color blueClr,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          flex: 2,
+          child: TextFormField(
+            controller: row.keyController,
+            style: monoStyle,
+            autocorrect: false,
+            enableSuggestions: false,
+            decoration: _advInputDecoration(
+              hint: isRtl ? 'الترويسة' : 'Header',
+              fillColor: panelBg,
+              hintColor: hintClr,
+              borderColor: borderClr,
+              focusColor: blueClr,
+              isDark: isDark,
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          flex: 3,
+          child: TextFormField(
+            controller: row.valueController,
+            style: monoStyle,
+            autocorrect: false,
+            enableSuggestions: false,
+            decoration: _advInputDecoration(
+              hint: isRtl ? 'القيمة' : 'Value',
+              fillColor: panelBg,
+              hintColor: hintClr,
+              borderColor: borderClr,
+              focusColor: blueClr,
+              isDark: isDark,
+            ),
+          ),
+        ),
+        IconButton(
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+          icon: Icon(Icons.close_rounded, size: 16, color: mutedClr),
+          onPressed: () => setState(() {
+            row.dispose();
+            _customHeaderRows.remove(row);
+          }),
+        ),
+      ],
+    );
   }
 
   Future<void> _pasteFromClipboard() async {
@@ -733,6 +1006,12 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
           duplicateCount++;
           continue;
         }
+        // FIX(H-16): Pace bulk imports to respect the backend rate limiter.
+        // Without a delay between requests, pasting ~30+ YouTube links
+        // guarantees mid-batch BackendRateLimitException failures.
+        if (addedCount > 0) {
+          await Future.delayed(const Duration(milliseconds: 500));
+        }
         final enteredName = _nameController.text.trim();
         final enteredExt = _extController.text.trim();
         final String fullName = _composeFullName(enteredName, enteredExt);
@@ -793,6 +1072,44 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
               debugPrint(
                 '[AddDownloadDialog] Bulk media extract failed for $singleUrl: $e\n$st',
               );
+              // FIX(H-16): When rate-limited, wait the indicated retry-after
+              // window and retry once instead of silently dropping the URL.
+              if (e is BackendRateLimitException &&
+                  e.retryAfterSeconds != null) {
+                await Future.delayed(
+                  Duration(seconds: e.retryAfterSeconds!),
+                );
+                try {
+                  final retryStreams =
+                      await YoutubeService.getStreamsForAnyUrl(singleUrl);
+                  if (retryStreams != null && retryStreams.isNotEmpty) {
+                    // Use the first stream as best-effort
+                    final stream = retryStreams.first;
+                    final streamUrl =
+                        (stream['src'] ?? stream['url'] ?? '') as String;
+                    final title =
+                        stream['title'] as String? ?? 'Video Download';
+                    final ext = stream['ext'] as String? ?? 'mp4';
+                    final sName = safeFileName('$title.$ext');
+                    await provider.addDownload(
+                      name: sName,
+                      url: streamUrl,
+                      size: (stream['size'] as num?)?.toInt() ?? 0,
+                      category: stream['type'] == 'audio' ? 'Audio' : 'Video',
+                      savePath: _pathController.text.trim().isNotEmpty
+                          ? _pathController.text.trim()
+                          : settings.customDownloadPath ?? '',
+                      threadCount: _selectedThreads,
+                      downloadPageUrl: singleUrl,
+                    );
+                    addedCount++;
+                    AddDownloadDialog.recordAddedUrl(singleUrl);
+                    continue;
+                  }
+                } catch (_) {
+                  // Give up after rate-limit retry; fall through to raw URL
+                }
+              }
             }
           }
           await provider.addDownload(
@@ -1002,10 +1319,14 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                   final confirmed = await showDialog<bool>(
                     context: dialogContext,
                     builder: (ctx) => AlertDialog(
-                      backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+                      backgroundColor:
+                          isDark ? AppTheme.surface : AppTheme.lightSurface,
                       title: Text(
                         isRtl ? 'تأكيد البدء من جديد' : 'Confirm Restart',
-                        style: TextStyle(color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed),
+                        style: TextStyle(
+                            color: isDark
+                                ? AppTheme.neonRed
+                                : AppTheme.lightNeonRed),
                       ),
                       content: Text(
                         isRtl
@@ -1019,12 +1340,18 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                         ),
                         ElevatedButton(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed).withValues(alpha: 0.2),
+                            backgroundColor: (isDark
+                                    ? AppTheme.neonRed
+                                    : AppTheme.lightNeonRed)
+                                .withValues(alpha: 0.2),
                           ),
                           onPressed: () => Navigator.pop(ctx, true),
                           child: Text(
                             isRtl ? 'نعم، ابدأ من جديد' : 'Yes, Start Over',
-                            style: TextStyle(color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed),
+                            style: TextStyle(
+                                color: isDark
+                                    ? AppTheme.neonRed
+                                    : AppTheme.lightNeonRed),
                           ),
                         ),
                       ],
@@ -1186,6 +1513,9 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
           mergedAudioUrl: _resolvedAudioUrl,
           audioSize: _resolvedAudioSize ?? 0,
           thumbnailUrl: _resolvedThumbnailUrl,
+          authUsername: _authUsernameOrNull,
+          authPassword: _authPasswordOrNull,
+          customHeaders: _collectCustomHeaders(),
         );
         if (!mounted) return;
         if (!context.mounted) return;
@@ -2260,6 +2590,15 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                     ),
                                   ),
                                 ),
+                                _buildCredentialsSection(
+                                  isRtl: isRtl,
+                                  isDark: isDark,
+                                  textClr: textClr,
+                                  mutedClr: mutedClr,
+                                  panelBg: panelBg,
+                                  borderClr: borderClr,
+                                  blueClr: blueClr,
+                                ),
                                 const SizedBox(height: 12),
                                 _SectionLabel(
                                   text: L10n.of(context, 'save_path_label'),
@@ -2611,6 +2950,22 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         ),
       ),
     );
+  }
+}
+
+/// Holds the editable key/value controllers for a single custom-header row in
+/// the add-download advanced options section.
+class _CustomHeaderRow {
+  final TextEditingController keyController;
+  final TextEditingController valueController;
+
+  _CustomHeaderRow({String key = '', String value = ''})
+      : keyController = TextEditingController(text: key),
+        valueController = TextEditingController(text: value);
+
+  void dispose() {
+    keyController.dispose();
+    valueController.dispose();
   }
 }
 

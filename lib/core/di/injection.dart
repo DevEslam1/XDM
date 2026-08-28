@@ -6,10 +6,7 @@ import '../../features/downloads/data/drift_task_repository.dart';
 import '../../features/downloads/data/task_repository.dart';
 import '../../features/downloads/domain/orchestrators/http_download_orchestrator.dart';
 import '../../features/downloads/domain/orchestrators/torrent_download_orchestrator.dart';
-import '../../features/downloads/provider/download_filter_provider.dart';
-import '../../features/downloads/provider/download_list_provider.dart';
 import '../../features/downloads/provider/download_queue_engine.dart';
-import '../../features/downloads/provider/download_queue_provider.dart';
 import '../../features/downloads/provider/torrent_provider.dart';
 import '../../features/downloads/services/torrent_session_manager.dart';
 import '../../features/settings/provider/settings_provider.dart';
@@ -50,6 +47,8 @@ import '../services/share_url_handler.dart';
 import '../services/shared_prefs_batcher.dart';
 import '../services/single_instance_service.dart';
 import '../services/site_intelligence/site_intelligence_service.dart';
+import '../services/subscription/purchase_service.dart';
+import '../services/subscription/subscription_service.dart';
 import '../services/torrent_service.dart';
 import '../services/tracker_manager.dart';
 import '../services/update_service.dart';
@@ -135,21 +134,11 @@ Future<void> configureDependencies() async {
     getIt.registerLazySingleton<DownloadQueueEngine>(
       () => DownloadQueueEngine(),
     );
-    getIt.registerLazySingleton<DownloadListProvider>(
-      () => DownloadListProvider(getIt<TaskRepository>()),
-      dispose: (p) => p.dispose(),
-    );
-    getIt.registerLazySingleton<DownloadQueueProvider>(
-      () => DownloadQueueProvider(
-        listProvider: getIt<DownloadListProvider>(),
-        settings: getIt<SettingsProvider>(),
-      ),
-      dispose: (p) => p.dispose(),
-    );
-    getIt.registerLazySingleton<DownloadFilterProvider>(
-      () => DownloadFilterProvider(getIt<DownloadListProvider>()),
-      dispose: (p) => p.dispose(),
-    );
+    // FIX(M-11): The dead parallel state layer (DownloadListProvider /
+    // DownloadQueueProvider / DownloadFilterProvider / DownloadStatsNotifier)
+    // was removed from DI and the widget tree — nothing consumed them and
+    // they formed a second source of truth for the task list next to
+    // [DownloadProvider]. The classes remain available to tests.
     getIt.registerLazySingleton<TorrentProvider>(
       () => TorrentProvider(torrentService: getIt<ITorrentService>()),
       dispose: (p) => p.dispose(),
@@ -171,7 +160,10 @@ Future<void> configureDependencies() async {
       ),
       dispose: (p) => p.dispose(),
     );
-    getIt.registerLazySingleton<IConnectivity>(
+    // FIX P1-21: Use factory so IConnectivity always resolves to the live
+    // DownloadProvider published by main.dart (which replaces the DI factory).
+    // LazySingleton would cache a dead provider if resolved before main's replacement.
+    getIt.registerFactory<IConnectivity>(
       () => getIt<DownloadProvider>().networkMonitor,
     );
 
@@ -207,6 +199,17 @@ Future<void> configureDependencies() async {
     getIt.registerLazySingleton<TrackerManager>(
       () => TrackerManager(),
       dispose: (t) => t.dispose(),
+    );
+
+    getIt.registerLazySingleton<SubscriptionService>(
+      () => SubscriptionService(),
+      dispose: (s) => s.dispose(),
+    );
+    getIt.registerLazySingleton<PurchaseService>(
+      () => PurchaseService(
+        subscriptionService: getIt<SubscriptionService>(),
+      ),
+      dispose: (p) => p.dispose(),
     );
 
     getIt.registerLazySingleton<SiteIntelligenceService>(
@@ -269,7 +272,8 @@ Future<void> configureDependencies() async {
       dispose: (b) => b.dispose(),
     );
   } catch (e, st) {
-    LoggingService.logger('DI').shout('Failed to configure dependencies, resetting GetIt', e, st);
+    LoggingService.logger('DI')
+        .shout('Failed to configure dependencies, resetting GetIt', e, st);
     await getIt.reset();
     rethrow;
   }
@@ -278,11 +282,17 @@ Future<void> configureDependencies() async {
 /// Shuts down and disposes all registered singleton dependencies on app detach.
 Future<void> shutdownDependencies() async {
   try {
+    await ServiceRegistry.shutdownAll();
+  } catch (e, st) {
+    LoggingService.logger('DI')
+        .warning('ServiceRegistry.shutdownAll failed', e, st);
+  }
+  try {
     await getIt.reset();
   } catch (e, st) {
-    LoggingService.logger('DI').warning('getIt.reset failed during shutdown', e, st);
+    LoggingService.logger('DI')
+        .warning('getIt.reset failed during shutdown', e, st);
   }
-  await ServiceRegistry.shutdownAll();
 }
 
 /// Helper for resetting GetIt dependency graph between tests.

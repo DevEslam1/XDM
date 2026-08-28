@@ -6,6 +6,7 @@ import 'dart:math' as math;
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:dmx/core/services/download_journal.dart';
+import 'package:dmx/core/services/engine/ssrf_guard.dart';
 import 'package:dmx/core/services/logging_service.dart';
 import 'package:dmx/core/services/retry_interceptor.dart';
 import 'package:flutter/foundation.dart' show kReleaseMode;
@@ -75,6 +76,15 @@ Dio buildTransferDio({
   String? cookies,
   String? oauthToken,
   Dio? pooled,
+  String? authUsername,
+  String? authPassword,
+  Map<String, String>? customHeaders,
+  bool httpsOnly = false,
+  String? proxyType,
+  String? proxyHost,
+  int? proxyPort,
+  String? proxyUsername,
+  String? proxyPassword,
 }) {
   final client = pooled ?? Dio();
   if (pooled == null) {
@@ -82,6 +92,57 @@ Dio buildTransferDio({
     client.options.connectTimeout = const Duration(seconds: 30);
     client.options.sendTimeout = const Duration(seconds: 60);
     client.options.receiveTimeout = const Duration(seconds: 60);
+    // M-1: SSRF + cleartext guard. Validate the initial request URL and every
+    // redirect hop dart:io auto-followed, so a link that redirects to
+    // 169.254.169.254 / 127.0.0.1 (or an integer-encoded form) is refused on
+    // the download path. Added only on freshly-built (non-pooled) clients so
+    // the interceptor isn't stacked twice.
+    client.interceptors.add(InterceptorsWrapper(
+      onRequest: (options, handler) {
+        try {
+          // Initial (and non-redirect) requests allow LAN/loopback/private
+          // targets so users can download from their own NAS/router/localhost,
+          // while metadata/link-local/0.0.0.0/multicast stay blocked.
+          SsrfGuard.validate(options.uri,
+              httpsOnly: httpsOnly, allowPrivate: true);
+        } on SsrfBlockedException catch (e) {
+          handler.reject(DioException(
+            requestOptions: options,
+            type: DioExceptionType.badResponse,
+            error: e,
+            message: e.message,
+          ));
+          return;
+        }
+        handler.next(options);
+      },
+      onResponse: (response, handler) {
+        // Only redirect hops need the strict re-check. A no-redirect response
+        // was already validated on the initial request (allowPrivate:true for a
+        // user-typed URL). When the server issued a 3xx, re-validate every hop
+        // and the final URI STRICTLY (allowPrivate:false) so a remote host
+        // cannot pivot the download into the user's private network.
+        if (response.redirects.isNotEmpty) {
+          try {
+            for (final r in response.redirects) {
+              SsrfGuard.validate(r.location,
+                  httpsOnly: httpsOnly, allowPrivate: false);
+            }
+            SsrfGuard.validate(response.realUri,
+                httpsOnly: httpsOnly, allowPrivate: false);
+          } on SsrfBlockedException catch (e) {
+            handler.reject(DioException(
+              requestOptions: response.requestOptions,
+              type: DioExceptionType.badResponse,
+              error: e,
+              message: e.message,
+            ));
+            return;
+          }
+        }
+        handler.next(response);
+      },
+    ));
   }
 
   final uri = url != null ? Uri.tryParse(url) : null;
@@ -106,6 +167,11 @@ Dio buildTransferDio({
   }
   if (oauthToken != null && oauthToken.isNotEmpty) {
     client.options.headers['Authorization'] = 'Bearer $oauthToken';
+  } else if (authUsername != null && authUsername.isNotEmpty) {
+    // Explicit per-download HTTP Basic credentials (Plan 06 6.2).
+    final basic =
+        base64Encode(utf8.encode('$authUsername:${authPassword ?? ''}'));
+    client.options.headers['Authorization'] = 'Basic $basic';
   } else if (url != null) {
     final uri = Uri.tryParse(url);
     if (uri != null && uri.userInfo.isNotEmpty) {
@@ -114,6 +180,19 @@ Dio buildTransferDio({
       client.options.headers['Authorization'] = 'Basic $base64Auth';
     }
   }
+
+  // Apply user-supplied custom headers LAST so they win over any header
+  // derived above (including a user-provided Authorization override).
+  if (customHeaders != null) {
+    customHeaders.forEach((k, v) {
+      if (k.trim().isNotEmpty) client.options.headers[k] = v;
+    });
+  }
+
+  final useHttpProxy = proxyType == 'http' &&
+      proxyHost != null &&
+      proxyHost.isNotEmpty &&
+      (proxyPort ?? 0) > 0;
 
   if (client.httpClientAdapter is IOHttpClientAdapter) {
     final adapter = client.httpClientAdapter as IOHttpClientAdapter;
@@ -124,6 +203,19 @@ Dio buildTransferDio({
     adapter.createHttpClient = () {
       final httpClient = HttpClient();
       httpClient.badCertificateCallback = DebugCertOverride.getCallback(url);
+      if (useHttpProxy) {
+        // dart:io HttpClient supports HTTP CONNECT proxies only; SOCKS5 is
+        // handled natively by libtorrent, never here.
+        httpClient.findProxy = (_) => 'PROXY $proxyHost:$proxyPort';
+        if (proxyUsername != null && proxyUsername.isNotEmpty) {
+          httpClient.addProxyCredentials(
+            proxyHost,
+            proxyPort!,
+            '',
+            HttpClientBasicCredentials(proxyUsername, proxyPassword ?? ''),
+          );
+        }
+      }
       return httpClient;
     };
   }
@@ -200,5 +292,32 @@ bool isLikelyHtmlResponse(Headers headers, {List<int>? firstChunk}) {
       LoggingService.logger('EngineUtils').warning('Operation failed', e, st);
     }
   }
+  return false;
+}
+
+/// M-3: decides whether a single-stream download whose total size was never
+/// known (no usable Content-Length) can be trusted as *complete* once its
+/// response stream ends normally.
+///
+/// dart:io raises on a truncated Content-Length- or chunked-delimited body, so
+/// a clean loop exit is only reached when the framing itself signalled the end:
+/// - `Transfer-Encoding: chunked` — the terminating zero-length chunk arrived
+///   (dart:io would have thrown otherwise);
+/// - a close-delimited body (`Connection: close`, or a `Content-Length` we can
+///   see) — the graceful socket close *is* the completion signal.
+///
+/// A keep-alive response carrying neither a length nor chunked framing has no
+/// way to delimit its body, so a stream that simply stops may have been
+/// truncated by an early socket close. Sealing those bytes as a finished file
+/// is the M-3 bug; we reject them here so the transfer resumes/fails instead.
+/// A zero-byte result is never a real file, regardless of framing.
+bool unknownLengthEofIsTrustworthy(Headers headers, int bytesReceived) {
+  if (bytesReceived <= 0) return false;
+  final transferEncoding =
+      headers.value('transfer-encoding')?.toLowerCase() ?? '';
+  if (transferEncoding.contains('chunked')) return true;
+  if (headers.value(Headers.contentLengthHeader) != null) return true;
+  final connection = headers.value('connection')?.toLowerCase() ?? '';
+  if (connection.contains('close')) return true;
   return false;
 }

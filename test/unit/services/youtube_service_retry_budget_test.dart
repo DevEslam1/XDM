@@ -20,10 +20,8 @@ void main() {
       YoutubeService.resetClientCooldowns();
     });
 
-    test(
-      'getStreams honors 45s total retry budget cap',
-      () async {
-        final sw = Stopwatch()..start();
+    test('getStreams honors 45s total retry budget cap', () async {
+      final sw = Stopwatch()..start();
 
       try {
         await YoutubeService.getStreams(

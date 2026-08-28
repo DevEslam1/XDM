@@ -9,7 +9,8 @@ void main() {
     late Directory tempDir;
 
     setUp(() async {
-      tempDir = await Directory.systemTemp.createTemp('dmx_completion_gate_test_');
+      tempDir =
+          await Directory.systemTemp.createTemp('dmx_completion_gate_test_');
     });
 
     tearDown(() async {
@@ -26,7 +27,8 @@ void main() {
       await file.writeAsBytes(content);
 
       final expectedSha = sha256.convert(content).toString();
-      final verified = await ChecksumService.verify(file.path, expectedSha, 'sha256');
+      final verified =
+          await ChecksumService.verify(file.path, expectedSha, 'sha256');
       expect(verified, isTrue);
     });
 
@@ -35,8 +37,10 @@ void main() {
       final content = List<int>.generate(2048, (i) => i % 256);
       await file.writeAsBytes(content);
 
-      const wrongSha = '0000000000000000000000000000000000000000000000000000000000000000';
-      final verified = await ChecksumService.verify(file.path, wrongSha, 'sha256');
+      const wrongSha =
+          '0000000000000000000000000000000000000000000000000000000000000000';
+      final verified =
+          await ChecksumService.verify(file.path, wrongSha, 'sha256');
       expect(verified, isFalse);
     });
   });

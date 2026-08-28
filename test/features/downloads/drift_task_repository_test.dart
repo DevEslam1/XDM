@@ -30,7 +30,8 @@ void main() {
       );
     }
 
-    test('save, loadAll, getById, and delete operations work correctly', () async {
+    test('save, loadAll, getById, and delete operations work correctly',
+        () async {
       final task1 = createTask('1');
       final task2 = createTask('2');
 

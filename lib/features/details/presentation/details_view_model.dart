@@ -29,6 +29,11 @@ class DetailsViewModel extends ChangeNotifier {
   }) {
     updateSpeedSpots();
     _speedRefreshTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (task == null) {
+        _speedRefreshTimer?.cancel();
+        _speedRefreshTimer = null;
+        return;
+      }
       updateSpeedSpots();
     });
   }
@@ -145,7 +150,8 @@ class DetailsViewModel extends ChangeNotifier {
         FlSpot(1, ulH.isNotEmpty ? ulH[0] : 0)
       ];
     }
-    final changed = !_spotsEqual(_downloadSpots, dl) || !_spotsEqual(_uploadSpots, ul);
+    final changed =
+        !_spotsEqual(_downloadSpots, dl) || !_spotsEqual(_uploadSpots, ul);
     _downloadSpots = dl;
     _uploadSpots = ul;
     _maxGraphLen = math.max(len, 1);

@@ -27,8 +27,8 @@ void main() {
     test('handles null and unknown labels gracefully', () {
       expect(CycleState.fromLibtorrent(null), CycleState.downloading);
       expect(CycleState.fromLibtorrent(''), CycleState.downloading);
-      expect(CycleState.fromLibtorrent('some_random_state'),
-          CycleState.stalled);
+      expect(
+          CycleState.fromLibtorrent('some_random_state'), CycleState.stalled);
     });
 
     test('parses names in camelCase and snake_case', () {

@@ -56,6 +56,7 @@ abstract class ITorrentStats {
   String get nativeVersion;
   Stream<TorrentAlertEvent> get alertUpdates;
   List<TorrentAlertEvent> getRecentAlerts([int? torrentId]);
+
   /// Per-file on-disk progress. [knownSizes] maps a file index to a length the
   /// caller already trusts, used when the engine reports a size of `0`
   /// (unknown) so files are not mistaken for complete.
@@ -106,7 +107,6 @@ abstract class ITorrentConfig {
   void prioritizeFile(int torrentId, int fileIndex, {int priority = 7});
   void setPieceDeadline(int torrentId, int pieceIndex, int deadlineMs);
   void enableSuperSeeding(int torrentId, bool enabled);
-  void applySettingsPack(TorrentSettingsPack pack);
   Future<void> setProxy({
     required String host,
     required int port,

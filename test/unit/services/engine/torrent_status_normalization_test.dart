@@ -17,7 +17,8 @@ void main() {
         equals('512.0 KB / 1.0 MB'),
       );
       expect(
-        sizeProgressLabel(received: 1024 * 1024 * 1024, total: 2 * 1024 * 1024 * 1024),
+        sizeProgressLabel(
+            received: 1024 * 1024 * 1024, total: 2 * 1024 * 1024 * 1024),
         equals('1.0 GB / 2.0 GB'),
       );
     });
@@ -33,7 +34,9 @@ void main() {
       expect(peersLabel(connected: null, totalInSwarm: null), equals('—'));
     });
 
-    test('TorrentDataStatus helpers evaluate metadata and checking flags correctly', () {
+    test(
+        'TorrentDataStatus helpers evaluate metadata and checking flags correctly',
+        () {
       const statusFetching = TorrentDataStatus(
         totalWanted: 0,
         totalWantedDone: 0,
@@ -89,7 +92,9 @@ void main() {
       expect(readyInfo.isFetchingMetadata, isFalse);
     });
 
-    test('TorrentInfo model properly maps and normalizes progress and swarm counts', () {
+    test(
+        'TorrentInfo model properly maps and normalizes progress and swarm counts',
+        () {
       const info = TorrentInfo(
         id: 1,
         name: 'ubuntu.iso',

@@ -468,13 +468,24 @@ class AdBlockFilterUpdater {
     // wildcard regexes are only recompiled for those, not the whole cache.
     final changedPatterns = <String>{};
 
-    // FIX: Clear all parsed rule sets BEFORE re-parsing so stale rules from
-    // a previous update cycle don't accumulate. Without this, every update
-    // appends to the existing sets, causing unbounded growth and duplicate
-    // rules that waste memory and SharedPreferences space.
+    // FIX(C2): Snapshot the current in-memory state before clearing so that
+    // if all downloads fail, we can restore immediately without waiting for
+    // the prefs restore path. This eliminates the window where the ad
+    // blocker has ZERO rules active.
+    final savedPatterns = Set<String>.from(_urlPatterns);
+    final savedCosmeticRules = Set<String>.from(_cosmeticRules);
+    final savedSiteCosmeticRules = Map<String, Set<String>>.from(
+      _siteCosmeticRules.map((k, v) => MapEntry(k, Set<String>.from(v))),
+    );
+    final savedCosmeticExceptions = Map<String, Set<String>>.from(
+      _cosmeticExceptions.map((k, v) => MapEntry(k, Set<String>.from(v))),
+    );
+    final savedGlobalCosmeticExceptions =
+        Set<String>.from(_globalCosmeticExceptions);
+    final savedScriptletRules = Set<String>.from(_scriptletRules);
+
     _urlPatterns.clear();
-    _urlPatternsTrie
-        .clear(); // Bug #2 fix: trie must be cleared alongside _urlPatterns to avoid stale patterns accumulating across filter updates
+    _urlPatternsTrie.clear();
     _cosmeticRules.clear();
     _siteCosmeticRules.clear();
     _cosmeticExceptions.clear();
@@ -654,62 +665,31 @@ class AdBlockFilterUpdater {
       _rebuildWildcardPatterns(changedPatterns);
     } else {
       _log.warning(
-          'Some filter sources failed to download. Pattern and cosmetic rule updates were skipped to prevent data loss.');
-      // Reload old patterns/cosmetics from prefs to restore in-memory state
-      _urlPatterns.clear();
-      _urlPatternsTrie.clear();
-      _cosmeticRules.clear();
-      _siteCosmeticRules.clear();
-      _cosmeticExceptions.clear();
-      _scriptletRules.clear();
-
-      final cachedPatterns = prefs.getStringList(_patternsKey) ?? [];
-      final cachedCosmetics = prefs.getStringList(_cosmeticKey) ?? [];
-      final cachedScriptlets = prefs.getStringList(_scriptletsKey) ?? [];
-      _urlPatterns.addAll(cachedPatterns);
-      for (final p in cachedPatterns) {
+          'Some filter sources failed to download. Restoring previous in-memory rule state.');
+      // FIX(C2): Restore from the pre-update snapshot (not just prefs) to
+      // eliminate the window where the ad blocker has zero rules active.
+      _urlPatterns
+        ..clear()
+        ..addAll(savedPatterns);
+      for (final p in savedPatterns) {
         _urlPatternsTrie.insert(p);
       }
-      // FIX(P6): Rebuild only from the restored pattern set.
-      _rebuildWildcardPatterns(cachedPatterns.toSet());
-      _cosmeticRules.addAll(cachedCosmetics);
-      _scriptletRules.addAll(cachedScriptlets);
-
-      _globalCosmeticExceptions.clear();
+      _rebuildWildcardPatterns(savedPatterns);
+      _cosmeticRules
+        ..clear()
+        ..addAll(savedCosmeticRules);
+      _siteCosmeticRules
+        ..clear()
+        ..addAll(savedSiteCosmeticRules);
+      _cosmeticExceptions
+        ..clear()
+        ..addAll(savedCosmeticExceptions);
       _globalCosmeticExceptions
-          .addAll(prefs.getStringList(_globalCosmeticExceptionsKey) ?? []);
-
-      final siteCosmeticsStr = prefs.getString(_siteCosmeticKey);
-      if (siteCosmeticsStr != null) {
-        try {
-          final decoded = jsonDecode(siteCosmeticsStr) as Map<String, dynamic>;
-          for (final entry in decoded.entries) {
-            final rules = (entry.value as List).cast<String>();
-            _siteCosmeticRules[entry.key] = rules.toSet();
-          }
-          // ignore: empty_catches
-        } catch (e, st) {
-          LoggingService.logger('AdblockFilterUpdater')
-              .warning('Operation failed', e, st);
-        }
-      }
-
-      final siteCosmeticExceptionsStr =
-          prefs.getString(_siteCosmeticExceptionsKey);
-      if (siteCosmeticExceptionsStr != null) {
-        try {
-          final decoded =
-              jsonDecode(siteCosmeticExceptionsStr) as Map<String, dynamic>;
-          for (final entry in decoded.entries) {
-            final rules = (entry.value as List).cast<String>();
-            _cosmeticExceptions[entry.key] = rules.toSet();
-          }
-          // ignore: empty_catches
-        } catch (e, st) {
-          LoggingService.logger('AdblockFilterUpdater')
-              .warning('Operation failed', e, st);
-        }
-      }
+        ..clear()
+        ..addAll(savedGlobalCosmeticExceptions);
+      _scriptletRules
+        ..clear()
+        ..addAll(savedScriptletRules);
     }
   }
 

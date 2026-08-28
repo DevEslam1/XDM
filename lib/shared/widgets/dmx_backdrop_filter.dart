@@ -46,7 +46,10 @@ class DmxBackdropFilter extends StatefulWidget {
   static int get activeCount => _activeCount;
 
   @visibleForTesting
-  static void resetActiveCount() => _activeCount = 0;
+  static void resetActiveCount() {
+    _activeCount = 0;
+    _disabled = false;
+  }
 
   @override
   State<DmxBackdropFilter> createState() => _DmxBackdropFilterState();

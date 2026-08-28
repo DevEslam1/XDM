@@ -55,7 +55,8 @@ void main() {
       final (first, second) = split!;
 
       expect(first.start, equals(0));
-      expect(first.end, equals(chunk.start + 3 * 1024 * 1024 + (3 * 1024 * 1024 ~/ 2) - 1));
+      expect(first.end,
+          equals(chunk.start + 3 * 1024 * 1024 + (3 * 1024 * 1024 ~/ 2) - 1));
       expect(second.start, equals(first.end + 1));
       expect(second.end, equals(chunk.end));
       expect(second.downloaded, equals(0));
@@ -72,14 +73,17 @@ void main() {
       expect(predictor.predictedSpeed, closeTo(1300.0, 0.01));
     });
 
-    test('ProtocolFallbackMemory: learns and retrieves per-host concurrency caps', () {
+    test(
+        'ProtocolFallbackMemory: learns and retrieves per-host concurrency caps',
+        () {
       const host = 'download.example.com';
       expect(ProtocolFallbackMemory.getHostConcurrencyCap(host), isNull);
 
       ProtocolFallbackMemory.recordHostConcurrencyCap(host, 3);
       expect(ProtocolFallbackMemory.getHostConcurrencyCap(host), equals(3));
 
-      ProtocolFallbackMemory.recordHostConcurrencyCap('https://download.example.com/file.zip', 2);
+      ProtocolFallbackMemory.recordHostConcurrencyCap(
+          'https://download.example.com/file.zip', 2);
       expect(ProtocolFallbackMemory.getHostConcurrencyCap(host), equals(2));
 
       ProtocolFallbackMemory.clearConcurrencyCaps();

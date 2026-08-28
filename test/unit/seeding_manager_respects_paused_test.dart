@@ -13,7 +13,9 @@ void main() {
       seedingManager = TorrentSeedingManager();
     });
 
-    test('shouldStopSeedingForTask returns false when task cycleState is paused', () {
+    test(
+        'shouldStopSeedingForTask returns false when task cycleState is paused',
+        () {
       final now = DateTime.now();
       final pausedTask = DownloadTask(
         id: 'seed_task_1',
@@ -46,7 +48,8 @@ void main() {
       expect(shouldStop, isFalse);
     });
 
-    test('shouldStopSeedingForTask returns false when task status is paused', () {
+    test('shouldStopSeedingForTask returns false when task status is paused',
+        () {
       final now = DateTime.now();
       final pausedTask = DownloadTask(
         id: 'seed_task_2',

@@ -89,7 +89,9 @@ void main() {
       },
     };
 
-    test('validates every (from, to) state pair across all DomainDownloadState values', () async {
+    test(
+        'validates every (from, to) state pair across all DomainDownloadState values',
+        () async {
       for (final fromState in DomainDownloadState.values) {
         final allowedTargets = expectedTransitions[fromState] ?? {};
 
@@ -98,7 +100,8 @@ void main() {
           expect(
             DomainStateMachine.canTransition(fromState, toState),
             isAllowed,
-            reason: '$fromState -> $toState should be ${isAllowed ? 'allowed' : 'rejected'}',
+            reason:
+                '$fromState -> $toState should be ${isAllowed ? 'allowed' : 'rejected'}',
           );
 
           final sm = DomainStateMachine(

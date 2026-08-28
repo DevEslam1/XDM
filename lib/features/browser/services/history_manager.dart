@@ -30,12 +30,14 @@ class BrowserHistoryManager {
   final bool Function() isActive;
 
   String? _lastHistoryEntryUrl;
+  String? _lastHistoryEntryNormalized;
   int? _lastHistoryEntryId;
   final Map<String, ({int id, DateTime visitedAt})> _recentVisits = {};
 
   /// Resets in-memory dedup tracking when incognito mode is toggled ON.
   void reset() {
     _lastHistoryEntryUrl = null;
+    _lastHistoryEntryNormalized = null;
     _lastHistoryEntryId = null;
     _recentVisits.clear();
   }
@@ -86,7 +88,8 @@ class BrowserHistoryManager {
           _log.warning('[HistoryManager] Time update error: $e');
         });
         if (title != null && title.isNotEmpty && title != clean) {
-          db.updateBrowserHistoryTitle(id, title).catchError((e) {
+          final safeTitle = _sanitizeTitle(title, clean);
+          db.updateBrowserHistoryTitle(id, safeTitle).catchError((e) {
             _log.warning('[HistoryManager] Title update error: $e');
           });
         }
@@ -96,13 +99,15 @@ class BrowserHistoryManager {
       return;
     }
 
-    if (clean == _lastHistoryEntryUrl) {
+    if (clean == _lastHistoryEntryUrl ||
+        _normalizeForDedup(clean) == _lastHistoryEntryNormalized) {
       if (title != null && title.isNotEmpty && title != clean) {
         if (_lastHistoryEntryId != null) {
           try {
             final db = resolveDatabase();
+            final safeTitle = _sanitizeTitle(title, clean);
             db
-                .updateBrowserHistoryTitle(_lastHistoryEntryId!, title)
+                .updateBrowserHistoryTitle(_lastHistoryEntryId!, safeTitle)
                 .catchError((e) {
               _log.warning('[HistoryManager] Title update error: $e');
             });
@@ -116,8 +121,10 @@ class BrowserHistoryManager {
     }
 
     _lastHistoryEntryUrl = clean;
+    _lastHistoryEntryNormalized = _normalizeForDedup(clean);
     _lastHistoryEntryId = null;
-    final titleToRecord = (title != null && title.isNotEmpty) ? title : clean;
+    final rawTitle = (title != null && title.isNotEmpty) ? title : clean;
+    final titleToRecord = _sanitizeTitle(rawTitle, clean);
     try {
       final db = resolveDatabase();
       db.addBrowserHistory({
@@ -130,6 +137,7 @@ class BrowserHistoryManager {
           _recentVisits[clean] = (id: id, visitedAt: now);
           _lastHistoryEntryId = id;
           _lastHistoryEntryUrl = clean;
+          _lastHistoryEntryNormalized = _normalizeForDedup(clean);
         }
       }).catchError((e) {
         _log.warning('[HistoryManager] Failed to record history: $e');
@@ -157,6 +165,35 @@ class BrowserHistoryManager {
       return await db.loadBrowserHistory(max: limit);
     } catch (_) {
       return [];
+    }
+  }
+
+  static String _sanitizeTitle(String raw, String fallback) {
+    var t = raw.trim();
+    t = t.replaceAll(RegExp(r'<[^>]*>'), '');
+    t = t.replaceAll(RegExp(r'&#x[0-9a-fA-F]+;'), '').replaceAll(RegExp(r'&#\d+;'), '');
+    if (t.length > 200) t = t.substring(0, 200);
+    final lower = t.toLowerCase();
+    if (lower.startsWith('javascript:') || lower.startsWith('data:')) return fallback;
+    if (t.isEmpty) return fallback;
+    return t;
+  }
+
+  /// Normalizes a URL for deduplication: strips trailing slash and lowercases host.
+  static String _normalizeForDedup(String url) {
+    try {
+      final parsed = Uri.tryParse(url);
+      if (parsed == null) return url;
+      var normalized = url;
+      // Strip trailing slash from path-only URLs (not root '/')
+      if (parsed.path.isNotEmpty &&
+          parsed.path != '/' &&
+          normalized.endsWith('/')) {
+        normalized = normalized.substring(0, normalized.length - 1);
+      }
+      return normalized.toLowerCase();
+    } catch (_) {
+      return url.toLowerCase();
     }
   }
 }

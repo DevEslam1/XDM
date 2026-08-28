@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show ProcessInfo;
 import 'package:flutter/scheduler.dart';
 import 'download_engine.dart';
 import 'frame_watchdog.dart';
@@ -69,8 +70,9 @@ class PerformanceMonitor {
     final buildMs = averageBuildMillis ?? 0.0;
     final rasterMs = averageRasterMillis ?? 0.0;
     final totalMs = buildMs + rasterMs;
-    if (totalMs <= 0) return 60.0;
-    return (1000.0 / totalMs).clamp(0.0, 120.0);
+    // FIX(M-20): Return 0 instead of fabricated 60fps when no data available.
+    if (totalMs <= 0) return 0.0;
+    return (1000.0 / totalMs).clamp(0.0, 144.0);
   }
 
   /// Average build duration over the sample window (ms), or null when empty.
@@ -93,21 +95,44 @@ class PerformanceMonitor {
     return (sum / _rasterSamples.length) / 1000.0;
   }
 
-  /// One-line diagnostic health summary string, e.g. "60fps | 2.3% jank | 8.2ms avg build".
+  /// One-line diagnostic health summary string.
   String get healthSummary {
     final jankPct = (jankRatio * 100).toStringAsFixed(1);
     final avgBuild = (averageBuildMillis ?? 0.0).toStringAsFixed(1);
-    return '60fps | $jankPct% jank | ${avgBuild}ms avg build';
+    final fps = currentFps.toStringAsFixed(0);
+    return '$fps fps | $jankPct% jank | ${avgBuild}ms avg build';
   }
 
-  /// Starts collecting frame timings. Idempotent.
+  /// Current process resident set size (bytes), or null when the platform can't
+  /// provide it (e.g. web). Read on demand — cheap, no background polling.
+  /// Consumed by the live monitor on its adaptive 2s/4s cadence. (Plan 07 §7.5)
+  int? get currentRssBytes {
+    try {
+      final rss = ProcessInfo.currentRss;
+      return rss > 0 ? rss : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Peak process RSS (bytes) since launch, or null when unavailable.
+  int? get maxRssBytes {
+    try {
+      final rss = ProcessInfo.maxRss;
+      return rss > 0 ? rss : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Starts collecting frame timings. Must be called on the main UI isolate. Idempotent.
   void start() {
     if (_listening) return;
     _listening = true;
     FrameWatchdog.start();
   }
 
-  /// Stops collecting frame timings.
+  /// Stops collecting frame timings. Must be called on the main UI isolate.
   void stop() {
     _listening = false;
   }
@@ -174,7 +199,12 @@ class PerformanceMonitor {
         PowerMonitor.batterySaverMode == BatterySaverMode.aggressive) {
       return;
     }
-    _onTimings(timings);
+    final validTimings = timings
+        .where((t) =>
+            t.buildDuration > Duration.zero || t.rasterDuration > Duration.zero)
+        .toList();
+    if (validTimings.isEmpty) return;
+    _onTimings(validTimings);
   }
 
   void _trim() {

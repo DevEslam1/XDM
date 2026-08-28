@@ -55,11 +55,9 @@ class WidgetUpdateWorker(context: Context, params: WorkerParameters) :
         }
 
         private fun refreshAllWidgets(context: Context) {
-            val manager = android.appwidget.AppWidgetManager.getInstance(context)
-            val ids = manager.getAppWidgetIds(
-                android.content.ComponentName(context, DMXWidgetProvider::class.java),
-            )
-            DMXWidgetProvider().onUpdate(context, manager, ids)
+            val intent = android.content.Intent(DMXWidgetProvider.ACTION_UPDATE_WIDGETS)
+            intent.setPackage(context.packageName)
+            context.sendBroadcast(intent)
         }
     }
 }

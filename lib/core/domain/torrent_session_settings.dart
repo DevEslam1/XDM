@@ -13,6 +13,8 @@ class TorrentSessionSettings {
   final bool sequentialDownload;
   final double shareRatioLimit;
   final int maxSeedingTimeMinutes;
+  final bool enableUtp;
+  final int diskCacheSizeBytes;
 
   const TorrentSessionSettings({
     this.enableDht = true,
@@ -24,16 +26,19 @@ class TorrentSessionSettings {
     this.sequentialDownload = false,
     this.shareRatioLimit = 0.0,
     this.maxSeedingTimeMinutes = 0,
+    this.enableUtp = true,
+    this.diskCacheSizeBytes = 64 * 1024 * 1024,
   })  : assert(torrentConnectionsLimit > 0,
             'Connections limit must be greater than zero'),
         assert(downloadRateLimitKbps >= 0,
             'Download rate limit cannot be negative'),
         assert(
             uploadRateLimitKbps >= 0, 'Upload rate limit cannot be negative'),
+        assert(shareRatioLimit >= 0.0, 'Share ratio limit cannot be negative'),
         assert(
-            shareRatioLimit >= 0.0, 'Share ratio limit cannot be negative'),
-        assert(maxSeedingTimeMinutes >= 0,
-            'Max seeding time cannot be negative');
+            maxSeedingTimeMinutes >= 0, 'Max seeding time cannot be negative'),
+        assert(diskCacheSizeBytes > 0,
+            'Disk cache size must be greater than zero');
 
   // FIX(M4): validated factory that throws ArgumentError on negative limits or connectionsLimit <= 0
   factory TorrentSessionSettings.validated({
@@ -46,6 +51,8 @@ class TorrentSessionSettings {
     bool sequentialDownload = false,
     double shareRatioLimit = 0.0,
     int maxSeedingTimeMinutes = 0,
+    bool enableUtp = true,
+    int diskCacheSizeBytes = 64 * 1024 * 1024,
   }) {
     if (torrentConnectionsLimit <= 0) {
       throw ArgumentError.value(
@@ -82,6 +89,13 @@ class TorrentSessionSettings {
         'Max seeding time cannot be negative',
       );
     }
+    if (diskCacheSizeBytes <= 0) {
+      throw ArgumentError.value(
+        diskCacheSizeBytes,
+        'diskCacheSizeBytes',
+        'Disk cache size must be greater than zero',
+      );
+    }
     return TorrentSessionSettings(
       enableDht: enableDht,
       enableUpnp: enableUpnp,
@@ -92,6 +106,8 @@ class TorrentSessionSettings {
       sequentialDownload: sequentialDownload,
       shareRatioLimit: shareRatioLimit,
       maxSeedingTimeMinutes: maxSeedingTimeMinutes,
+      enableUtp: enableUtp,
+      diskCacheSizeBytes: diskCacheSizeBytes,
     );
   }
 
@@ -105,6 +121,8 @@ class TorrentSessionSettings {
     bool? sequentialDownload,
     double? shareRatioLimit,
     int? maxSeedingTimeMinutes,
+    bool? enableUtp,
+    int? diskCacheSizeBytes,
   }) {
     return TorrentSessionSettings.validated(
       enableDht: enableDht ?? this.enableDht,
@@ -119,6 +137,8 @@ class TorrentSessionSettings {
       shareRatioLimit: shareRatioLimit ?? this.shareRatioLimit,
       maxSeedingTimeMinutes:
           maxSeedingTimeMinutes ?? this.maxSeedingTimeMinutes,
+      enableUtp: enableUtp ?? this.enableUtp,
+      diskCacheSizeBytes: diskCacheSizeBytes ?? this.diskCacheSizeBytes,
     );
   }
 
@@ -135,7 +155,9 @@ class TorrentSessionSettings {
           uploadRateLimitKbps == other.uploadRateLimitKbps &&
           sequentialDownload == other.sequentialDownload &&
           shareRatioLimit == other.shareRatioLimit &&
-          maxSeedingTimeMinutes == other.maxSeedingTimeMinutes;
+          maxSeedingTimeMinutes == other.maxSeedingTimeMinutes &&
+          enableUtp == other.enableUtp &&
+          diskCacheSizeBytes == other.diskCacheSizeBytes;
 
   @override
   int get hashCode => Object.hash(
@@ -148,5 +170,7 @@ class TorrentSessionSettings {
         sequentialDownload,
         shareRatioLimit,
         maxSeedingTimeMinutes,
+        enableUtp,
+        diskCacheSizeBytes,
       );
 }

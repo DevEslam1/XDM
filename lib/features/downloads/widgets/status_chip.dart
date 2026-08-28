@@ -181,7 +181,8 @@ class StatusChip extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.refresh_rounded, size: 10, color: AppTheme.neonRed),
+                  const Icon(Icons.refresh_rounded,
+                      size: 10, color: AppTheme.neonRed),
                   const SizedBox(width: 2),
                   Text(
                     'Retry',

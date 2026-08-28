@@ -34,28 +34,57 @@ DownloadTask createDummyTask({
 void main() {
   group('P0-3: DownloadStateMachine & transitionTo hardening', () {
     test('canTransition allows valid lifecycle progression', () {
-      expect(DownloadStateMachine.canTransition(DownloadState.queued, DownloadState.downloading), isTrue);
-      expect(DownloadStateMachine.canTransition(DownloadState.downloading, DownloadState.paused), isTrue);
-      expect(DownloadStateMachine.canTransition(DownloadState.downloading, DownloadState.completed), isTrue);
-      expect(DownloadStateMachine.canTransition(DownloadState.downloading, DownloadState.failed), isTrue);
-      expect(DownloadStateMachine.canTransition(DownloadState.paused, DownloadState.queued), isTrue);
-      expect(DownloadStateMachine.canTransition(DownloadState.paused, DownloadState.downloading), isTrue);
+      expect(
+          DownloadStateMachine.canTransition(
+              DownloadState.queued, DownloadState.downloading),
+          isTrue);
+      expect(
+          DownloadStateMachine.canTransition(
+              DownloadState.downloading, DownloadState.paused),
+          isTrue);
+      expect(
+          DownloadStateMachine.canTransition(
+              DownloadState.downloading, DownloadState.completed),
+          isTrue);
+      expect(
+          DownloadStateMachine.canTransition(
+              DownloadState.downloading, DownloadState.failed),
+          isTrue);
+      expect(
+          DownloadStateMachine.canTransition(
+              DownloadState.paused, DownloadState.queued),
+          isTrue);
+      expect(
+          DownloadStateMachine.canTransition(
+              DownloadState.paused, DownloadState.downloading),
+          isTrue);
     });
 
     test('canTransition rejects illegal transitions', () {
-      expect(DownloadStateMachine.canTransition(DownloadState.completed, DownloadState.failed), isFalse);
-      expect(DownloadStateMachine.canTransition(DownloadState.failed, DownloadState.completed), isFalse);
-      expect(DownloadStateMachine.canTransition(DownloadState.idle, DownloadState.completed), isFalse);
+      expect(
+          DownloadStateMachine.canTransition(
+              DownloadState.completed, DownloadState.failed),
+          isFalse);
+      expect(
+          DownloadStateMachine.canTransition(
+              DownloadState.failed, DownloadState.completed),
+          isFalse);
+      expect(
+          DownloadStateMachine.canTransition(
+              DownloadState.idle, DownloadState.completed),
+          isFalse);
     });
 
-    test('transitionTo maintains state when an invalid transition is attempted', () {
+    test('transitionTo maintains state when an invalid transition is attempted',
+        () {
       final task = createDummyTask(
         id: 'task-test-1',
         status: DownloadStatus.completed,
       );
 
       // Transitioning directly from completed to failed is illegal
-      final result = task.transitionTo(DownloadStatus.failed, reason: 'test failure');
+      final result =
+          task.transitionTo(DownloadStatus.failed, reason: 'test failure');
       expect(result.status, DownloadStatus.completed);
     });
 
@@ -65,13 +94,16 @@ void main() {
         status: DownloadStatus.downloading,
       );
 
-      final paused = task.transitionTo(DownloadStatus.paused, reason: 'user paused');
+      final paused =
+          task.transitionTo(DownloadStatus.paused, reason: 'user paused');
       expect(paused.status, DownloadStatus.paused);
 
-      final downloadingAgain = paused.transitionTo(DownloadStatus.downloading, reason: 'user resumed');
+      final downloadingAgain = paused.transitionTo(DownloadStatus.downloading,
+          reason: 'user resumed');
       expect(downloadingAgain.status, DownloadStatus.downloading);
 
-      final completed = downloadingAgain.transitionTo(DownloadStatus.completed, reason: 'done');
+      final completed = downloadingAgain.transitionTo(DownloadStatus.completed,
+          reason: 'done');
       expect(completed.status, DownloadStatus.completed);
     });
   });

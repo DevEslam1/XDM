@@ -64,8 +64,14 @@ void main() {
 
       final loaded = await dbService.loadTasks();
       expect(loaded.length, 2);
-      expect(loaded.any((t) => t.id == 'task-upsert-1' && t.downloadedBytes == 512), isTrue);
-      expect(loaded.any((t) => t.id == 'task-upsert-2' && t.status == DownloadStatus.queued), isTrue);
+      expect(
+          loaded
+              .any((t) => t.id == 'task-upsert-1' && t.downloadedBytes == 512),
+          isTrue);
+      expect(
+          loaded.any((t) =>
+              t.id == 'task-upsert-2' && t.status == DownloadStatus.queued),
+          isTrue);
 
       // Now update task1 and verify upsert modifies existing record
       final updatedTask1 = task1.copyWith(
@@ -77,7 +83,8 @@ void main() {
 
       final reloaded = await dbService.loadTasks();
       expect(reloaded.length, 2);
-      final persistedTask1 = reloaded.firstWhere((t) => t.id == 'task-upsert-1');
+      final persistedTask1 =
+          reloaded.firstWhere((t) => t.id == 'task-upsert-1');
       expect(persistedTask1.downloadedBytes, 1024);
       expect(persistedTask1.status, DownloadStatus.completed);
     });
