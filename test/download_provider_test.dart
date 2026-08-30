@@ -2,25 +2,20 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:battery_plus/battery_plus.dart';
-import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 import 'package:dio/dio.dart';
-import 'package:dmx/core/interfaces/i_torrent_service.dart';
+import 'package:drift/drift.dart' as drift;
 import 'package:dmx/core/services/database_service.dart';
 import 'package:dmx/core/services/download_engine.dart';
 import 'package:dmx/core/services/permission_service.dart';
-import 'package:dmx/core/services/power_monitor.dart';
-import 'package:dmx/core/services/torrent_service_stub.dart';
-import 'package:dmx/core/services/youtube_service.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
+import 'package:dmx/core/services/youtube_service.dart';
 import 'package:dmx/features/downloads/provider/download_provider.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
-import 'package:drift/drift.dart' as drift;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:get_it/get_it.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 
 class MockConnectivityPlatform extends ConnectivityPlatform {
   static List<ConnectivityResult> results = [ConnectivityResult.wifi];
@@ -45,6 +40,7 @@ class FakeDownloadEngine extends DownloadEngine {
     String? requestedFileName,
     String? referer,
     String? customUserAgent,
+    bool bypassSSL = false,
     String? cookies,
     String? oauthToken,
     CancelToken? cancelToken,
@@ -134,30 +130,11 @@ void main() {
     Hive.init('build/test_hive_provider');
     ConnectivityPlatform.instance = MockConnectivityPlatform();
 
-    final getIt = GetIt.instance;
-    if (getIt.isRegistered<ITorrentService>()) {
-      getIt.unregister<ITorrentService>();
-    }
-    getIt.registerSingleton<ITorrentService>(TorrentServiceStub());
-
     // Register mock handlers for platform channels
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-      const MethodChannel('com.xdm.downloadmanager/widget'),
+      const MethodChannel('com.example.dmx/widget'),
       (methodCall) async => null,
-    );
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-      const MethodChannel('com.dmx.app/widget_bridge'),
-      (methodCall) async => null,
-    );
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-      const MethodChannel('com.dmx.app/torrent'),
-      (methodCall) async {
-        if (methodCall.method == 'init') return {'status': 'ok'};
-        return null;
-      },
     );
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
@@ -246,52 +223,17 @@ void main() {
       savePath: '',
     );
 
-    await Future<void>.delayed(const Duration(milliseconds: 300));
+    // Wait for the debounced queue pump + async start chain to commit the
+    // first download (a fixed 50ms wait races the cold start path).
+    final pumpWatch = Stopwatch()..start();
+    while (provider.downloadingTasksCount < 1 &&
+        pumpWatch.elapsed < const Duration(seconds: 5)) {
+      await Future<void>.delayed(const Duration(milliseconds: 25));
+    }
 
     expect(provider.downloadingTasksCount, 1);
     expect(provider.queuedTasksCount, 1);
     expect(engine.startedUrls, ['https://example.com/one.zip']);
-  });
-
-  test('downloadOnlyWhileCharging gate holds tasks until charging resumes',
-      () async {
-    final (database, settings) = await _setupServices();
-    settings.downloadOnlyWhileCharging = true;
-    addTearDown(() => settings.downloadOnlyWhileCharging = false);
-    PowerMonitor.setBatteryStateForTesting(BatteryState.discharging);
-    addTearDown(
-        () => PowerMonitor.setBatteryStateForTesting(BatteryState.unknown));
-
-    final engine = FakeDownloadEngine();
-    final provider = DownloadProvider(
-      databaseService: database,
-      settingsProvider: settings,
-      downloadEngine: engine,
-      permissionService: FakePermissionService(),
-    );
-    addTearDown(provider.dispose);
-    await provider.load();
-
-    await provider.addDownload(
-      name: 'charge.zip',
-      url: 'https://example.com/charge.zip',
-      size: 0,
-      category: '',
-      savePath: '',
-    );
-    await Future<void>.delayed(const Duration(milliseconds: 300));
-
-    // Not charging: start-gate pauses the task before it can begin.
-    expect(engine.startedUrls, isEmpty);
-    final held = provider.tasks.firstWhere((t) => t.fileName == 'charge.zip');
-    expect(held.status, DownloadStatus.paused);
-    expect(held.errorMessage, DownloadStatusMessages.waitingCharging);
-
-    // Plug in: charging notifier fires, task is re-queued and started.
-    PowerMonitor.setBatteryStateForTesting(BatteryState.charging);
-    await Future<void>.delayed(const Duration(milliseconds: 300));
-
-    expect(engine.startedUrls, ['https://example.com/charge.zip']);
   });
 
   test('addDownloadsBatch enqueues multiple tasks in one call', () async {
@@ -358,7 +300,7 @@ void main() {
       expect(provider.tasks.first.chunks.length, 2);
 
       await provider.pauseTask(taskId);
-      await Future.delayed(const Duration(milliseconds: 300));
+      await Future.delayed(const Duration(milliseconds: 50));
 
       await provider.updateTaskThreadCount(taskId, 5);
       expect(provider.tasks.first.threadCount, 5);
@@ -678,7 +620,7 @@ void main() {
       );
 
       // Wait for the async task to complete and fail
-      await Future<void>.delayed(const Duration(milliseconds: 300));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
 
       expect(provider.tasks.first.status, DownloadStatus.failed);
       expect(
@@ -761,7 +703,7 @@ void main() {
       );
       await provider.load(pauseOrphanDownloads: false);
       // Wait briefly for the queue to pump
-      await Future<void>.delayed(const Duration(milliseconds: 300));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
 
       // The orphan task should be queued/downloading
       final t1 = provider.tasks.firstWhere((t) => t.id == '1');
@@ -881,7 +823,7 @@ void main() {
     expect(provider.tasks.first.status, DownloadStatus.paused);
 
     await provider.resumeAllTasks();
-    await Future<void>.delayed(const Duration(milliseconds: 300));
+    await Future<void>.delayed(const Duration(milliseconds: 50));
 
     expect(provider.tasks.first.status,
         anyOf(DownloadStatus.queued, DownloadStatus.downloading));
@@ -1264,6 +1206,9 @@ void main() {
       expect(
           DownloadProvider.youtubeStreamIdentityChanged(urlOld, urlNewDiffItag),
           isTrue);
+      // Current model behavior: a googlevideo HOST rotation alone is NOT an
+      // identity change (hosts rotate constantly without changing format —
+      // only id/itag/mime/clen count).
       expect(
           DownloadProvider.youtubeStreamIdentityChanged(urlOld, urlNewDiffHost),
           isFalse);
@@ -1402,6 +1347,7 @@ class FakeDownloadEngine403 extends DownloadEngine {
     String? requestedFileName,
     String? referer,
     String? customUserAgent,
+    bool bypassSSL = false,
     String? cookies,
     String? oauthToken,
     CancelToken? cancelToken,

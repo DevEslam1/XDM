@@ -1,8 +1,7 @@
 import 'dart:io';
-
-import 'package:dmx/core/services/download_engine.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+import 'package:dmx/core/services/download_engine.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -36,8 +35,7 @@ void main() {
       expect(await Directory(newSubDir).exists(), isTrue);
     });
 
-    test('Path traversal attempt is blocked with InvalidPathException',
-        () async {
+    test('Path traversal attempt is blocked with InvalidPathException', () async {
       final traversalPath = p.join(tempDir.path, '..', 'outside');
       expect(
         () => DownloadEngine.validateSavePath(traversalPath),

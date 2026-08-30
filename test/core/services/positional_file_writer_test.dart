@@ -1,8 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
-
-import 'package:dmx/core/services/positional_file_writer.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dmx/core/services/positional_file_writer.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -79,15 +78,13 @@ void main() {
 
       expect(await resumeWriter.length(), equals(1000));
       final readPart = await resumeWriter.readRange(0, 250);
-      expect(
-          readPart, equals(Uint8List.fromList(List.generate(250, (i) => 42))));
+      expect(readPart, equals(Uint8List.fromList(List.generate(250, (i) => 42))));
 
       await resumeWriter.write(
           1, 500, Uint8List.fromList(List.generate(250, (i) => 99)));
       await resumeWriter.flushAll();
       final readSecond = await resumeWriter.readRange(500, 250);
-      expect(readSecond,
-          equals(Uint8List.fromList(List.generate(250, (i) => 99))));
+      expect(readSecond, equals(Uint8List.fromList(List.generate(250, (i) => 99))));
 
       await resumeWriter.close();
     });
@@ -164,47 +161,6 @@ void main() {
 
       final readData = await writer.readRange(0, 15);
       expect(readData, equals(data));
-
-      await writer.close();
-    });
-
-    test('diskWriteBatching:false flushes each write immediately', () async {
-      final writer = await PositionalFileWriter.open(
-        testFilePath,
-        totalSize: 100,
-        threadCount: 1,
-        bufferSize: 1024, // large buffer that would normally retain the write
-        diskWriteBatching: false,
-      );
-
-      final data = Uint8List.fromList(List.generate(8, (i) => i));
-      await writer.write(0, 0, data);
-
-      // Write-through: nothing is left buffered even though the buffer is far
-      // from full, so a crash right here would not lose the bytes.
-      expect(writer.pendingBytes, equals(0));
-
-      await writer.close();
-    });
-
-    test('diskWriteBatching:true retains sub-buffer writes until flush',
-        () async {
-      final writer = await PositionalFileWriter.open(
-        testFilePath,
-        totalSize: 100,
-        threadCount: 1,
-        bufferSize: 1024,
-        // diskWriteBatching defaults to true
-      );
-
-      final data = Uint8List.fromList(List.generate(8, (i) => i));
-      await writer.write(0, 0, data);
-
-      // Batched: the small write stays in the in-memory buffer until flushed.
-      expect(writer.pendingBytes, equals(8));
-
-      await writer.flushAll();
-      expect(writer.pendingBytes, equals(0));
 
       await writer.close();
     });

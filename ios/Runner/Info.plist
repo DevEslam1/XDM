@@ -2,14 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>com.apple.security.application-groups</key>
-	<array>
-		<string>group.com.xdm.downloadmanager</string>
-	</array>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
-	<false/>
+	<true/>
 
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
@@ -133,22 +131,20 @@
 	</array>
 	<key>UIBackgroundModes</key>
 	<array>
-		<string>processing</string>
 		<string>fetch</string>
+		<string>processing</string>
 	</array>
 	<!--
 		ATS Justification for App Review:
-		XDM is a download manager. Users download arbitrary files from user-supplied
-		HTTP and HTTPS endpoints across the internet, including legacy servers.
-		NSAllowsArbitraryLoads is an intentional requirement for the core download functionality.
-		NSAllowsLocalNetworking is enabled for local network transfers and debugging.
-		Critical backend API domains enforce TLS 1.2+ and forward secrecy via NSExceptionDomains.
+		XDM is a download manager. Users download files from arbitrary HTTP/HTTPS
+		servers that they provide. Many file hosting servers still use plain HTTP.
+		NSAllowsArbitraryLoads is required for the core download functionality.
+		Our own backend API (xdm-backend-*.run.app) enforces TLS 1.2+ via
+		NSExceptionDomains.
 	-->
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
-		<true/>
-		<key>NSAllowsLocalNetworking</key>
 		<true/>
 		<key>NSExceptionDomains</key>
 		<dict>
@@ -160,53 +156,8 @@
 				<string>TLSv1.2</string>
 				<key>NSRequiresCertificateTransparency</key>
 				<false/>
-				<key>NSIncludesSubdomains</key>
-				<true/>
-			</dict>
-			<key>raw.githubusercontent.com</key>
-			<dict>
-				<key>NSExceptionRequiresForwardSecrecy</key>
-				<false/>
-				<key>NSIncludesSubdomains</key>
-				<true/>
-			</dict>
-			<key>cdn.jsdelivr.net</key>
-			<dict>
-				<key>NSExceptionRequiresForwardSecrecy</key>
-				<false/>
-				<key>NSIncludesSubdomains</key>
-				<true/>
-			</dict>
-			<key>youtube.com</key>
-			<dict>
-				<key>NSExceptionRequiresForwardSecrecy</key>
-				<false/>
-				<key>NSIncludesSubdomains</key>
-				<true/>
-			</dict>
-			<key>google.com</key>
-			<dict>
-				<key>NSExceptionRequiresForwardSecrecy</key>
-				<false/>
-				<key>NSIncludesSubdomains</key>
-				<true/>
-			</dict>
-			<key>gstatic.com</key>
-			<dict>
-				<key>NSExceptionRequiresForwardSecrecy</key>
-				<false/>
-				<key>NSIncludesSubdomains</key>
-				<true/>
-			</dict>
-			<key>easylist.to</key>
-			<dict>
-				<key>NSExceptionRequiresForwardSecrecy</key>
-				<false/>
-				<key>NSIncludesSubdomains</key>
-				<true/>
 			</dict>
 		</dict>
-	</dict>
 	<key>NSUserActivityTypes</key>
 	<array>
 		<string>StartDownloadIntent</string>
@@ -215,13 +166,5 @@
 		<string>GetDownloadStatusIntent</string>
 		<string>DownloadFileIntent</string>
 	</array>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>XDM needs access to your photo library to save downloaded images and videos.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>XDM needs permission to save downloaded images and videos to your photo library.</string>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>XDM uses the local network for peer discovery and BitTorrent transfers.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>XDM requires microphone access for audio functionality if requested.</string>
 </dict>
 </plist>

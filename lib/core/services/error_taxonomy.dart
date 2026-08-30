@@ -198,6 +198,19 @@ class ErrorTaxonomy {
       );
     }
 
+    // B10: a stall is transient (no updates for > 5 min) and leaves the
+    // engine handle — and all downloaded data — intact. Classify it as
+    // retryable with its own hint instead of falling through to the generic
+    // "Unexpected error" bucket reserved for fatal torrent failures.
+    if (error is TorrentStallException) {
+      return const ErrorClassification(
+        family: ErrorFamily.network,
+        message: 'Torrent stalled — retry to resume from current progress',
+        retryable: true,
+        recoveryAction: RecoveryAction.retryWithDelay,
+      );
+    }
+
     if (error is XdmBackendTimeoutException) {
       return const ErrorClassification(
         family: ErrorFamily.timeout,

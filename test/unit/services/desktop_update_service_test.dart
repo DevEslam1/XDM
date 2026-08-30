@@ -1,5 +1,5 @@
-import 'package:dmx/core/services/desktop_update_service.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dmx/core/services/desktop_update_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

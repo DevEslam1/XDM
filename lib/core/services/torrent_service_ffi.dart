@@ -145,6 +145,12 @@ class TorrentService {
           st,
         );
       }
+      // B5: release any pending pauseTorrent waiter promptly — force-stop
+      // removes the stats the waiter would otherwise time out waiting for.
+      final waiter = _pauseConfirmWaiters.remove(id);
+      if (waiter != null && !waiter.isCompleted) {
+        waiter.complete();
+      }
       _activeTorrentIds.remove(id);
       _latestProgress.remove(id);
       _latestStats.remove(id);
@@ -162,6 +168,13 @@ class TorrentService {
   // getFiles() is synchronous FFI; throttle compatibility metadata probes so
   // they cannot starve Flutter's UI isolate on every status tick.
   static final Map<int, DateTime> _metadataProbeAt = {};
+
+  // B5: per-torrent pause confirmations. pauseTorrent registers a waiter
+  // before its native call and awaits it OUTSIDE the lock; the status
+  // processing path below completes it. Waiting on the (lock-guarded) stream
+  // from inside the lock could only ever match pre-buffered events, because
+  // the producer itself needs that lock to add new ticks.
+  static final Map<int, Completer<void>> _pauseConfirmWaiters = {};
 
   static DateTime? _lastEmitTime;
   static Map<int, TorrentUpdateInfo>? _pendingUpdate;
@@ -350,6 +363,13 @@ class TorrentService {
   // so the flag would mislead the per-file progress estimator.
   static bool get sequentialDownloadEnabled =>
       _sequentialDownload && sequentialDownloadSupported;
+
+  /// The raw user setting captured by [configureSession], before the
+  /// capability gate applied by [sequentialDownloadEnabled]. The 1.9.2
+  /// native setter is a no-op, so the gated getter must stay false; the
+  /// wiring guard test asserts this field to prove the setting is captured.
+  @visibleForTesting
+  static bool get sequentialDownloadSettingForTesting => _sequentialDownload;
   static double get shareRatioLimit => _shareRatioLimit;
   static int get maxSeedingTimeMinutes => _maxSeedingTimeMinutes;
 
@@ -537,6 +557,20 @@ class TorrentService {
                   pieces: value.pieces,
                 );
                 _latestStats[value.id] = info;
+
+                // B5: complete a pauseTorrent waiter inline. Completing a
+                // completer is synchronous and needs no lock re-entry, so the
+                // waiter resolves as soon as the paused label is processed —
+                // even while the producer holds the lock.
+                final pauseWaiter = _pauseConfirmWaiters[value.id];
+                if (pauseWaiter != null && !pauseWaiter.isCompleted) {
+                  final label = info.stateLabel.toLowerCase();
+                  if (label.contains('paused') ||
+                      label.contains('stopped') ||
+                      label.contains('pausing')) {
+                    pauseWaiter.complete();
+                  }
+                }
                 return MapEntry(key, info);
               });
 
@@ -728,6 +762,36 @@ class TorrentService {
       {List<int>? resumeData}) {
     if (!isInitialized) return -1;
     _startTrackingUpdates();
+    // B4: a magnet already active in this session (same source URL or same
+    // info-hash) must not gain a second native handle — concurrent re-adds
+    // (handler + session-manager resume) would otherwise create duplicate
+    // handles for the same info-hash + save dir.
+    final existing = idForSource(magnetUri);
+    if (existing != null && isTorrentAlive(existing)) {
+      String? existingSavePath;
+      try {
+        existingSavePath = _native.getTorrentStatus(existing)?.savePath;
+      } catch (_) {}
+      String normalizePath(String path) =>
+          path.replaceAll('\\', '/').toLowerCase();
+      if (existingSavePath == null ||
+          normalizePath(existingSavePath) == normalizePath(savePath)) {
+        _log.fine(
+            'addMagnet: source already active as torrent $existing — reusing handle.');
+        return existing;
+      }
+      _log.warning(
+          'addMagnet: torrent $existing already exists with a different save path; adding a separate handle.');
+    } else if (existing != null) {
+      // Stale mapping to a dead handle: drop the bookkeeping so the fresh add
+      // registers cleanly. Resume data is keyed by source, not handle, and is
+      // deliberately kept.
+      _torrentSources.remove(existing);
+      _activeTorrentIds.remove(existing);
+      _latestStats.remove(existing);
+      _latestProgress.remove(existing);
+      _metadataProbeAt.remove(existing);
+    }
     final enrichedUri = _enrichMagnetWithTrackersIfNeeded(magnetUri);
     try {
       final id = _native.addMagnet(enrichedUri, savePath, resumeData: resumeData);
@@ -843,9 +907,13 @@ class TorrentService {
           continue;
         }
 
-        // FIX(M6-b): Remove handle on timeout
+        // FIX(M6-b): Remove handle on timeout.
+        // B20: deleteFiles must stay false — libtorrent may already have
+        // re-attached to existing files for this info-hash, so deleting would
+        // erase real partial data. The caller cleans up its own temp .torrent
+        // artifact; on-disk payload belongs to the task.
         try {
-          removeTorrent(id, deleteFiles: true);
+          removeTorrent(id, deleteFiles: false);
         } catch (_) {}
         onStatusUpdate
             ?.call('Metadata fetch failed. Try adding trackers manually.');
@@ -858,8 +926,10 @@ class TorrentService {
         metadataProbeTimer.cancel();
         sub.cancel();
         stopwatch.stop();
+        // B20: same hazard as the timeout path above — never erase partial
+        // payload because the metadata probe failed; drop the handle only.
         try {
-          removeTorrent(id, deleteFiles: true);
+          removeTorrent(id, deleteFiles: false);
         } catch (_) {}
         rethrow;
       }
@@ -1026,10 +1096,19 @@ class TorrentService {
   static Future<void> pauseTorrent(int id) async {
     if (!isPluginAvailable || !isInitialized || !isTorrentAlive(id)) return;
     if (id >= 0) {
-      await _torrentLock.synchronized(() async {
+      // B5: restructured so the confirmation wait happens OUTSIDE
+      // _torrentLock. The status producer adds ticks from inside the same
+      // lock, so awaiting the stream inside it could only match events
+      // buffered before the wait began — 5s timeouts ×3 attempts, spurious
+      // force-stops, and every other locked op serialised behind it.
+      var confirmed = false;
+      for (var attempt = 1; attempt <= 3; attempt++) {
+        // Registered BEFORE the native pause call so no tick can slip past
+        // between the call and the wait.
+        final waiter = Completer<void>();
+        _pauseConfirmWaiters[id] = waiter;
         try {
-          var confirmed = false;
-          for (var attempt = 1; attempt <= 3; attempt++) {
+          await _torrentLock.synchronized(() async {
             try {
               await _native.pauseTorrent(id, graceful: attempt < 3);
             } catch (e) {
@@ -1037,52 +1116,49 @@ class TorrentService {
                   'Pause attempt $attempt native call failed for $id: $e');
             }
 
-            // Check immediately via native status before waiting on stream.
+            // Check immediately via native status before waiting on the
+            // waiter at all.
+            if (_isTorrentPausedOrStopped(id)) {
+              confirmed = true;
+            }
+          });
+          if (confirmed) break;
+
+          try {
+            await waiter.future.timeout(const Duration(seconds: 5));
+            confirmed = true;
+            break;
+          } on TimeoutException {
+            // One last chance: re-query native status after timeout.
             if (_isTorrentPausedOrStopped(id)) {
               confirmed = true;
               break;
             }
-
-            try {
-              await torrentUpdates.firstWhere((updateMap) {
-                final stats = updateMap[id];
-                if (stats == null) return false;
-                // Accept any stopped/paused/pausing label.
-                final label = stats.stateLabel.toLowerCase();
-                return label.contains('paused') ||
-                    label.contains('stopped') ||
-                    label.contains('pausing');
-              }).timeout(const Duration(seconds: 5));
-              confirmed = true;
-              break;
-            } on TimeoutException {
-              // One last chance: re-query native status after timeout.
-              if (_isTorrentPausedOrStopped(id)) {
-                confirmed = true;
-                break;
-              }
-              _log.warning(
-                  'Pause attempt $attempt/3 timed out for torrent $id');
-            } catch (e) {
-              _log.fine('Pause verification check attempt $attempt caught: $e');
-            }
+            _log.warning('Pause attempt $attempt/3 timed out for torrent $id');
           }
-
-          if (!confirmed) {
-            _log.severe(
-              'Force-stopping torrent $id after 3 failed pause attempts',
-            );
-            try {
-              await _native.pauseTorrent(id, graceful: false);
-            } catch (e) {
-              _log.severe('Force-pause call failed for torrent $id: $e');
-            }
-          }
-
-          await _saveResumeDataAfterPause(id);
         } catch (e) {
-          _log.warning('pauseTorrent failed for id $id: $e');
+          _log.fine('Pause verification check attempt $attempt caught: $e');
+        } finally {
+          if (identical(_pauseConfirmWaiters[id], waiter)) {
+            _pauseConfirmWaiters.remove(id);
+          }
         }
+      }
+
+      // Final force-pause + resume save, still under the lock as before.
+      await _torrentLock.synchronized(() async {
+        if (!confirmed) {
+          _log.severe(
+            'Force-stopping torrent $id after 3 failed pause attempts',
+          );
+          try {
+            await _native.pauseTorrent(id, graceful: false);
+          } catch (e) {
+            _log.severe('Force-pause call failed for torrent $id: $e');
+          }
+        }
+
+        await _saveResumeDataAfterPause(id);
       });
     }
   }
@@ -1102,10 +1178,16 @@ class TorrentService {
   }
 
   static bool loadResumeData(int id, List<int> data) {
-    final uint8 = Uint8List.fromList(data);
-    _latestResumeBlobs[id] = uint8;
     if (!isInitialized || id < 0) return false;
     final loaded = _native.loadResumeData(id, data);
+    // B21: cache the blob only once the engine actually accepted it. Caching
+    // before the native call made _saveResumeDataBeforePause trust a phantom
+    // blob on libtorrent 1.9.2 (loadResumeData always returns false there)
+    // and skip the degraded files/piece snapshot, so nothing restorable got
+    // persisted at pause time.
+    if (loaded) {
+      _latestResumeBlobs[id] = Uint8List.fromList(data);
+    }
     return loaded;
   }
 

@@ -1346,6 +1346,16 @@ $customCss
     return [];
   }
 
+  // JS injected at page start to clear leftover ad intervals. Per the FIX
+  // notes on the setInterval overrides (see earlyJs below), the cleanup list
+  // is now empty — the snippet is kept as an explicit no-op because the
+  // browser screen still injects it on every navigation.
+  static const String intervalCleanupJs = '''
+(function() {
+  try { if (window.__xdmIntervalCleanup) { return; } window.__xdmIntervalCleanup = true; } catch (e) {}
+})();
+''';
+
   // YouTube-specific UserScript injected at AT_DOCUMENT_START.
   // Uses a Proxy-based approach that is safer than Object.defineProperty
   // and degrades gracefully if YouTube's scripts have already set the

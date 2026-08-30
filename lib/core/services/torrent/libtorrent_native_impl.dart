@@ -85,11 +85,26 @@ class LibtorrentNativeImpl implements ITorrentNative {
   static const int _estimatedPieceSize = 262144;
 
   NativeTorrentStatus _mapStatus(lt.TorrentInfo info) {
-    // Estimate pieces based on totalWanted and progress.
-    final int estimatedNumPieces =
-        max(1, info.totalWanted ~/ _estimatedPieceSize);
+    // B16: `TorrentInfo.totalDone` counts bytes of deselected files too,
+    // while libtorrent's `progress` is the wanted-only fraction
+    // (total_wanted_done / total_wanted). 1.9.2 exposes no separate
+    // wanted-done field, so derive totalWantedDone from the wanted-only
+    // progress; reporting totalDone inflated progress/ETA for torrents with
+    // deselected files and could mark them complete before the wanted bytes
+    // were actually on disk.
+    final double wantedProgress =
+        info.progress.isFinite ? info.progress.clamp(0.0, 1.0) : 0.0;
+    final int wantedDone = (info.hasMetadata && info.totalWanted > 0)
+        ? (wantedProgress * info.totalWanted).round().clamp(0, info.totalWanted)
+        : 0;
+    // B2: without metadata there is no piece table. The old max(1, …)
+    // estimate always reported a fake 1-piece torrent, which kept the
+    // handler's dedicated metadata-phase branch permanently dead.
+    final int estimatedNumPieces = (info.hasMetadata && info.totalWanted > 0)
+        ? max(1, info.totalWanted ~/ _estimatedPieceSize)
+        : 0;
     final int estimatedPiecesDone =
-        (estimatedNumPieces * info.progress).floor();
+        (estimatedNumPieces * wantedProgress).floor();
 
     // Generate a synthetic boolean bitfield for UI compatibility
     final pieces = List<bool>.generate(
@@ -109,7 +124,8 @@ class LibtorrentNativeImpl implements ITorrentNative {
       uploadRate: info.uploadRate,
       totalDone: info.totalDone,
       totalWanted: info.totalWanted,
-      totalWantedDone: info.totalDone,
+      // B16: wanted-only derived bytes — see the derivation above.
+      totalWantedDone: wantedDone,
       totalUploaded: info.totalUploaded,
       numPeers: info.numPeers,
       numSeeds: info.numSeeds,

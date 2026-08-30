@@ -1,77 +1,73 @@
 import 'dart:io';
 
 import 'package:dio/dio.dart';
-import 'package:dmx/core/services/mirror/mirror_registry.dart';
-import 'package:dmx/core/services/mirror/mirror_selector.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:dmx/core/services/mirror_failover.dart';
+import 'package:dmx/core/services/mirror_health_store.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
-    await MirrorHealthStore.instance.clear();
-    await MirrorHealthStore.instance.init();
+    await MirrorHealthStore.clear();
+    await MirrorHealthStore.init();
   });
 
   group('MirrorHealthStore', () {
     test('blacklists a mirror after 5 failures with 6h TTL', () async {
-      const url = 'https://mirror-a.com/file';
+      final url = 'https://mirror-a.com/file';
       for (var i = 0; i < 5; i++) {
-        await MirrorHealthStore.instance.recordFailure(url, statusCode: 500);
+        await MirrorHealthStore.recordFailure(url, statusCode: 500);
       }
-      expect(MirrorHealthStore.instance.isBlacklisted(url), isTrue);
-      expect(MirrorHealthStore.instance.getFailureCount(url), 5);
+      expect(MirrorHealthStore.isBlacklisted(url), isTrue);
+      expect(MirrorHealthStore.getFailureCount(url), 5);
     });
 
     test('success resets failures and clears blacklist', () async {
-      const url = 'https://mirror-b.com/file';
+      final url = 'https://mirror-b.com/file';
       for (var i = 0; i < 5; i++) {
-        await MirrorHealthStore.instance.recordFailure(url);
+        await MirrorHealthStore.recordFailure(url);
       }
-      expect(MirrorHealthStore.instance.isBlacklisted(url), isTrue);
+      expect(MirrorHealthStore.isBlacklisted(url), isTrue);
 
-      await MirrorHealthStore.instance.recordSuccess(url, speedBps: 1000000);
-      expect(MirrorHealthStore.instance.isBlacklisted(url), isFalse);
-      expect(MirrorHealthStore.instance.getFailureCount(url), 0);
-      expect(MirrorHealthStore.instance.getPersistedSpeed(url), 1000000);
+      await MirrorHealthStore.recordSuccess(url, speedBps: 1000000);
+      expect(MirrorHealthStore.isBlacklisted(url), isFalse);
+      expect(MirrorHealthStore.getFailureCount(url), 0);
+      expect(MirrorHealthStore.getPersistedSpeed(url), 1000000);
     });
 
     test('health data persists across restarts', () async {
-      await MirrorHealthStore.instance.recordFailure('https://m1.com/x');
-      await MirrorHealthStore.instance.recordFailure('https://m1.com/x');
-      await MirrorHealthStore.instance
-          .recordSuccess('https://m2.com/x', speedBps: 42);
-
-      // Writes are coalesced; a durable flush persists them to prefs.
-      await MirrorHealthStore.instance.flushPending(durable: true);
+      await MirrorHealthStore.recordFailure('https://m1.com/x');
+      await MirrorHealthStore.recordFailure('https://m1.com/x');
+      await MirrorHealthStore.recordSuccess('https://m2.com/x', speedBps: 42);
 
       // Re-init simulates an app restart (same SharedPreferences backing).
-      await MirrorHealthStore.instance.init();
-      expect(MirrorHealthStore.instance.getFailureCount('https://m1.com/x'), 2);
-      expect(
-          MirrorHealthStore.instance.getPersistedSpeed('https://m2.com/x'), 42);
+      await MirrorHealthStore.init();
+      expect(MirrorHealthStore.getFailureCount('https://m1.com/x'), 2);
+      expect(MirrorHealthStore.getPersistedSpeed('https://m2.com/x'), 42);
     });
 
     test('clear removes all persisted data', () async {
-      await MirrorHealthStore.instance.recordFailure('https://m1.com/x');
-      await MirrorHealthStore.instance.clear();
-      expect(MirrorHealthStore.instance.getFailureCount('https://m1.com/x'), 0);
+      await MirrorHealthStore.recordFailure('https://m1.com/x');
+      await MirrorHealthStore.clear();
+      expect(MirrorHealthStore.getFailureCount('https://m1.com/x'), 0);
     });
   });
 
   group('orderMirrorUrls', () {
     test('primary first, then speed-ranked, blacklisted last', () async {
-      const slow = 'https://slow.com/file';
-      const fast = 'https://fast.com/file';
-      const black = 'https://black.com/file';
-      const primary = 'https://primary.com/file';
+      final slow = 'https://slow.com/file';
+      final fast = 'https://fast.com/file';
+      final black = 'https://black.com/file';
+      final primary = 'https://primary.com/file';
 
-      await MirrorHealthStore.instance.recordSuccess(slow, speedBps: 100);
-      await MirrorHealthStore.instance.recordSuccess(fast, speedBps: 900000);
+      await MirrorHealthStore.recordSuccess(slow, speedBps: 100);
+      await MirrorHealthStore.recordSuccess(fast, speedBps: 900000);
       for (var i = 0; i < 5; i++) {
-        await MirrorHealthStore.instance.recordFailure(black);
+        await MirrorHealthStore.recordFailure(black);
       }
 
       final ordered = orderMirrorUrls(
@@ -109,9 +105,9 @@ void main() {
     });
 
     test('blacklisted mirror is skipped', () async {
-      const black = 'https://black.com';
+      final black = 'https://black.com';
       for (var i = 0; i < 5; i++) {
-        await MirrorHealthStore.instance.recordFailure(black);
+        await MirrorHealthStore.recordFailure(black);
       }
 
       final failover = MirrorFailover([
@@ -159,8 +155,8 @@ void main() {
       });
 
       expect(succeeded, isNull);
-      expect(MirrorHealthStore.instance.getFailureCount('https://m1.com'), 1);
-      expect(MirrorHealthStore.instance.getFailureCount('https://m2.com'), 1);
+      expect(MirrorHealthStore.getFailureCount('https://m1.com'), 1);
+      expect(MirrorHealthStore.getFailureCount('https://m2.com'), 1);
     });
   });
 }

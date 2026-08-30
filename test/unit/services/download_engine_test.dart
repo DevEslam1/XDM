@@ -1,15 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
-
+import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/features/downloads/provider/download_orchestrator.dart';
-import 'package:flutter_test/flutter_test.dart';
 
 class _MockOrchestratorHost implements DownloadOrchestratorHost {
   DownloadTask? lastTaskState;
-
-  @override
-  DownloadTask? findTaskById(String id) => lastTaskState;
 
   @override
   Future<void> setTaskState(DownloadTask task) async {
@@ -23,7 +19,7 @@ class _MockOrchestratorHost implements DownloadOrchestratorHost {
   bool get enableBackgroundTimers => false;
 
   @override
-  dynamic noSuchMethod(Invocation invocation) => null;
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 void main() {

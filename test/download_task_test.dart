@@ -344,8 +344,7 @@ void main() {
       expect(task.progress, 1.0);
     });
 
-    test('progress returns 0.0 and isIndeterminate is true when fileSize is 0',
-        () {
+    test('progress returns -1.0 when fileSize is 0', () {
       final now = DateTime(2026, 7, 23);
       final task = DownloadTask(
         id: 'p3',
@@ -364,8 +363,7 @@ void main() {
         updatedAt: now,
       );
 
-      expect(task.progress, 0.0);
-      expect(task.isIndeterminate, isTrue);
+      expect(task.progress, -1.0);
     });
   });
 

@@ -133,7 +133,7 @@ class ScheduleManager {
   static Future<void> scheduleAlarm(String taskId, DateTime scheduledAt) async {
     if (Platform.isAndroid || isAndroidForTesting) {
       try {
-        final delay = scheduledAt.difference(DateTime.now());
+        final delay = scheduledAt.toUtc().difference(DateTime.now().toUtc());
         if (delay.isNegative) return;
 
         await Workmanager().registerOneOffTask(

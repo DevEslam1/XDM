@@ -1,5 +1,5 @@
-import 'package:dmx/core/services/engines/speed_predictor.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dmx/core/services/engines/speed_predictor.dart';
 
 void main() {
   group('SpeedPredictor', () {

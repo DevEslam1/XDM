@@ -1,5 +1,5 @@
-import 'package:dmx/core/services/youtube_service.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dmx/core/services/youtube_service.dart';
 
 void main() {
   test('Fetch playlist details for public playlist', () async {

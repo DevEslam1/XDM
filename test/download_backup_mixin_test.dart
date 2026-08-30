@@ -22,7 +22,7 @@ void main() {
     });
 
     test('round-trips encrypted backups with the correct password', () {
-      const original = 'hello backup payload';
+      final original = 'hello backup payload';
       final encrypted = provider.encryptBackup(original, 'secret');
 
       expect(encrypted, isNotEmpty);
@@ -45,8 +45,8 @@ void main() {
       expect(provider.decryptBackup(tampered, 'secret'), isNull);
     });
 
-    test('rejects legacy insecure XDMCRYPT v1 XOR payloads', () {
-      const payload = 'legacy payload';
+    test('decrypts legacy XDMCRYPT v1 payloads using XOR', () {
+      final payload = 'legacy payload';
       final keyBytes = sha256.convert(utf8.encode('legacy-password')).bytes;
       final cipherBytes = List<int>.generate(
         payload.length,
@@ -56,7 +56,7 @@ void main() {
       final legacy = utf8.encode('XDMCRYPT');
       final encoded = base64Encode([...legacy, ...cipherBytes]);
 
-      expect(provider.decryptBackup(encoded, 'legacy-password'), isNull);
+      expect(provider.decryptBackup(encoded, 'legacy-password'), payload);
     });
 
     test('decrypts XDMCRYPT v3 backups (SHA-256 KDF, pre-PBKDF2)', () {

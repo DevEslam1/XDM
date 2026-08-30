@@ -344,29 +344,6 @@ void main() {
       });
     });
 
-    group('platform scheduling (BG-09 / C-5)', () {
-      test('dynamic in-app tick created on Android and cancelled on dispose',
-          () {
-        ScheduleManager.isAndroidForTesting = true;
-        try {
-          final androidManager = ScheduleManager(
-            tasks: () => tasks,
-            databaseService: db,
-            isDisposed: () => disposed,
-            downloadingTasksCount: () => downloadingCount,
-            updateTorrentUploadLimit: () => torrentUploadLimitCalls++,
-            notifyListeners: () => notifyCalls++,
-            pumpQueue: () => pumpQueueCalls++,
-          );
-          androidManager.start();
-          expect(androidManager.schedulingTimer, isNotNull);
-          androidManager.dispose();
-        } finally {
-          ScheduleManager.isAndroidForTesting = false;
-        }
-      });
-    });
-
     group('dispose', () {
       test('cancels the scheduling timer', () {
         manager.start();

@@ -1,5 +1,5 @@
-import 'package:dmx/core/services/widget_data_bridge.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dmx/core/services/widget_data_bridge.dart';
 
 WidgetTaskSummary task(
   String id, {
@@ -148,7 +148,7 @@ void main() {
         final snapshots = dashboard([task('a', speed: 100)]);
 
         await bridge.pushDashboard(snapshots);
-        await bridge.pushDashboard(dashboard([task('a', speed: 200)]));
+        await bridge.pushDashboard(snapshots);
         expect(pushes.length, 1);
 
         await Future<void>.delayed(

@@ -1,8 +1,7 @@
-import 'package:dmx/features/downloads/models/download_task.dart';
-import 'package:dmx/features/downloads/widgets/download_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
+import 'package:dmx/features/downloads/widgets/download_card.dart';
+import 'package:dmx/features/downloads/models/download_task.dart';
 import '../helpers/test_helpers.dart';
 
 void main() {

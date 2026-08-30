@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:logging/logging.dart';
@@ -232,6 +233,14 @@ class SettingsProvider extends ChangeNotifier
 
   // FIX-0.1 / FIX-0.5: developerMode cannot bypass SSL in release.
   bool developerMode = false;
+
+  /// Phase-0 repair: the old `bypassSSL` flag was removed by the
+  /// FIX-0.1/FIX-0.5 hardening, but the browser's server-trust handler
+  /// (browser_tab_view.dart) still reads it. Restored as a debug-only,
+  /// developer-mode-gated getter so release builds can never skip
+  /// certificate validation.
+  bool get bypassSSL => developerMode && kDebugMode;
+
   bool httpsOnly = false;
   bool _reduceVisuals = false;
   bool get reduceVisuals => batterySaverMode ? true : _reduceVisuals;

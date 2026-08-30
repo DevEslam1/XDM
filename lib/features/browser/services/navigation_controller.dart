@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:logging/logging.dart';
-import 'package:synchronized/synchronized.dart';
 
 import '../../../core/app_theme.dart';
 import '../../../core/services/widget_deep_link.dart';

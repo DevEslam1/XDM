@@ -10,6 +10,12 @@ class DownloadQueueEngine {
   /// Tracks tasks currently being started (not yet reflected in status).
   final Set<String> _inflightStarts = {};
 
+  /// Current number of tasks in-flight during start.
+  int get pendingStartCount => _inflightStarts.length;
+
+  /// Checks if a task is currently in-flight during start.
+  bool isTaskPendingStart(String taskId) => _inflightStarts.contains(taskId);
+
   /// Returns tasks that are currently waiting in the queued state.
   List<DownloadTask> getQueuedTasks(List<DownloadTask> tasks) {
     return tasks.where((t) => t.status == DownloadStatus.queued).toList();

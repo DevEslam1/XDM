@@ -48,9 +48,7 @@ import BackgroundTasks
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     if #available(iOS 13.0, *) {
-      if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "IosBackgroundDownloadHandler") {
-        IosBackgroundDownloadHandler.register(with: registrar)
-      }
+      IosBackgroundDownloadHandler.register(with: engineBridge.pluginRegistry.registrar(forPlugin: "IosBackgroundDownloadHandler")!)
 
       if let messenger = engineBridge.pluginRegistry.registrar(forPlugin: "XDMWidgetBridge")?.messenger() {
         let widgetBridgeChannel = FlutterMethodChannel(

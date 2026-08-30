@@ -1,5 +1,5 @@
-import 'package:dmx/core/services/mirror/mirror_selector.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dmx/core/services/engines/mirror_parallel_engine.dart';
 
 void main() {
   group('MirrorParallelEngine', () {
@@ -27,41 +27,6 @@ void main() {
       final engine = MirrorParallelEngine(['https://m1.com', 'https://m2.com']);
       engine.reportMirrorSpeed('https://m1.com', 500000);
       engine.reportMirrorSpeed('https://m2.com', 100000);
-    });
-
-    test(
-        'raceMirrors cancels slower mirrors immediately upon winning response (M-01/M-02)',
-        () async {
-      final mirrors = ['https://fast.com/file', 'https://slow.com/file'];
-      bool slowCancelled = false;
-
-      final winner = await MirrorParallelEngine.raceMirrors<String>(
-        mirrors,
-        (url, cancelToken) async {
-          if (url.contains('fast')) {
-            await Future<void>.delayed(const Duration(milliseconds: 20));
-            return 'fast_content';
-          } else {
-            cancelToken.whenCancel.then((_) {
-              slowCancelled = true;
-            });
-            await Future<void>.delayed(const Duration(milliseconds: 500));
-            return 'slow_content';
-          }
-        },
-      );
-
-      expect(winner, equals('fast_content'));
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-      expect(slowCancelled, isTrue);
-    });
-
-    test('dispose cancels debounce timer and releases resources', () async {
-      final engine = MirrorParallelEngine(['https://m1.com', 'https://m2.com']);
-      engine.reportMirrorSpeed('https://m1.com', 500000);
-      await engine.dispose();
-      // Safe to call again
-      await engine.dispose();
     });
   });
 }

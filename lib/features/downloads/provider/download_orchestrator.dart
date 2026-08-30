@@ -26,6 +26,7 @@ import '../../../core/services/download_journal.dart';
 import '../../../core/services/download_metrics.dart';
 import '../../../core/services/engine/engine_utils.dart';
 import '../../../core/services/error_taxonomy.dart';
+import '../../../core/services/positional_file_writer.dart';
 import '../../../core/services/ffmpeg_mux_service.dart';
 import '../../../core/services/permission_service.dart';
 import '../../../core/services/power_monitor.dart';
@@ -61,8 +62,6 @@ abstract class DownloadOrchestratorHost {
   Map<String, int> get retryCounts;
   Map<String, Queue<double>> get speedHistories;
   Map<String, int> get lastProgressUpdateTimes;
-  Map<String, int> get lastDbSaveTimes;
-  Map<String, int> get lastDbSaveBytes;
   Map<String, int> get lastTorrentFileDiskSync;
   Set<String> get pendingProgressUpdates;
   Map<String, int> get ytLowSpeedCounts;
@@ -166,6 +165,10 @@ class DownloadOrchestrator {
     _periodicResumeSaveTimer = Timer.periodic(
       interval,
       (_) {
+        // BUG6: Persist progress-only task updates on this cadence so a
+        // force-kill mid-download doesn't leave the DB row (read by
+        // widgets/backup/export) at stale byte counts.
+        unawaited(flushPendingProgressToDatabase());
         if (TorrentService.activeTorrentIds.isNotEmpty) {
           unawaited(TorrentResumeStore.saveAll(
             TorrentService.activeTorrentIds,
@@ -233,13 +236,12 @@ class DownloadOrchestrator {
       StateStore.removeCachedPayload(taskId);
       _host.speedHistories.remove(taskId);
       _host.lastProgressUpdateTimes.remove(taskId);
-      _host.lastDbSaveTimes.remove(taskId);
-      _host.lastDbSaveBytes.remove(taskId);
       _host.lastTorrentFileDiskSync.remove(taskId);
       _host.ytLowSpeedCounts.remove(taskId);
       _host.ytThrottlingRefreshing.remove(taskId);
       _host.retryCounts.remove(taskId);
       _host.retryTimers.remove(taskId)?.cancel();
+      _streamResolveRetries.remove(taskId);
       _host.pendingProgressUpdates.remove(taskId);
     });
 
@@ -290,6 +292,30 @@ class DownloadOrchestrator {
         !DownloadEngine.isInBackground &&
         !PowerMonitor.screenOff) {
       _host.providerNotifyListeners();
+    }
+  }
+
+  /// BUG6: Applies pending progress-only updates to the database.
+  ///
+  /// Progress-only ticks park in `_pendingProgressUpdates` and used to be
+  /// flushed only at finalize/failure, so a force-kill 2h into a 3h download
+  /// left the DB row at ~0 bytes. Runs on the periodic resume-save cadence
+  /// (30s foreground / 60s background); the engine `.dmxstate` remains the
+  /// byte-level source of truth — this keeps the DB row useful.
+  @visibleForTesting
+  Future<void> flushPendingProgressToDatabase() async {
+    if (_host.providerDisposed) return;
+    for (final id in _host.pendingProgressUpdates.toList()) {
+      final task = _host.findTaskById(id);
+      if (task == null || task.status != DownloadStatus.downloading) {
+        _host.pendingProgressUpdates.remove(id);
+        continue;
+      }
+      try {
+        await _host.flushPendingProgress(id);
+      } catch (e) {
+        debugPrint('[DMX] BUG6: periodic progress flush failed for $id: $e');
+      }
     }
   }
 
@@ -354,6 +380,9 @@ class DownloadOrchestrator {
       return task;
     }
 
+    // BUG9: byte count confirmed by the state store, used to clamp the task
+    // when validation fails part-way through.
+    int? validatedBytes;
     try {
       if (task.downloadedBytes > 0 || task.tempFilePath.isNotEmpty) {
         final result = await StateStore.loadOrCreate(
@@ -364,6 +393,7 @@ class DownloadOrchestrator {
         );
 
         final state = result.state;
+        validatedBytes = state.downloadedBytes;
         if (state.downloadedBytes != task.downloadedBytes ||
             result.diskAdjusted ||
             result.migratedFrom != null) {
@@ -433,14 +463,33 @@ class DownloadOrchestrator {
         }
         await _host.setTaskState(task);
       }
-    } catch (e) {
-      debugPrint('[DMX] StateStore validation failed: $e');
+    } catch (e, st) {
+      // BUG9: a validation failure must not pass silently — log it with the
+      // task id and clamp the task to whatever byte count validation managed
+      // to confirm, so the resume never claims more than was validated.
+      LoggingService.logger('DownloadOrchestrator').warning(
+        '[BUG9] StateStore validation failed for task ${task.id}; '
+        'proceeding with best-effort state',
+        e,
+        st,
+      );
+      final confirmed = validatedBytes;
+      if (confirmed != null &&
+          confirmed >= 0 &&
+          confirmed < task.downloadedBytes) {
+        task = task.copyWith(downloadedBytes: confirmed);
+      }
     }
 
     return task;
   }
 
   final Map<String, int> _ytRefreshAttempts = {};
+
+  /// BUG8: Retry budget for the stream-resolution phase only. Kept separate
+  /// from `_host.retryCounts` (download-phase retries) so resolution retries
+  /// don't starve download retries.
+  final Map<String, int> _streamResolveRetries = {};
 
   // FIX-1.2: Lock orchestrator shared maps
   int get pendingStartCount => _startingTaskIds.length;
@@ -480,6 +529,66 @@ class DownloadOrchestrator {
       // pumpQueue() coalesces re-entry and early-exits when the cap is met.
       _host.pumpQueue();
     }
+  }
+
+  /// BUG1: `_resolveStreamUrl` returns null for TWO different outcomes:
+  /// (a) a retry was scheduled — the task is left `queued` with a pending
+  /// retry timer, or (b) resolution failed permanently — the task is already
+  /// `failed`. Only fail a still-queued task when no retry timer is actually
+  /// pending, otherwise the scheduled auto-retry is silently overwritten and
+  /// the UI flashes "Retrying in N seconds" and then flips to Failed.
+  @visibleForTesting
+  Future<void> failTaskIfNoRetryScheduled(String taskId) async {
+    if (_host.retryTimers.containsKey(taskId)) {
+      return; // retry scheduled — the timer callback will re-pump the queue
+    }
+    final live = _host.findTaskById(taskId);
+    if (live != null && live.status == DownloadStatus.queued) {
+      await _host.setTaskState(live.copyWith(
+        status: DownloadStatus.failed,
+        errorMessage: 'Failed to resolve download stream.',
+      ));
+    }
+  }
+
+  /// BUG4: True when a pause/cancel landed during the async gap between the
+  /// `queued` check and the `downloading` commit. Committing `downloading`
+  /// over such a pause creates a zombie: `setTaskState`'s guard only blocks
+  /// pausedByUser/failed/completed overrides, and NetworkMonitor removed the
+  /// cancel token, so nothing else unwinds the started transfer.
+  bool _pauseLandedDuringStart(DownloadTask task, CancelToken cancelToken) {
+    if (cancelToken.isCancelled) return true;
+    final live = _host.findTaskById(task.id);
+    if (live == null) return true;
+    return live.status != DownloadStatus.queued &&
+        live.status != DownloadStatus.downloading;
+  }
+
+  /// BUG4: Aborts a start whose task was policy-paused mid-gap. Unwinds the
+  /// placeholder future/cancel token and cancels+removes the orchestrator
+  /// stream tokens so no transfer keeps running behind the pause.
+  Future<void> _abortStartAfterPolicyPause(
+    DownloadTask task,
+    Completer<void> earlyReturnCompleter,
+  ) async {
+    debugPrint(
+        '[DMX] BUG4: aborting start of ${task.id} — a pause landed during start');
+    _host.cancelTokens.remove(task.id);
+    final orchTokens = _host.orchestratorTokens.remove(task.id);
+    if (orchTokens != null) {
+      if (!orchTokens.video.isCancelled) {
+        try {
+          orchTokens.video.cancel('policy_pause');
+        } catch (_) {}
+      }
+      if (!orchTokens.audio.isCancelled) {
+        try {
+          orchTokens.audio.cancel('policy_pause');
+        } catch (_) {}
+      }
+    }
+    if (!earlyReturnCompleter.isCompleted) earlyReturnCompleter.complete();
+    _host.activeFutures.remove(task.id);
   }
 
   // FIX-S10: Detect YouTube web page URLs that require stream resolution
@@ -751,12 +860,16 @@ class DownloadOrchestrator {
               _host.providerSettingsProvider.autoRetryEnabled && isRetryable
                   ? _host.providerSettingsProvider.maxRetries
                   : 0;
-          final currentRetry = _host.retryCounts[task.id] ?? 0;
+          // BUG8: consume the resolution-phase budget, not the download-phase
+          // `_host.retryCounts`, so stream-resolution retries don't starve the
+          // download retry loop.
+          final currentRetry = _streamResolveRetries[task.id] ?? 0;
 
           if (currentRetry < maxRetries) {
-            _host.retryCounts[task.id] = currentRetry + 1;
+            _streamResolveRetries[task.id] = currentRetry + 1;
+            // BUG7: exponential backoff with a hard cap.
             final delaySeconds =
-                _host.providerSettingsProvider.retryDelaySeconds;
+                retryBackoffSeconds(_host.providerSettingsProvider.retryDelaySeconds, currentRetry);
             debugPrint(
               'Transient error resolving stream for task ${task.id}. Retrying (${currentRetry + 1}/$maxRetries) in $delaySeconds seconds...',
             );
@@ -786,7 +899,7 @@ class DownloadOrchestrator {
             return null;
           }
 
-          _host.retryCounts.remove(task.id);
+          _streamResolveRetries.remove(task.id);
           await _host.setTaskState(
             task.copyWith(
               status: DownloadStatus.failed,
@@ -1403,7 +1516,6 @@ class DownloadOrchestrator {
     await _host.flushPendingProgress(taskId);
     _host.speedHistories.remove(taskId);
     _host.lastProgressUpdateTimes.remove(taskId);
-    _host.lastDbSaveTimes.remove(taskId);
 
     final taskObj = _host.findTaskById(taskId);
     _host.ytLowSpeedCounts.remove(taskId);
@@ -2976,7 +3088,46 @@ class DownloadOrchestrator {
                     preferredType: task.youtubePreferredType);
 
                 if (fresh != null && fresh['url'] != null) {
-                  task = task.copyWith(url: fresh['url'] as String);
+                  final freshUrl = fresh['url'] as String;
+                  // BUG2: guard the mid-download URL swap with the same
+                  // identity check as the 403/410 refresh path below. The
+                  // old code appended the new stream onto the previous
+                  // format's bytes (supportsResume:true, no reset) which
+                  // corrupts the output when the itag/mime/clen changed.
+                  if (!youtubeMimeCompatible(task.url, freshUrl)) {
+                    rethrow;
+                  }
+                  final identityChanged =
+                      DownloadProvider.youtubeStreamIdentityChanged(
+                          task.url, freshUrl);
+                  if (identityChanged) {
+                    debugPrint(
+                        '[DMX] BUG2: stream identity changed mid-download for ${task.id}; resetting video progress');
+                    for (final path in [
+                      task.tempFilePath,
+                      '${task.tempFilePath}.dmxstate',
+                      '${task.tempFilePath}.dmxstate.tmp',
+                      '${task.tempFilePath}.journal',
+                    ]) {
+                      try {
+                        final f = File(path);
+                        if (await f.exists()) await f.delete();
+                      } catch (err) {
+                        debugPrint('[DMX] BUG2 cleanup failed for $path: $err');
+                      }
+                    }
+                    videoBytesSoFar = 0;
+                    videoSizeSoFar = 0;
+                    task = task.copyWith(
+                      url: freshUrl,
+                      downloadedBytes: 0,
+                      chunks: List<double>.filled(
+                          task.threadCount > 0 ? task.threadCount : 1, 0.0),
+                      videoStreamSize: 0,
+                    );
+                  } else {
+                    task = task.copyWith(url: freshUrl);
+                  }
                   await _host.setTaskState(task);
 
                   await _host.downloadEngine.download(
@@ -3542,15 +3693,15 @@ class DownloadOrchestrator {
 
       var resolved = await _resolveStreamUrl(task);
       if (resolved == null) {
-        final live = _host.findTaskById(task.id);
-        if (live != null && live.status == DownloadStatus.queued) {
-          await _host.setTaskState(live.copyWith(
-            status: DownloadStatus.failed,
-            errorMessage: 'Failed to resolve download stream.',
-          ));
-        }
+        // A retry may be scheduled (BUG1) or resolution failed permanently.
+        await failTaskIfNoRetryScheduled(task.id);
         return;
       }
+      // BUG8: resolution succeeded — clear the resolution-phase retry budget
+      // so a later resolution failure starts from a fresh budget. (The
+      // budget is kept across resolution RETRIES and cleared on exhaustion
+      // inside _resolveStreamUrl.)
+      _streamResolveRetries.remove(task.id);
       // FIX-YT-ITAG: if the resolved stream URL carries a different itag
       // (format/quality changed), the previously downloaded bytes belong to
       // the old format and are invalid.  Reset progress so the engine
@@ -3816,6 +3967,12 @@ class DownloadOrchestrator {
             }
 
             // C-2 FIX: Set downloading immediately so UI reflects state
+            // BUG4: a policy pause may have landed while the torrent was
+            // being added — do not commit downloading over it.
+            if (_pauseLandedDuringStart(task, cancelToken)) {
+              await _abortStartAfterPolicyPause(task, earlyReturnCompleter);
+              return;
+            }
             await _host.setTaskState(task.copyWith(
               torrentId: torrentId,
               status: DownloadStatus.downloading,
@@ -3991,6 +4148,14 @@ class DownloadOrchestrator {
       }
       final int realTotalDownloaded =
           summedTotalDownloaded ?? task.downloadedBytes;
+
+      // BUG4: re-check immediately before the downloading commit — a
+      // NetworkMonitor / wifi-only / charging / user pause can land during
+      // the long async gap above; committing `downloading` would override it.
+      if (_pauseLandedDuringStart(task, cancelToken)) {
+        await _abortStartAfterPolicyPause(task, earlyReturnCompleter);
+        return;
+      }
 
       task = task.copyWith(
         status: DownloadStatus.downloading,
@@ -4291,7 +4456,14 @@ class DownloadOrchestrator {
         debugPrint('[DMX] _executeDownload completed for ${task.id}');
       }).catchError((Object error, StackTrace stackTrace) async {
         final realError = error;
-
+        // BUG9: the handler below awaits calls that can themselves throw
+        // (setTaskState / startOverTask / mirror failover). If it threw, the
+        // task used to be stranded `queued` with no retry timer. Track a
+        // legitimate requeue (the pump is debounced, so queued-without-timer
+        // is legal right after) and guarantee a resolution at the end.
+        var handlerRequeuedTask = false;
+        var expiredLinkUnresolved = false;
+        try {
         // ERR-RESILIENCE-1.1: Classify every download-pipeline failure once so
         // retry decisions, diagnostics and recovery hints stay consistent.
         final classification = ErrorTaxonomy.classify(realError);
@@ -4308,6 +4480,7 @@ class DownloadOrchestrator {
             debugPrint(
                 '[DMX] Server rejected HTTP 206 resume. Performing a full restart from byte 0 for task: ${task.id}');
             _host.notifications.cancelNotification(notificationId);
+            handlerRequeuedTask = true;
             await _host.startOverTask(
               task.id,
               task.url,
@@ -4378,10 +4551,24 @@ class DownloadOrchestrator {
           _host.retryCounts.remove(task.id);
           _host.retryTimers.remove(task.id)?.cancel();
           if (current.status == DownloadStatus.downloading) {
+            // BUG10: classify the cancel reason — only user-initiated pauses
+            // may set pausedByUser. Network-driven cancels (network_lost /
+            // wifi_only_pause) must stay auto-resumable: when the engine
+            // unwind exceeds the NetworkMonitor's 5s window, this handler is
+            // what publishes the paused state, and a pausedByUser:true here
+            // would make _resumeFromNetworkDisconnect skip it forever.
+            final outcome = cancelPauseOutcome(
+              cancelReasonOf(realError, cancelToken),
+              alreadyUserPaused: current.pausedByUser,
+            );
             await _host.setTaskState(
               current.copyWith(
                 status: DownloadStatus.paused,
-                pausedByUser: true,
+                pausedByUser: outcome.isUserPause,
+                pauseReason: outcome.isUserPause
+                    ? PauseReason.user
+                    : PauseReason.networkLost,
+                errorMessage: outcome.waitingMessage ?? current.errorMessage,
                 speed: 0,
                 clearEta: true,
               ),
@@ -4406,13 +4593,38 @@ class DownloadOrchestrator {
         // Audio sidecar intentionally preserved on failure.
         // Retry / resume can continue from the existing .audio + .audio.dmxstate.
 
+        // BUG5: Expired-URL recovery used to exist only for YouTube. The
+        // engine now throws UrlExpiredException for generic hosts too
+        // (410 Gone, or 401/403 with expiry hints), and isRetryableError
+        // returns false for those statuses — so the link was never
+        // refreshed. For non-YouTube tasks with mirrors, fail over to the
+        // next mirror; otherwise fall through to the permanent-failure path
+        // with a clear refresh-URL hint.
+        final isExpiredUrlError = realError is UrlExpiredException;
+        if (isExpiredUrlError && !_isYouTubeTask(task)) {
+          final mirrorUrl = _nextMirrorUrl(current);
+          if (mirrorUrl != null) {
+            debugPrint(
+                '[DMX] BUG5: URL expired for ${task.id}; failing over to mirror');
+            _host.notifications.cancelNotification(notificationId);
+            handlerRequeuedTask = true;
+            await _host.updateTaskUrlAndResume(task.id, mirrorUrl);
+            return;
+          }
+          expiredLinkUnresolved = true;
+        }
+
         // ERR-RESILIENCE-1.1: Retry policy derived from the taxonomy.
         // refreshUrl is transient for YouTube (URL rotation) and permanent
         // for generic auth failures — gate it on the existing task-aware check.
+        // BUG5: a UrlExpiredException on a YouTube task keeps the specialized
+        // re-queue path (the pre-start R-2 refresh resolves a fresh URL).
         final actionRetryable = recoveryAction == RecoveryAction.retrySame ||
             recoveryAction == RecoveryAction.retryWithDelay ||
             (recoveryAction == RecoveryAction.refreshUrl &&
-                (_isYouTubeTask(task) && _isYouTubeStreamError(realError)));
+                (_isYouTubeTask(task) &&
+                    (isExpiredUrlError ||
+                        _isYouTubeStreamError(realError))));
         final isRetryable = actionRetryable || isRetryableError(realError);
         final maxRetries =
             _host.providerSettingsProvider.autoRetryEnabled && isRetryable
@@ -4422,7 +4634,10 @@ class DownloadOrchestrator {
 
         if (currentRetry < maxRetries) {
           _host.retryCounts[task.id] = currentRetry + 1;
-          final delaySeconds = _host.providerSettingsProvider.retryDelaySeconds;
+          // BUG7: exponential backoff with a hard cap instead of a flat
+          // retryDelaySeconds between every attempt.
+          final delaySeconds = retryBackoffSeconds(
+              _host.providerSettingsProvider.retryDelaySeconds, currentRetry);
           debugPrint(
             'Transient error for task ${task.id}. Retrying (${currentRetry + 1}/$maxRetries) in $delaySeconds seconds...',
           );
@@ -4483,6 +4698,14 @@ class DownloadOrchestrator {
             'Failed to clean up temp files on non-retryable error: $e',
           );
         }
+        // BUG5: a non-refreshable expired link must tell the user what to do
+        // instead of surfacing a raw Dio/HTTP message.
+        final failureMessage = expiredLinkUnresolved
+            ? 'Link expired — update the download URL and try again. '
+                '(${errorMessage(realError)})'
+            : wasExhausted
+                ? 'Download failed after $maxRetries retries. Please check your network and try again.'
+                : errorMessage(realError);
         await _host.setTaskState(
           current.copyWith(
             status: DownloadStatus.failed,
@@ -4496,9 +4719,7 @@ class DownloadOrchestrator {
             recoveryHint: RecoveryHints.hintFor(
               RecoveryHints.fromError(realError),
             ),
-            errorMessage: wasExhausted
-                ? 'Download failed after $maxRetries retries. Please check your network and try again.'
-                : errorMessage(realError),
+            errorMessage: failureMessage,
           ),
         );
         if (wasExhausted) {
@@ -4517,12 +4738,41 @@ class DownloadOrchestrator {
           _host.notifications.showFailed(
             notificationId: notificationId,
             title: task.fileName,
-            error: errorMessage(realError),
+            error: failureMessage,
           );
         }
         // FIX-2.1: Clean up per-task state on permanent failure
         if (!isRetryable || wasExhausted) {
           _cleanupTaskState(task.id);
+        }
+        } catch (handlerError, handlerStack) {
+          // BUG9: the handler itself must never throw asynchronously — that
+          // used to leave the task queued with no timer and leak an
+          // unhandled async error.
+          LoggingService.logger('DownloadOrchestrator').severe(
+              'BUG9: download error handler failed for ${task.id}',
+              handlerError,
+              handlerStack);
+        } finally {
+          // BUG9: guarantee a `queued` task ends up either failed or queued
+          // WITH a retry timer. The requeue paths (start-over, mirror
+          // failover) pump the queue with a debounce, so they are exempt.
+          try {
+            final live = _host.findTaskById(task.id);
+            if (!handlerRequeuedTask &&
+                live != null &&
+                live.status == DownloadStatus.queued &&
+                !_host.retryTimers.containsKey(task.id) &&
+                !isTaskPendingStart(task.id) &&
+                !_host.providerDisposed) {
+              Timer(const Duration(seconds: 2), () {
+                unawaited(_failQueuedTaskWithoutTimer(task.id));
+              });
+            }
+          } catch (e) {
+            debugPrint(
+                '[DMX] BUG9: resolution guarantee check failed for ${task.id}: $e');
+          }
         }
       }).whenComplete(() {
         _host.cancelTokens.remove(task.id);
@@ -4678,6 +4928,20 @@ class DownloadOrchestrator {
     if (error is InsufficientStorageException) {
       return false; // Retrying won't free up disk space.
     }
+    // BUG7: disk-full / I-O / permission failures and expired links don't
+    // heal by retrying — the taxonomy maps them to showSettings /
+    // refreshUrl recovery paths instead of blind re-attempts.
+    if (error is FileSystemException || error is PositionalFileWriterException) {
+      return false;
+    }
+    if (error is UrlExpiredException) {
+      return false;
+    }
+    if (msg.contains('permission denied') ||
+        msg.contains('access is denied') ||
+        msg.contains('errno = 13')) {
+      return false;
+    }
     if (error is DownloadIntegrityException ||
         msg.contains('file changed on server') ||
         msg.contains('filechangedonserver')) {
@@ -4762,6 +5026,108 @@ class DownloadOrchestrator {
     if (task.youtubeQualityPreset != null) return true;
     final url = '${task.url} ${task.downloadPageUrl ?? ''}'.toLowerCase();
     return url.contains('youtube.com') || url.contains('youtu.be');
+  }
+
+  /// BUG5: Next usable mirror URL for expired-link failover — the first
+  /// mirror that is non-empty and differs from the failing URL, or null when
+  /// no failover target remains.
+  static String? _nextMirrorUrl(DownloadTask task) {
+    for (final mirror in task.mirrorUrls ?? const <String>[]) {
+      if (mirror.isNotEmpty && mirror != task.url) return mirror;
+    }
+    return null;
+  }
+
+  /// BUG10: Extracts the human-readable cancel reason from a cancel error /
+  /// token (e.g. 'paused:user', 'network_lost', 'wifi_only_pause').
+  @visibleForTesting
+  static String? cancelReasonOf(Object error, CancelToken cancelToken) {
+    String? describe(Object? o) {
+      if (o == null) return null;
+      final s = o.toString();
+      return s.trim().isEmpty ? null : s;
+    }
+
+    if (error is DioException) {
+      final direct = describe(error.error) ?? describe(error.message);
+      if (direct != null) return direct;
+    }
+    final cancelError = cancelToken.cancelError;
+    if (cancelError is DioException) {
+      return describe(cancelError.error) ?? describe(cancelError.message);
+    }
+    return null;
+  }
+
+  /// BUG10: Maps a cancel reason to the pause outcome the error handler
+  /// should publish. Only user-initiated reasons produce a user pause;
+  /// network-driven reasons get the matching waiting status message so the
+  /// task auto-resumes when connectivity returns.
+  @visibleForTesting
+  static ({bool isUserPause, String? waitingMessage}) cancelPauseOutcome(
+    String? cancelMessage, {
+    bool alreadyUserPaused = false,
+  }) {
+    if (alreadyUserPaused) {
+      return (isUserPause: true, waitingMessage: null);
+    }
+    final raw = cancelMessage != null && cancelMessage.startsWith('paused:')
+        ? cancelMessage.substring('paused:'.length)
+        : cancelMessage;
+    final reason = PauseReason.fromName(raw, fallback: PauseReason.unknown);
+    if (reason == PauseReason.user) {
+      return (isUserPause: true, waitingMessage: null);
+    }
+    if (raw == 'wifi_only_pause') {
+      return (
+        isUserPause: false,
+        waitingMessage: DownloadStatusMessages.waitingWifi,
+      );
+    }
+    if (reason == PauseReason.networkLost || raw == 'network_lost') {
+      return (
+        isUserPause: false,
+        waitingMessage: DownloadStatusMessages.waitingNetwork,
+      );
+    }
+    return (isUserPause: false, waitingMessage: null);
+  }
+
+  /// BUG7: Exponential backoff for auto-retry scheduling — the base
+  /// `retryDelaySeconds` doubles per attempt and caps at 5 minutes so a
+  /// flapping download cannot hammer its source every few seconds.
+  @visibleForTesting
+  static int retryBackoffSeconds(int baseSeconds, int retryIndex) {
+    if (baseSeconds <= 0) return 0;
+    final shifted = baseSeconds * (1 << retryIndex.clamp(0, 12));
+    return shifted > _maxRetryBackoffSeconds
+        ? _maxRetryBackoffSeconds
+        : shifted;
+  }
+
+  static const int _maxRetryBackoffSeconds = 300;
+
+  /// BUG9: Terminal resolution for a task stranded `queued` with no retry
+  /// timer and no pending start — the tail guarantee of the download error
+  /// handler (invoked from a short grace timer so a debounced queue pump can
+  /// still pick the task up).
+  Future<void> _failQueuedTaskWithoutTimer(String taskId) async {
+    try {
+      if (_host.providerDisposed) return;
+      final live = _host.findTaskById(taskId);
+      if (live == null || live.status != DownloadStatus.queued) return;
+      if (_host.retryTimers.containsKey(taskId) || isTaskPendingStart(taskId)) {
+        return;
+      }
+      await _host.setTaskState(live.copyWith(
+        status: DownloadStatus.failed,
+        speed: 0,
+        clearEta: true,
+        errorMessage: 'Download failed. Tap retry to start again.',
+      ));
+    } catch (e) {
+      debugPrint('[DMX] BUG9: queued-task resolution failed for $taskId: $e');
+    }
   }
 
   /// Maps common file extensions to MIME types for MediaStore insertion.

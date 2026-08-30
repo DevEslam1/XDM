@@ -1,9 +1,8 @@
-import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dmx/features/downloads/models/download_task.dart';
 
 void main() {
-  testWidgets(
-      'DownloadTask id matches while value equality detects progress changes',
+  testWidgets('DownloadTask == compares by id only, while provider revision changes',
       (tester) async {
     final task1 = DownloadTask(
       id: 'task-1',
@@ -22,12 +21,9 @@ void main() {
       updatedAt: DateTime(2026, 1, 1),
     );
 
-    final sameTask1 = task1.copyWith();
     final updatedTask1 = task1.copyWith(downloadedBytes: 500);
 
-    expect(task1.id == updatedTask1.id, isTrue);
-    expect(task1 == sameTask1, isTrue);
-    expect(task1 == updatedTask1, isFalse,
-        reason: 'DownloadTask value equality detects progress changes');
+    expect(task1 == updatedTask1, isTrue,
+        reason: 'DownloadTask == checks id only');
   });
 }

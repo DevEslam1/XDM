@@ -122,7 +122,10 @@ class HttpTransferJob {
 
   static const int maxPendingDelays = 16;
   static const Duration _maxChunkWallClock = Duration(minutes: 10);
-  static Duration stalledThreshold = const Duration(minutes: 5);
+  // F4: per-job stall threshold. This used to be a static field, which every
+  // job running in the shared worker isolate overwrote with its own
+  // cmd.stalledTimeoutMinutes — corrupting the stall detection of all peers.
+  Duration stalledThreshold = const Duration(minutes: 5);
   int _nextTimerId = 0;
   final Map<int, Completer<void>> _pendingDelays = <int, Completer<void>>{};
   final Map<int, Timer> _pendingTimers = <int, Timer>{};
@@ -163,19 +166,33 @@ class HttpTransferJob {
         'Cancellable delay queue capacity ($maxPendingDelays) reached; '
         'falling back to cancellable timer',
       );
+      // F26: reuse the tracked-timer bookkeeping for the fallback delay. The
+      // previous fallback registered a fresh `_cancelToken.whenCancel.then`
+      // listener on every call; Future listeners cannot be removed, so one
+      // closure (timer + completer) leaked per capped call until cancel.
+      final id = _nextTimerId++;
       final completer = Completer<void>();
+      _pendingDelays[id] = completer;
+      bool timerFired = false;
+
       final timer = Timer(duration, () {
-        if (!completer.isCompleted) completer.complete();
+        timerFired = true;
+        _pendingTimers.remove(id);
+        final c = _pendingDelays.remove(id);
+        if (c != null && !c.isCompleted) {
+          c.complete();
+        }
       });
-      unawaited(_cancelToken.whenCancel.then((_) {
-        timer.cancel();
-        if (!completer.isCompleted) completer.complete();
-      }).catchError((_) {}));
+      _pendingTimers[id] = timer;
+
       try {
         await completer.future;
       } finally {
-        timer.cancel();
-        if (!completer.isCompleted) completer.complete();
+        if (!timerFired) {
+          timer.cancel();
+          _pendingTimers.remove(id);
+        }
+        _pendingDelays.remove(id);
       }
       return;
     }
@@ -254,6 +271,15 @@ class HttpTransferJob {
   PauseReason get effectivePauseReason =>
       _pendingPauseReason ?? PauseReason.userRequested;
 
+  // F6: the writer of the in-flight multi-thread transfer, tracked so
+  // requestCancel can flush buffered bytes and persist a durability-clamped
+  // snapshot instead of raw live counters.
+  PositionalFileWriter? _activeWriter;
+
+  @visibleForTesting
+  set activeWriterForTesting(PositionalFileWriter? writer) =>
+      _activeWriter = writer;
+
   Future<void> requestCancel([PauseReason? reason]) async {
     if (reason != null) {
       _pendingPauseReason = reason;
@@ -266,8 +292,20 @@ class HttpTransferJob {
       try {
         await DownloadJournal.flushAndSyncForFile(cmd.tempFilePath);
       } catch (_) {}
+      // F6: workers can still be writing while this save runs — persisting
+      // the raw live state could record counters beyond the flushed bytes.
+      // Flush first, then save the durability-clamped snapshot.
+      final writer = _activeWriter;
+      if (writer != null) {
+        try {
+          await writer.flushAll();
+        } catch (e, stLog) {
+          _log.fine('Writer flush on requestCancel failed', e, stLog);
+        }
+      }
       try {
-        await StateStore.save(cmd.tempFilePath, st,
+        await StateStore.save(
+            cmd.tempFilePath, _durableStateSnapshot(st, writer),
             durable: true, taskId: cmd.taskId);
       } catch (_) {}
     }
@@ -288,6 +326,10 @@ class HttpTransferJob {
 
   /// Emits typed TransferResult containing classified taxonomy code and retryable flag.
   void sendUnhandledError(Object e) {
+    // F9: the hard-timeout path already sent the error for this event; the
+    // worker-entry catch re-invokes us with the follow-on cancel DioException
+    // (and later teardown errors) — do not emit a duplicate.
+    if (_timeoutErrorSent) return;
     final classification = ErrorTaxonomy.classify(e);
     final errorType = switch (classification.family) {
       ErrorFamily.cancelled => 'cancel',
@@ -322,6 +364,10 @@ class HttpTransferJob {
 
   Timer? _hardTimeoutTimer;
   Timer? _jobHealthTimer;
+  // F9: set when onHardTimeout has emitted the explicit timeout error. The
+  // follow-on cancel DioException must not be re-emitted as a second error
+  // for the same event via sendUnhandledError (workerEntry catch).
+  bool _timeoutErrorSent = false;
 
   @visibleForTesting
   Timer? get jobHealthTimerForTesting => _jobHealthTimer;
@@ -335,7 +381,11 @@ class HttpTransferJob {
     );
     final hardTimeoutDuration = _computeHardTimeout();
     void onHardTimeout() {
-      requestCancel(PauseReason.userRequested);
+      // F10: a hard timeout is a timeout, not a user pause — persist the
+      // correct pause reason so auto-resume policy sees the truth.
+      if (_timeoutErrorSent) return;
+      _timeoutErrorSent = true;
+      requestCancel(PauseReason.timeout);
       _send('error', {
         'errorType': 'timeout',
         'errorMessage':
@@ -488,7 +538,9 @@ class HttpTransferJob {
         await _runMultiThreaded(dio);
       } on RangeUnsupportedException {
         debugPrint('[DMX-Job] Range unsupported → single-stream fallback');
-        _resetToSingleStream();
+        // F16: the wipe (temp file + state + journal) must complete before
+        // the single-stream download opens its own writer on the same path.
+        await _resetToSingleStream();
         await _runSingleStream(dio);
       }
     } else {
@@ -552,17 +604,29 @@ class HttpTransferJob {
     Duration maxTimeout = const Duration(hours: 24),
   }) {
     if (totalSize <= 0) return maxTimeout;
-    final computed = Duration(seconds: totalSize ~/ (100 * 1024));
+    // F3: align the code with the documented 50 KB/s baseline (the constant
+    // was still 100 KB/s, computing timeouts twice as generous as intended).
+    final computed = Duration(seconds: totalSize ~/ (50 * 1024));
     if (computed < minTimeout) return minTimeout;
     if (computed > maxTimeout) return maxTimeout;
     return computed;
   }
 
   Duration _computeHardTimeout() {
+    // F10: test seam — a null override falls through to the computed value.
+    final override = hardTimeoutForTesting;
+    if (override != null) return override;
     final st = _state;
     if (st == null || st.totalSize <= 0) return defaultTaskHardTimeout;
     return computeHardTimeoutForSize(st.totalSize);
   }
+
+  /// Test-only override for the hard-timeout watchdog duration.
+  @visibleForTesting
+  static Duration? hardTimeoutForTesting;
+
+  @visibleForTesting
+  void startStopwatchForTesting() => _stopwatch.start();
 
   static String _formatDuration(Duration d) {
     if (d.inDays > 0) return '${d.inDays}d ${d.inHours % 24}h';
@@ -702,7 +766,9 @@ class HttpTransferJob {
       final status = e.response?.statusCode;
       final host = Uri.tryParse(cmd.punyUrl)?.host.toLowerCase() ?? '';
       final isYtOrSigned = _isExpiredUrlOrSite(cmd.url, host);
-      if (isYtOrSigned && (status == 401 || status == 403)) {
+      // F11: 410 Gone also signals an expired signed URL.
+      if (isYtOrSigned &&
+          (status == 401 || status == 403 || status == 410)) {
         identityCache.remove(cacheKey);
         _emitProgress(0,
             statusMessage: 'Refreshing links…',
@@ -727,7 +793,10 @@ class HttpTransferJob {
     }
   }
 
-  void _resetToSingleStream() {
+  @visibleForTesting
+  Future<void> resetToSingleStreamForTesting() => _resetToSingleStream();
+
+  Future<void> _resetToSingleStream() async {
     final st = _state!;
     _log.info(
         'resume_range_ignored: resetting to single-stream for ${cmd.taskId}');
@@ -740,7 +809,12 @@ class HttpTransferJob {
       _multiThreadCancelToken.cancel('fallback_to_single_stream');
     }
     _multiThreadCancelToken = CancelToken();
-    StateStore.resetTransferState(
+    // F16: this must complete before the single-stream download opens its
+    // writer. The reset deletes the temp file, the state snapshot, and the
+    // journal; running it concurrently with the new download raced the
+    // unlink against the first writes (POSIX: unlinked inode breaks the
+    // finalize rename; Windows: the delete was silently swallowed).
+    await StateStore.resetTransferState(
       cmd.tempFilePath,
       taskId: cmd.taskId,
       state: st,
@@ -809,6 +883,32 @@ class HttpTransferJob {
     PositionalFileWriter writer;
     final hasPriorBytes = st.downloadedBytes > 0;
     if (hasPriorBytes && await File(cmd.tempFilePath).exists()) {
+      // F17: capture the REAL disk length BEFORE openForResume pre-sizes the
+      // file to totalSize (zero-filling any holes). Once the file is
+      // pre-extended, a chunk claiming more bytes than the disk actually
+      // holds becomes undetectable — the stale J4 pre-flight in _runChunk
+      // compares against the inflated length and never fires, so resume
+      // would replay only the tail over a zero-filled hole and the final
+      // size check would still pass. Treat the on-disk length as truth.
+      final diskLenBeforeExtend = await File(cmd.tempFilePath).length();
+      var clampedAny = false;
+      for (final c in st.chunks) {
+        if (c.downloaded > 0 && c.start + c.downloaded > diskLenBeforeExtend) {
+          final durable = (diskLenBeforeExtend - c.start).clamp(0, c.downloaded);
+          _log.warning(
+            '[F17] Chunk [${c.start}..${c.end}] claims ${c.downloaded} bytes '
+            'but disk ends at $diskLenBeforeExtend — clamping to $durable.',
+          );
+          c.downloaded = durable;
+          // The recorded digest no longer covers the clamped prefix.
+          c.hash = null;
+          clampedAny = true;
+        }
+      }
+      if (clampedAny) {
+        st.migrationNote =
+            '${st.migrationNote ?? ''} f17_disk_truth_clamp'.trim();
+      }
       writer = await PositionalFileWriter.openForResume(cmd.tempFilePath,
           threadCount: st.threadCount,
           totalSize: st.totalSize,
@@ -822,6 +922,9 @@ class HttpTransferJob {
         c.downloaded = 0;
       }
     }
+    // F6: let requestCancel flush + clamp against this writer while the
+    // transfer is running.
+    _activeWriter = writer;
 
     final governor = BandwidthGovernor(
       _effectiveGlobalLimit(),
@@ -881,13 +984,7 @@ class HttpTransferJob {
         try {
           final actualLen = await File(cmd.tempFilePath).length();
           if (actualLen < st.downloadedBytes) {
-            var remaining = actualLen;
-            for (final c in st.chunks) {
-              final chunkOnDisk =
-                  min(c.downloaded, max(0, remaining - c.start));
-              c.downloaded = chunkOnDisk.clamp(0, c.size >= 0 ? c.size : 0);
-              remaining -= chunkOnDisk;
-            }
+            reconcileChunksWithDisk(st, actualLen);
           }
         } catch (e, stLog) {
           _log.fine('Reconcile with disk on cancel failed', e, stLog);
@@ -925,10 +1022,38 @@ class HttpTransferJob {
       }
       rethrow;
     } finally {
+      _activeWriter = null;
       governor.removeTaskLimit(cmd.taskId);
       governor.unregisterConsumer();
       governor.dispose();
-      await writer.close();
+      try {
+        await writer.close();
+      } catch (closeErr, closeSt) {
+        // F8: close() rethrows InsufficientStorage/WriterException from its
+        // final flush. Throwing here (a finally block) would REPLACE the
+        // in-flight error — e.g. turning a cancel-triggered pause into a
+        // failure — so log and continue, preserving the original semantics.
+        _log.fine(
+            'Writer close after transfer end failed (original error preserved)',
+            closeErr,
+            closeSt);
+      }
+    }
+  }
+
+  /// F7: reconcile persisted chunk counters with the real on-disk length at
+  /// pause time. Each chunk keeps what its own range actually holds on disk:
+  /// `clamp(actualLen - c.start, 0, c.downloaded)`.
+  ///
+  /// The previous implementation subtracted already-consumed bytes from a
+  /// rolling `remaining` counter AND then subtracted the absolute `c.start`
+  /// from it again — double-counting chunk starts, discarding real frontier
+  /// progress — and clamped indeterminate chunks (size < 0) to 0 outright.
+  @visibleForTesting
+  void reconcileChunksWithDisk(TransferState st, int actualLen) {
+    for (final c in st.chunks) {
+      final allowance = (actualLen - c.start).clamp(0, c.downloaded);
+      c.downloaded = allowance;
     }
   }
 
@@ -959,6 +1084,12 @@ class HttpTransferJob {
     var nextWorkerId = 0;
     final failFast = Completer<void>();
     Object? permanentError;
+    // F13: the scheduling loop may need extra passes — e.g. under
+    // maxConcurrency == 1 the only worker re-queues a chunk after exhausting
+    // its retries and then retires, which previously stranded the queue (the
+    // chunk was never picked up and surfaced later as a
+    // DownloadIntegrityException). Re-run the loop, bounded.
+    var passCompleter = completer;
 
     Future<void> spawnWorker(int workerId) async {
       runningWorkers++;
@@ -1093,18 +1224,33 @@ class HttpTransferJob {
         activeChunkIndices.remove(workerId);
         activeSpeedPredictors.remove(workerId);
         runningWorkers--;
-        if (runningWorkers == 0 && !completer.isCompleted) {
-          completer.complete();
+        if (runningWorkers == 0 && !passCompleter.isCompleted) {
+          passCompleter.complete();
         }
       }
     }
 
-    final initialWorkers = min(maxConcurrency, max(1, pendingQueue.length));
-    for (var i = 0; i < initialWorkers; i++) {
-      unawaited(spawnWorker(nextWorkerId++));
-    }
+    // F13: bounded scheduling passes. The normal case completes in one pass
+    // (queue drained, workers exit); a pass only repeats when workers retired
+    // while chunks were still queued.
+    const maxSchedulingPasses = 3;
+    for (var pass = 0; pass < maxSchedulingPasses; pass++) {
+      if (pendingQueue.isEmpty) break;
+      if (_cancelRequested || _cancelToken.isCancelled) break;
+      if (failFast.isCompleted) break;
+      if (pass > 0) {
+        passCompleter = Completer<void>();
+        debugPrint(
+            '[AdaptiveScheduler] F13: re-running scheduling pass $pass with '
+            '${pendingQueue.length} queued chunk(s)');
+      }
+      final initialWorkers = min(maxConcurrency, max(1, pendingQueue.length));
+      for (var i = 0; i < initialWorkers; i++) {
+        unawaited(spawnWorker(nextWorkerId++));
+      }
 
-    await completer.future;
+      await passCompleter.future;
+    }
 
     if (failFast.isCompleted && permanentError != null) {
       throw permanentError!;
@@ -1135,19 +1281,26 @@ class HttpTransferJob {
       final corruptedChunks = <int>[];
       for (var i = 0; i < st.chunks.length; i++) {
         final chunk = st.chunks[i];
-        if (chunk.hash != null && chunk.size > 0) {
-          final diskHash = await _computeChunkDiskSha256(
-            cmd.tempFilePath,
-            chunk.start,
-            chunk.size,
+        if (chunk.hash == null) continue;
+        // F17: an incomplete chunk that was resumed with data can carry a
+        // proven hash covering only its downloaded prefix (recorded at the
+        // chunk-boundary save). Digest exactly that prefix — hashing the
+        // full chunk size would compare against the un-downloaded tail and
+        // always fail, which is why incomplete chunks were previously
+        // excluded from verification altogether.
+        final verifyLen = chunk.isComplete ? chunk.size : chunk.downloaded;
+        if (verifyLen <= 0) continue;
+        final diskHash = await _computeChunkDiskSha256(
+          cmd.tempFilePath,
+          chunk.start,
+          verifyLen,
+        );
+        if (diskHash.toLowerCase() != chunk.hash!.toLowerCase()) {
+          _log.warning(
+            '[IntegrityPipeline] Corrupted chunk detected at index $i (range ${chunk.start}-${chunk.end}). '
+            'Expected hash: ${chunk.hash}, actual: $diskHash. Triggering re-download of ONLY this chunk.',
           );
-          if (diskHash.toLowerCase() != chunk.hash!.toLowerCase()) {
-            _log.warning(
-              '[IntegrityPipeline] Corrupted chunk detected at index $i (range ${chunk.start}-${chunk.end}). '
-              'Expected hash: ${chunk.hash}, actual: $diskHash. Triggering re-download of ONLY this chunk.',
-            );
-            corruptedChunks.add(i);
-          }
+          corruptedChunks.add(i);
         }
       }
 
@@ -1286,7 +1439,9 @@ class HttpTransferJob {
         }
         if (response.statusCode != 206) {
           await response.data?.stream.listen((_) {}).cancel();
-          if (response.statusCode == 401 || response.statusCode == 403) {
+          if (response.statusCode == 401 ||
+              response.statusCode == 403 ||
+              response.statusCode == 410) {
             final host = Uri.tryParse(cmd.punyUrl)?.host.toLowerCase() ?? '';
             final isYtOrSigned = _isExpiredUrlOrSite(cmd.url, host);
             if (isYtOrSigned) {
@@ -1362,63 +1517,74 @@ class HttpTransferJob {
         final digestSink = sha256.startChunkedConversion(innerDigestSink);
 
         if (resumeFrom > 0) {
-          final tempFile = File(cmd.tempFilePath);
-          if (tempFile.existsSync()) {
-            final raf = tempFile.openSync(mode: FileMode.read);
-            try {
-              raf.setPositionSync(chunk.start);
-              var remainingToRead = resumeFrom;
-              const bufferSize = 64 * 1024;
-              while (remainingToRead > 0) {
-                final toRead = min(bufferSize, remainingToRead);
-                final bytes = raf.readSync(toRead);
-                if (bytes.isEmpty) break;
-                digestSink.add(bytes);
-                remainingToRead -= bytes.length;
-              }
-            } finally {
-              raf.closeSync();
-            }
+          // F18: the writer may still hold up to 256KB per chunk in its
+          // buffers from earlier attempts this session. Digesting the raw
+          // file without flushing folds a zero gap into the hash and
+          // persists a wrong digest (which later fails integrity checks or
+          // resurrects bad data). readRange flushes all writer buffers
+          // before reading, so the digest always covers what is on disk.
+          final resumedBytes = await writer.readRange(chunk.start, resumeFrom);
+          if (resumedBytes.isNotEmpty) {
+            digestSink.add(resumedBytes);
           }
         }
 
         var sessionBytes = 0;
-        await for (final piece in stream) {
-          _throwIfCancelled();
-          final sleepMs =
-              await governor.acquire(piece.length, taskId: cmd.taskId);
-          if (sleepMs > 0) {
-            await _cancellableDelay(Duration(milliseconds: sleepMs));
+        // F24: pump the response stream through a pass-through controller so
+        // the source subscription can be cancelled explicitly when the chunk
+        // loop exits early (full chunk / hot-split overshoot breaks). Relying
+        // on the loop's implicit break-cancel leaves the HTTP socket draining
+        // in the background while the chunk loop moves on.
+        final pieceController = StreamController<Uint8List>();
+        final sourceSub = stream.listen(
+          pieceController.add,
+          onError: pieceController.addError,
+          onDone: pieceController.close,
+        );
+        try {
+          await for (final piece in pieceController.stream) {
             _throwIfCancelled();
-          }
-          final pos = chunk.start + resumeFrom + sessionBytes;
-          final remainingInChunk = chunk.size >= 0
-              ? chunk.size - (resumeFrom + sessionBytes)
-              : piece.length;
-          if (remainingInChunk <= 0) {
-            break;
-          }
-          final toWrite = remainingInChunk < piece.length
-              ? Uint8List.sublistView(piece, 0, remainingInChunk)
-              : piece;
-          await writer.write(chunkIndex, pos, toWrite);
-          digestSink.add(toWrite);
-          sessionBytes += toWrite.length;
-          chunk.downloaded = resumeFrom + sessionBytes;
-          _bytesSinceSave += toWrite.length;
+            final sleepMs =
+                await governor.acquire(piece.length, taskId: cmd.taskId);
+            if (sleepMs > 0) {
+              await _cancellableDelay(Duration(milliseconds: sleepMs));
+              _throwIfCancelled();
+            }
+            final pos = chunk.start + resumeFrom + sessionBytes;
+            final remainingInChunk = chunk.size >= 0
+                ? chunk.size - (resumeFrom + sessionBytes)
+                : piece.length;
+            if (remainingInChunk <= 0) {
+              break;
+            }
+            final toWrite = remainingInChunk < piece.length
+                ? Uint8List.sublistView(piece, 0, remainingInChunk)
+                : piece;
+            await writer.write(chunkIndex, pos, toWrite);
+            digestSink.add(toWrite);
+            sessionBytes += toWrite.length;
+            chunk.downloaded = resumeFrom + sessionBytes;
+            _bytesSinceSave += toWrite.length;
 
-          if (speedPredictor != null) {
-            final elapsedSec = _stopwatch.elapsedMilliseconds / 1000.0;
-            if (elapsedSec > 0) {
-              speedPredictor.addSample(sessionBytes / elapsedSec);
+            if (speedPredictor != null) {
+              final elapsedSec = _stopwatch.elapsedMilliseconds / 1000.0;
+              if (elapsedSec > 0) {
+                speedPredictor.addSample(sessionBytes / elapsedSec);
+              }
+            }
+
+            await _throttledSaveAndReport(writer);
+
+            if (chunk.size >= 0 && (resumeFrom + sessionBytes) >= chunk.size) {
+              break;
             }
           }
-
-          await _throttledSaveAndReport(writer);
-
-          if (chunk.size >= 0 && (resumeFrom + sessionBytes) >= chunk.size) {
-            break;
-          }
+        } finally {
+          // F24: release the response connection deterministically. The
+          // controller itself is intentionally left unclosed to avoid
+          // add-after-close races with in-flight source events; it is
+          // garbage-collected together with its buffered events.
+          await sourceSub.cancel();
         }
         digestSink.close();
         if (chunkDigest != null && chunk.isComplete) {
@@ -1467,7 +1633,9 @@ class HttpTransferJob {
         if (e.message?.startsWith('Server rejected resume') == true) rethrow;
 
         final status = e.response?.statusCode;
-        if (status == 401 || status == 403) {
+        // F11: 410 Gone is how GCS/Azure expire signed URLs — treat it like
+        // 401/403 so link refresh can kick in.
+        if (status == 401 || status == 403 || status == 410) {
           final host = Uri.tryParse(cmd.punyUrl)?.host.toLowerCase() ?? '';
           final isLikelyExpired = _isExpiredUrlOrSite(cmd.url, host);
           if (isLikelyExpired) {
@@ -1566,8 +1734,19 @@ class HttpTransferJob {
             validateStatus: (_) => true,
           ),
         );
-        if (response.statusCode != 206 || response.data == null) {
+        if (response.statusCode == 200) {
+          // F12: the server ignored Range/If-Range and sent full content —
+          // the resumed bytes may belong to different content. Wipe.
+          await response.data?.stream.listen((_) {}).cancel();
           chunk.downloaded = 0;
+          _log.fine(
+              '[DMX-Job] spot-check got 200 (range ignored) → chunk $chunkIndex reset');
+          return;
+        }
+        if (response.statusCode != 206 || response.data == null) {
+          // F12: transient failures (5xx, 429, throttling, ...) must not
+          // destroy real resumed progress — skip the check without wiping.
+          await response.data?.stream.listen((_) {}).cancel();
           return;
         }
         final builder = BytesBuilder(copy: false);
@@ -1605,7 +1784,7 @@ class HttpTransferJob {
     if (st.chunks.isEmpty) {
       st.chunks = ChunkScheduler.singleStream(st.totalSize);
     }
-    final chunk = st.chunks.first;
+    var chunk = st.chunks.first;
     final tempFile = File(cmd.tempFilePath);
     await tempFile.parent.create(recursive: true);
 
@@ -1628,18 +1807,42 @@ class HttpTransferJob {
         chunk.downloaded = 0;
         await tempFile.delete();
         try {
-          await StateStore.remove(cmd.tempFilePath);
+          await StateStore.remove(cmd.tempFilePath, taskId: cmd.taskId);
         } catch (e, st) {
           _log.fine('Failed to remove state store on temp file overrun', e, st);
         }
         st.chunks = ChunkScheduler.singleStream(st.totalSize);
+        chunk = st.chunks.first;
       } else if (cmd.supportsResume) {
+        // F14: disk length is the source of truth on resume — never trust a
+        // counter claiming more bytes than the file holds, or FileMode.append
+        // will misalign server data against physical offsets.
         chunk.downloaded = st.totalSize > 0 ? len.clamp(0, st.totalSize) : len;
       } else {
         chunk.downloaded = 0;
         await tempFile.delete();
       }
-    } else if (!cmd.supportsResume) {
+    } else {
+      // F14: the temp file is gone but the state may still claim progress.
+      // Appending a full-range response to a fresh empty file while the
+      // Range header asks for `bytes=resumeFrom-` shifts every byte by
+      // resumeFrom; the final size check then either fails the job or —
+      // across several restart cycles — finalizes a corrupt, length-correct
+      // file. Reset to zero and clear the stale snapshot so the inflated
+      // counters cannot resurrect through the stale-write guard.
+      if (st.downloadedBytes > 0 || chunk.downloaded > 0) {
+        debugPrint('[DMX-Job] F14: temp file missing but state claims '
+            '${st.downloadedBytes} bytes — restarting from zero');
+        for (final c in st.chunks) {
+          c.downloaded = 0;
+          c.hash = null;
+        }
+        try {
+          await StateStore.remove(cmd.tempFilePath, taskId: cmd.taskId);
+        } catch (e, st) {
+          _log.fine('Failed to remove stale state for missing temp file', e, st);
+        }
+      }
       chunk.downloaded = 0;
     }
 
@@ -1686,12 +1889,13 @@ class HttpTransferJob {
               chunk.downloaded = 0;
               await tempFile.delete();
               try {
-                await StateStore.remove(cmd.tempFilePath);
+                await StateStore.remove(cmd.tempFilePath, taskId: cmd.taskId);
               } catch (e, st) {
                 _log.fine('Failed to remove state store on spot check mismatch',
                     e, st);
               }
               st.chunks = ChunkScheduler.singleStream(st.totalSize);
+              chunk = st.chunks.first;
             }
           } else {
             await response.data?.stream.listen((_) {}).cancel();
@@ -1779,20 +1983,19 @@ class HttpTransferJob {
                 message: 'Server repeatedly ignored Range requests.',
               );
             }
-            // Clear state files
-            for (final p in [
-              '${cmd.tempFilePath}.dmxstate',
-              '${cmd.tempFilePath}.dmxstate.tmp',
-            ]) {
-              try {
-                final f = File(p);
-                if (await f.exists()) await f.delete();
-              } catch (e, st) {
-                _log.fine(
-                    'Failed to delete dmxstate file on single-stream restart',
-                    e,
-                    st);
-              }
+            // F15: clear the state via StateStore.remove, which resolves the
+            // SAME per-task path (pathFor → `<temp>.<taskId>.dmxstate`) the
+            // saves use. The hand-built legacy paths previously left the
+            // current snapshot intact, letting the stale pre-restart counters
+            // resurrect through the journal's stale-write guard on the next
+            // pause.
+            try {
+              await StateStore.remove(cmd.tempFilePath, taskId: cmd.taskId);
+            } catch (e, st) {
+              _log.fine(
+                  'Failed to remove state store on single-stream restart',
+                  e,
+                  st);
             }
             if (await tempFile.exists()) {
               try {
@@ -1804,14 +2007,17 @@ class HttpTransferJob {
             }
             chunk.downloaded = 0;
             st.chunks = ChunkScheduler.singleStream(st.totalSize);
+            chunk = st.chunks.first;
             // Restart from the beginning with this mirror
             continue;
           }
 
           if (response.statusCode != 200 && response.statusCode != 206) {
             await response.data?.stream.listen((_) {}).cancel();
-            // FIX 4: URL expiration detection
-            if (response.statusCode == 401 || response.statusCode == 403) {
+            // FIX 4: URL expiration detection (F11: also 410 Gone)
+            if (response.statusCode == 401 ||
+                response.statusCode == 403 ||
+                response.statusCode == 410) {
               final host = Uri.tryParse(cmd.punyUrl)?.host.toLowerCase() ?? '';
               final isYtOrSigned = _isExpiredUrlOrSite(cmd.url, host);
               if (isYtOrSigned) {
@@ -1910,7 +2116,17 @@ class HttpTransferJob {
                 await _cancellableDelay(Duration(milliseconds: sleepMs));
                 _throwIfCancelled();
               }
-              await raf.writeFrom(piece);
+              try {
+                await raf.writeFrom(piece);
+              } on FileSystemException catch (writeErr) {
+                // F23: the raw raf write bypasses the writer's ENOSPC
+                // mapping — surface disk-full as InsufficientStorageException
+                // instead of a generic FileSystemException.
+                final diskFull =
+                    PositionalFileWriter.mapDiskFullError(writeErr);
+                if (diskFull != null) throw diskFull;
+                rethrow;
+              }
               chunk.downloaded += piece.length;
               _bytesSinceSave += piece.length;
               await _throttledSaveAndReport(
@@ -1931,6 +2147,9 @@ class HttpTransferJob {
             await raf.flush();
             await raf.close();
           } catch (e, st) {
+            // F23: a disk-full surface here too, not just on write.
+            final diskFull = PositionalFileWriter.mapDiskFullError(e);
+            if (diskFull != null) throw diskFull;
             _log.fine('Failed to flush/close raf in single-stream', e, st);
           }
           raf = null;
@@ -1992,7 +2211,8 @@ class HttpTransferJob {
 
           final status = e.response?.statusCode;
           // FIX 4: URL expiration detection - precise patterns only
-          if (status == 401 || status == 403) {
+          // (F11: also 410 Gone, used by GCS/Azure for expired signatures)
+          if (status == 401 || status == 403 || status == 410) {
             final host = Uri.tryParse(cmd.punyUrl)?.host.toLowerCase() ?? '';
             final isYtOrSigned = _isExpiredUrlOrSite(cmd.url, host);
             if (isYtOrSigned) {
@@ -2248,8 +2468,6 @@ class HttpTransferJob {
       return;
     }
 
-    if (_stateSavePending) return;
-
     final st = _state;
     if (st == null) return;
     final nowMs = _stopwatch.elapsedMilliseconds;
@@ -2272,7 +2490,11 @@ class HttpTransferJob {
       );
     }
 
-    if (dueSave) {
+    // F21: a pending save must no longer swallow DUE PROGRESS REPORTS — it
+    // only suppresses scheduling another durable save. The previous
+    // early-return dropped every report for the whole save duration (up to
+    // the fsync + write time), freezing the UI's progress for seconds.
+    if (dueSave && !_stateSavePending) {
       _lastStateSaveMs = nowMs;
       _bytesSinceSave = 0;
       _stateSavePending = true;

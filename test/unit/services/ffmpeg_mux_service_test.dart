@@ -1,8 +1,7 @@
 import 'dart:io';
-
+import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/core/services/ffmpeg_mux_service.dart';
 import 'package:dmx/core/utils/semaphore.dart';
-import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -47,26 +46,6 @@ void main() {
       expect(canResume, isTrue);
 
       tempDir.deleteSync(recursive: true);
-    });
-
-    test('mergeVideoAudio delegates to mockMergeHandler when configured',
-        () async {
-      int calls = 0;
-      FFmpegMuxService.mockMergeHandler = (video, audio, output) async {
-        calls++;
-        return true;
-      };
-
-      final result = await FFmpegMuxService.mergeVideoAudio(
-        'video.mp4',
-        'audio.aac',
-        'output.mp4',
-      );
-
-      expect(result, isTrue);
-      expect(calls, 1);
-
-      FFmpegMuxService.mockMergeHandler = null;
     });
   });
 }

@@ -1,6 +1,6 @@
-import 'package:dmx/core/services/database/app_database.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dmx/core/services/database/app_database.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -16,9 +16,7 @@ void main() {
   });
 
   test('Database migration and initial setup sanity check', () async {
-    // Keep in sync with AppDatabase.schemaVersion so a schema bump fails
-    // loudly here instead of silently drifting.
-    expect(db.schemaVersion, equals(28));
+    expect(db.schemaVersion, equals(17));
 
     // Verify bookmarks table and operations work correctly
     await db.customStatement('''

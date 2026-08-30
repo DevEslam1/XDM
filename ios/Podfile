@@ -4,9 +4,22 @@ platform :ios, '15.0'
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
-# Keep the local podspec aligned with the libtorrent_flutter 2.0.0 wrapper,
-# whose native binaries are built against libtorrent core 2.1.1.
-# We vendor a corrected copy in ios/LocalPodspecs/ so no runtime patching is needed.
+# Workaround: libtorrent_flutter 1.9.2 podspec incorrectly hardcodes version 1.7.0.
+# We patch it to 1.9.2 to resolve the version mismatch in Podfile.lock.
+begin
+  libtorrent_podspec_path = File.expand_path(File.join('..', '.symlinks', 'plugins', 'libtorrent_flutter', 'ios', 'libtorrent_flutter.podspec'), __FILE__)
+  if File.exist?(libtorrent_podspec_path)
+    podspec_content = File.read(libtorrent_podspec_path)
+    if podspec_content.include?("s.version          = '1.7.0'")
+      puts "Patching libtorrent_flutter.podspec version to 1.9.2"
+      podspec_content.gsub!("s.version          = '1.7.0'", "s.version          = '1.9.2'")
+      File.write(libtorrent_podspec_path, podspec_content)
+    end
+  end
+rescue => e
+  puts "Warning: Failed to patch libtorrent_flutter podspec: #{e.message}"
+end
+
 
 project 'Runner', {
   'Debug' => :debug,
@@ -33,9 +46,6 @@ flutter_ios_podfile_setup
 
 target 'Runner' do
   use_frameworks!
-
-  # Override libtorrent_flutter podspec with our vendored corrected copy.
-  pod 'libtorrent_flutter', :podspec => File.expand_path('LocalPodspecs/libtorrent_flutter.podspec', __dir__)
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
   target 'RunnerTests' do

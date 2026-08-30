@@ -1,8 +1,7 @@
 import 'dart:io';
-
-import 'package:dmx/features/browser/services/adblock_filter_updater.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+import 'package:dmx/features/browser/services/adblock_filter_updater.dart';
 
 void main() {
   /// These tests verify the integrity check logic used in AdblockFilterUpdater._downloadAndParse.
@@ -27,7 +26,7 @@ void main() {
     });
 
     test('normal text filter file passes', () async {
-      const content = '||ads.example.com^\n||tracker.io^\n';
+      final content = '||ads.example.com^\n||tracker.io^\n';
       final f = File(p.join(tempDir.path, 'filter.txt'));
       await f.writeAsString(content);
       final size = await f.length();
@@ -44,7 +43,7 @@ void main() {
     });
 
     test('file much smaller than last good size is rejected', () async {
-      const tiny = '||a.com^\n';
+      final tiny = '||a.com^\n';
       final f = File(p.join(tempDir.path, 'tiny.txt'));
       await f.writeAsString(tiny);
       final size = await f.length();
@@ -65,7 +64,7 @@ void main() {
 
     test('no previous size (first download) always passes size check',
         () async {
-      const content = '||ads.example.com^\n';
+      final content = '||ads.example.com^\n';
       final f = File(p.join(tempDir.path, 'first.txt'));
       await f.writeAsString(content);
       final size = await f.length();

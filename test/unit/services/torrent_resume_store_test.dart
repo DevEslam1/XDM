@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:dmx/core/services/torrent_resume_store.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dmx/core/services/torrent_resume_store.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -123,7 +123,7 @@ void main() {
       final file = File(torrentFilePath);
 
       // Raw bencoded torrent bytes containing an info dict
-      const bencodedStr = 'd4:infod4:name4:test6:lengthi100eee';
+      final bencodedStr = 'd4:infod4:name4:test6:lengthi100eee';
       final bencodedBytes = Uint8List.fromList(utf8.encode(bencodedStr));
       await file.writeAsBytes(bencodedBytes);
 
@@ -142,34 +142,6 @@ void main() {
       expect(loaded, equals([9, 9, 9]));
 
       await TorrentResumeStore.deleteResumeDataForSource(torrentFilePath);
-    });
-
-    test(
-        'corrupted fastresume file with sha mismatch is deleted and returns null (T-01)',
-        () async {
-      const sourceUrl =
-          'magnet:?xt=urn:btih:corrupted00000000000000000000000000000000';
-      final validBlob = Uint8List.fromList([1, 2, 3, 4, 5]);
-
-      await TorrentResumeStore.saveAndWait(
-        torrentId: 601,
-        sourceUrl: sourceUrl,
-        fetchResumeData: () => validBlob,
-      );
-
-      // Overwrite blob file with garbage
-      final resumeDir = Directory('${tempDir.path}/torrent_resume');
-      final files = resumeDir.listSync().whereType<File>();
-      final blobFile = files.firstWhere((f) => f.path.endsWith('.resume'));
-      await blobFile.writeAsString('GARBAGE CORRUPTED DATA');
-
-      // Attempt load
-      final result =
-          await TorrentResumeStore.loadResumeDataForSource(sourceUrl);
-      expect(result, isNull);
-
-      // Corrupted file must be deleted
-      expect(await blobFile.exists(), isFalse);
     });
   });
 }

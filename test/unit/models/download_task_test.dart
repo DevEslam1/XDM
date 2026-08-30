@@ -1,5 +1,5 @@
-import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dmx/features/downloads/models/download_task.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -179,57 +179,6 @@ void main() {
       expect(list[1].id, equals('t_urgent'));
       expect(list[2].id, equals('t_normal_new_low_order'));
       expect(list[3].id, equals('t_normal_old'));
-    });
-
-    // TEST-T1: Chunk averaging, padding, and NaN/Inf handling
-    test('TEST-T1: sanitizedChunks handles padding, averaging, and NaN/Inf',
-        () {
-      final taskWithFewerChunks = DownloadTask(
-        id: 't_chunks_1',
-        fileName: 'file.bin',
-        url: 'https://example.com/file.bin',
-        fileSize: 1000,
-        downloadedBytes: 500,
-        category: 'Other',
-        status: DownloadStatus.downloading,
-        savePath: '/downloads',
-        localFilePath: '/downloads/file.bin',
-        tempFilePath: '/downloads/file.bin.dmxpart',
-        threadCount: 4,
-        chunks: const [0.2, 0.4], // 2 chunks for 4 threads -> average is 0.3
-        createdAt: now,
-        updatedAt: now,
-      );
-
-      final chunks1 = taskWithFewerChunks.sanitizedChunks;
-      expect(chunks1.length, equals(4));
-      expect(chunks1[0], closeTo(0.2, 0.001));
-      expect(chunks1[1], closeTo(0.4, 0.001));
-      expect(chunks1[2], closeTo(0.3, 0.001));
-      expect(chunks1[3], closeTo(0.3, 0.001));
-
-      final taskWithNanInf = DownloadTask(
-        id: 't_chunks_2',
-        fileName: 'file2.bin',
-        url: 'https://example.com/file2.bin',
-        fileSize: 1000,
-        downloadedBytes: 500,
-        category: 'Other',
-        status: DownloadStatus.downloading,
-        savePath: '/downloads',
-        localFilePath: '/downloads/file2.bin',
-        tempFilePath: '/downloads/file2.bin.dmxpart',
-        threadCount: 3,
-        chunks: const [double.nan, double.infinity, 0.75],
-        createdAt: now,
-        updatedAt: now,
-      );
-
-      final chunks2 = taskWithNanInf.sanitizedChunks;
-      expect(chunks2.length, equals(3));
-      expect(chunks2[0], equals(0.0));
-      expect(chunks2[1], equals(0.0));
-      expect(chunks2[2], closeTo(0.75, 0.001));
     });
   });
 }

@@ -116,6 +116,8 @@ class _DownloadCardState extends State<DownloadCard>
       ),
     );
 
+    bool? pendingDeleteFiles;
+
     final Widget interactiveCard = isSelectionMode
         ? cardWidget
         : Dismissible(
@@ -178,11 +180,7 @@ class _DownloadCardState extends State<DownloadCard>
 
                 // Active / paused / queued / merging / failed → ask the user,
                 // because a partial file may be on disk.
-                // FIX M-8: Capture provider references BEFORE the async gap.
-                // After showDeleteConfirmationDialog returns, the BuildContext
-                // may be stale if the widget was disposed during the dialog.
                 final settings = context.read<SettingsProvider>();
-                final capturedProvider = provider;
                 final deleteFiles = await showDeleteConfirmationDialog(
                   context,
                   task,
@@ -192,21 +190,18 @@ class _DownloadCardState extends State<DownloadCard>
                 // User cancelled → snap the card back.
                 if (deleteFiles == null) return false;
 
-                // User confirmed → delete immediately (dialog acts as gate)
-                try {
-                  await capturedProvider.deleteTask(task.id,
-                      deleteFiles: deleteFiles);
-                  return true;
-                } catch (e) {
-                  if (context.mounted) {
-                    ThemedSnackbar.show(
-                      context,
-                      message: 'Failed to delete: $e',
-                      color: AppTheme.neonRed,
-                    );
-                  }
-                  return false;
-                }
+                // User confirmed → record selection and let onDismissed execute deletion
+                pendingDeleteFiles = deleteFiles;
+                return true;
+              }
+            },
+            onDismissed: (direction) {
+              if (direction == DismissDirection.endToStart &&
+                  task.status != DownloadStatus.completed) {
+                provider.deleteTask(
+                  task.id,
+                  deleteFiles: pendingDeleteFiles ?? false,
+                );
               }
             },
             child: cardWidget,

@@ -1,8 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
-
-import 'package:dmx/core/services/positional_file_writer.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dmx/core/services/positional_file_writer.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

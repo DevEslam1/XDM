@@ -122,15 +122,14 @@ class DownloadProvider extends ChangeNotifier
       databaseService: _databaseService,
       findTask: _findTask,
       onTaskUpdated: (updated) {
+        if (_disposed || _executor.isTombstoned(updated.id)) return;
         final idx = _tasks.indexWhere((t) => t.id == updated.id);
         if (idx != -1) {
           _tasks[idx] = updated;
-        } else {
-          _tasks.add(updated);
+          _taskIndex[updated.id] = updated;
+          filteredTasksDirty = true;
+          safeNotify();
         }
-        _taskIndex[updated.id] = updated;
-        filteredTasksDirty = true;
-        safeNotify();
       },
     );
     _executor = TaskExecutor(
@@ -186,9 +185,10 @@ class DownloadProvider extends ChangeNotifier
   final Map<String, int> _retryCounts = {};
   final Map<String, Queue<double>> _speedHistories = {};
   final Map<String, Queue<double>> _uploadSpeedHistories = {};
+  // BUG6: the per-task DB-throttle maps (lastDbSaveTimes/lastDbSaveBytes)
+  // were never written and progress-only rows now flush periodically via
+  // DownloadOrchestrator.flushPendingProgressToDatabase — removed.
   final Map<String, int> _lastProgressUpdateTimes = {},
-      _lastDbSaveTimes = {},
-      _lastDbSaveBytes = {},
       _lastTorrentFileDiskSync = {};
   final Set<String> _pendingProgressUpdates = {};
   final Map<String, int> _ytLowSpeedCounts = {};
@@ -238,10 +238,6 @@ class DownloadProvider extends ChangeNotifier
   Map<String, Queue<double>> get speedHistories => _speedHistories;
   @override
   Map<String, int> get lastProgressUpdateTimes => _lastProgressUpdateTimes;
-  @override
-  Map<String, int> get lastDbSaveTimes => _lastDbSaveTimes;
-  @override
-  Map<String, int> get lastDbSaveBytes => _lastDbSaveBytes;
   @override
   Map<String, int> get lastTorrentFileDiskSync => _lastTorrentFileDiskSync;
   @override
@@ -753,7 +749,8 @@ class DownloadProvider extends ChangeNotifier
                 List<Map<String, dynamic>>? updatedFiles;
                 int selectedFileDownloaded = 0;
                 bool hasSelectedFileProgress = false;
-                if (task.torrentFiles != null && task.torrentFiles!.isNotEmpty) {
+                if (task.torrentFiles != null &&
+                    task.torrentFiles!.isNotEmpty) {
                   updatedFiles = List<Map<String, dynamic>>.from(
                     task.torrentFiles!.map((f) => Map<String, dynamic>.from(f)),
                   );
@@ -775,7 +772,8 @@ class DownloadProvider extends ChangeNotifier
                         hasSelectedFileProgress = true;
                       }
                     }
-                    final bool lengthKnown = len > 0 || f['lengthKnown'] == true;
+                    final bool lengthKnown =
+                        len > 0 || f['lengthKnown'] == true;
                     final bool isComp =
                         lengthKnown && ((dl >= len) || f['isComplete'] == true);
                     f['isComplete'] = isComp;
@@ -851,7 +849,6 @@ class DownloadProvider extends ChangeNotifier
     if (shouldStop) _stopTorrentPollingTimer();
   }
 
-
   // FIX-1.1: Lock all mutations in DownloadProvider
   Future<void> addTask(DownloadTask task) async {
     if (_disposed) return;
@@ -861,9 +858,10 @@ class DownloadProvider extends ChangeNotifier
   // FIX P0-5: Do not notify while holding _tasksLock — listeners may
   // re-enter the provider and deadlock. Notify after releasing lock.
   Future<void> _setTask(DownloadTask task) async {
+    if (_executor.isTombstoned(task.id)) return;
     bool shouldNotify = false;
     await _tasksLock.synchronized(() async {
-      if (_disposed) return;
+      if (_disposed || _executor.isTombstoned(task.id)) return;
       await _databaseService.saveTask(task);
       final idx = _tasks.indexWhere((t) => t.id == task.id);
       if (idx != -1) {
@@ -884,9 +882,10 @@ class DownloadProvider extends ChangeNotifier
 
   @override
   Future<void> setTaskState(DownloadTask task) async {
+    if (_executor.isTombstoned(task.id)) return;
     bool shouldNotify = false;
     await _tasksLock.synchronized(() async {
-      if (_disposed) return;
+      if (_disposed || _executor.isTombstoned(task.id)) return;
       final existing = _findTask(task.id);
       if (existing != null) {
         if (existing.pausedByUser &&
@@ -910,7 +909,7 @@ class DownloadProvider extends ChangeNotifier
       final idx = _tasks.indexWhere((t) => t.id == task.id);
       if (idx != -1) {
         _tasks[idx] = task;
-      } else {
+      } else if (!_executor.isTombstoned(task.id)) {
         _tasks.add(task);
       }
       _taskIndex[task.id] = task;
@@ -995,7 +994,14 @@ class DownloadProvider extends ChangeNotifier
     if (path == null || path.isEmpty) return;
     try {
       final file = File(path);
-      if (await file.exists()) await file.delete();
+      if (await file.exists()) {
+        await file.delete();
+        return;
+      }
+      final dir = Directory(path);
+      if (await dir.exists()) {
+        await dir.delete(recursive: true);
+      }
     } catch (_) {}
   }
 
@@ -1283,7 +1289,18 @@ class DownloadProvider extends ChangeNotifier
 
     // Publish paused before waiting for the in-flight downloader.
     if (wasActive) {
-      await setTaskState(taskBeforePause.copyWith(
+      // BUG3: flush any pending progress-only DB update first so the row
+      // reflects the latest bytes, then re-read the task so the paused
+      // state carries the newest in-memory receivedBytes/chunks. Engine
+      // ticks are dropped after the status flip, so this pre-flush is the
+      // last chance to persist them.
+      await flushPendingProgress(id);
+      // BUG3: re-read the task after the flush so the paused state carries
+      // the newest in-memory receivedBytes/chunks (the flush window can
+      // still have moved progress; a task deleted in that window is skipped).
+      final liveToPause = _findTask(id);
+      if (liveToPause == null) return;
+      await setTaskState(liveToPause.copyWith(
         status: DownloadStatus.paused,
         speed: 0,
         clearEta: true,
@@ -1291,6 +1308,11 @@ class DownloadProvider extends ChangeNotifier
         pauseReason: reason,
       ));
     }
+
+    // BUG7: cancel any pending auto-retry timer so the pause takes effect
+    // immediately and a manual retry inside the timer window isn't silently
+    // swallowed by the queue pump's waiting-for-retry filter.
+    _retryTimers.remove(id)?.cancel();
 
     final token = _cancelTokens.remove(id);
     if (token != null && !token.isCancelled) {
@@ -1350,6 +1372,10 @@ class DownloadProvider extends ChangeNotifier
 
   Future<void> cancelTask(String id) async {
     if (_disposed) return;
+    // BUG7: cancel any pending auto-retry timer so a manual retry issued
+    // right after a cancel isn't silently swallowed by the queue pump's
+    // waiting-for-retry filter.
+    _retryTimers.remove(id)?.cancel();
     _cancelTokens.remove(id)?.cancel('cancelled');
     _notifications.cancelForTask(id);
     await _applyStateChange(
@@ -1385,14 +1411,39 @@ class DownloadProvider extends ChangeNotifier
             _latestTorrentStats.remove(torrentId);
           }
           forgetTorrentSwarm(id);
+          final duo = _orchestratorTokens.remove(id);
+          duo?.video.cancel('deleted');
+          duo?.audio.cancel('deleted');
           _cancelTokens.remove(id)?.cancel('deleted');
+          _retryTimers.remove(id)?.cancel();
+          _retryCounts.remove(id);
+          _activeFutures.remove(id);
           _notifications.cancelForTask(id);
           if (deleteFiles) {
             await _deleteFileSafely(task.localFilePath);
-            await _deleteFileSafely(task.tempFilePath);
-            await _deleteFileSafely('${task.tempFilePath}.dmx_journal');
-            await _deleteFileSafely('${task.tempFilePath}.dmx_meta');
-            await _deleteFileSafely('${task.tempFilePath}.parts');
+            final tempPath = task.tempFilePath;
+            if (tempPath.isNotEmpty) {
+              await _deleteFileSafely(tempPath);
+              await _deleteFileSafely('$tempPath.dmx_journal');
+              await _deleteFileSafely('$tempPath.dmx_meta');
+              await _deleteFileSafely('$tempPath.parts');
+              await _deleteFileSafely('$tempPath.journal');
+              await _deleteFileSafely('$tempPath.dmxstate');
+              await _deleteFileSafely('$tempPath.audio');
+              await _deleteFileSafely('$tempPath.audio.journal');
+              await _deleteFileSafely('$tempPath.audio.dmxstate');
+              await deleteDownloadParts(tempPath);
+              await DownloadJournal.deleteJournalFor(tempPath);
+            }
+            if (task.torrentFiles != null && task.torrentFiles!.isNotEmpty) {
+              for (final f in task.torrentFiles!) {
+                final relPath = f['path']?.toString();
+                if (relPath != null && relPath.isNotEmpty) {
+                  final fullPath = p.join(task.savePath, relPath);
+                  await _deleteFileSafely(fullPath);
+                }
+              }
+            }
           }
           await _databaseService.deleteTask(id);
           _tasks.removeWhere((t) => t.id == id);
@@ -1400,8 +1451,12 @@ class DownloadProvider extends ChangeNotifier
           _speedHistories.remove(id);
           _uploadSpeedHistories.remove(id);
           _lastProgressUpdateTimes.remove(id);
+          _lastTorrentFileDiskSync.remove(id);
+          _pendingProgressUpdates.remove(id);
           _ytLowSpeedCounts.remove(id);
           _ytThrottlingRefreshing.remove(id);
+          effectiveThreadOverrides.remove(id);
+          _resumeRejectionRestarts.remove(id);
           _downloadMetrics.remove(id);
           _reservedTaskIds.remove(id);
           filteredTasksDirty = true;
@@ -1664,17 +1719,23 @@ class DownloadProvider extends ChangeNotifier
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _eventSubscription?.cancel();
-    _widgetUpdateTimer?.cancel();
-    _torrentPollingTimer?.cancel();
-    _torrentPollingTimer = null;
-    _networkMonitor.dispose();
-    _scheduleManager.dispose();
-    _notifications.dispose();
-    _orchestrator.dispose();
-    _executor.dispose();
     _settingsProvider.removeListener(_onSettingsChanged);
     PowerMonitor.isChargingNotifier.removeListener(_onChargingChanged);
+    _eventSubscription?.cancel();
+    _eventSubscription = null;
+    _widgetUpdateTimer?.cancel();
+    _widgetUpdateTimer = null;
+    _torrentPollingTimer?.cancel();
+    _torrentPollingTimer = null;
+    for (final t in _retryTimers.values) {
+      t.cancel();
+    }
+    _retryTimers.clear();
+    _notifications.dispose();
+    _scheduleManager.dispose();
+    _networkMonitor.dispose();
+    _orchestrator.dispose();
+    _executor.dispose();
     _taskIndex.clear();
     _ytLowSpeedCounts.clear();
     _ytThrottlingRefreshing.clear();

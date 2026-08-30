@@ -1,7 +1,6 @@
-import 'package:dmx/features/settings/screens/settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
+import 'package:dmx/features/settings/screens/settings_screen.dart';
 import '../helpers/test_helpers.dart';
 
 void main() {
@@ -17,7 +16,6 @@ void main() {
 
     testWidgets('dark mode switch is toggleable', (tester) async {
       final settings = createMockSettingsProvider();
-      await settings.load();
 
       await tester.pumpWidget(createTestApp(
         child: const SettingsScreen(),
@@ -49,7 +47,6 @@ void main() {
     });
     testWidgets('supports setting theme mode to amoled', (tester) async {
       final settings = createMockSettingsProvider();
-      await settings.load();
       await settings.setThemeMode('amoled');
 
       expect(settings.themeMode, equals('amoled'));
@@ -61,17 +58,16 @@ void main() {
         'enabling battery saver mode keeps power tab active and page visible',
         (tester) async {
       final settings = createMockSettingsProvider();
-      await settings.load();
       await tester.pumpWidget(createTestApp(
         child: const SettingsScreen(initialSection: 'power'),
         settingsProvider: settings,
       ));
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
 
       expect(settings.activeSettingsTabIndex, equals(5));
 
       await settings.setBatterySaverMode(true);
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
 
       expect(settings.batterySaverMode, isTrue);
       expect(settings.activeSettingsTabIndex, equals(5));

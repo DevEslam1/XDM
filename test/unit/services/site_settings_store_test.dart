@@ -1,16 +1,19 @@
-import 'package:dmx/features/browser/services/site_settings_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:dmx/features/browser/services/site_settings_store.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('SiteSettingsStore', () {
+    // FIX(B5): the store is instance-scoped now (no shared static cache), so
+    // each test uses a fresh instance against mock SharedPreferences.
     late SiteSettingsStore store;
 
     setUp(() {
       SharedPreferences.setMockInitialValues({});
       store = SiteSettingsStore();
+      store.clearCache();
     });
 
     test('getForHost returns default SiteSettings for unconfigured host',

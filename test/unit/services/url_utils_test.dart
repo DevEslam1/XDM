@@ -1,6 +1,6 @@
-import 'package:dmx/core/utils/file_utils.dart';
-import 'package:dmx/core/utils/url_utils.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dmx/core/utils/url_utils.dart';
+import 'package:dmx/core/utils/file_utils.dart';
 
 void main() {
   group('URL Utils', () {

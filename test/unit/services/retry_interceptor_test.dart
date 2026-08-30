@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
-import 'package:dmx/core/services/retry_interceptor.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dmx/core/services/retry_interceptor.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

@@ -97,6 +97,23 @@ class TorrentSubscriptionRegistry {
     return entry?.subscription;
   }
 
+  /// B19: cancels and removes the CURRENT subscription for [torrentId] —
+  /// but only when it was registered by [handler]. Replacement subscriptions
+  /// (registered from the stream-error path) are not visible to the stale
+  /// local `sub` captured by the original caller, so cleanup must look the
+  /// live one up here or it leaks.
+  Future<void> cancelCurrentFor(
+      int torrentId, TorrentDownloadHandler handler) async {
+    final entry = _registry[torrentId];
+    if (entry == null || !identical(entry.handler, handler)) return;
+    _registry.remove(torrentId);
+    try {
+      await entry.subscription.cancel();
+    } catch (e, st) {
+      _log.fine('Failed to cancel current subscription: $e', e, st);
+    }
+  }
+
   void unregister(int torrentId, TorrentDownloadHandler handler) {
     final entry = _registry[torrentId];
     if (entry != null && identical(entry.handler, handler)) {
@@ -427,8 +444,20 @@ class TorrentDownloadHandler {
     final deadline = DateTime.now().add(budget);
     var pauseAttempts = 0;
     while (DateTime.now().isBefore(deadline) && pauseAttempts < 3) {
+      // B6: bound each pause attempt to the remaining budget. pauseTorrent
+      // can spend up to 3×5s confirming internally, so an unbounded await
+      // here could consume the whole budget and starve the force-stop that
+      // must run on schedule.
+      final remaining = deadline.difference(DateTime.now());
       try {
-        await _torrentService.pauseTorrent(id);
+        await _torrentService.pauseTorrent(id).timeout(
+              remaining <= Duration.zero ? Duration.zero : remaining,
+              onTimeout: () => _log.fine(
+                  'haltTorrent pause attempt for $id exceeded remaining budget'),
+            );
+      } on TimeoutException {
+        // Budget for this attempt exhausted — the loop condition re-checks
+        // the overall deadline below.
       } catch (e, st) {
         _log.warning('haltTorrent pause failed for $id', e, st);
       }
@@ -586,6 +615,11 @@ class TorrentDownloadHandler {
             },
             files: torrentFiles,
             pieceBitfield: pieceBitfield,
+            // B14: persist the piece counts so needsRecheckAfterResume has a
+            // stored value to validate the engine's actual pieces against
+            // when the degraded snapshot is consumed on re-add.
+            piecesTotal: pieceBitfield?.length,
+            piecesDone: pieceBitfield?.where((b) => b).length,
             degradedFallback: true,
           ).timeout(
             fallbackBudget,
@@ -769,6 +803,9 @@ class TorrentDownloadHandler {
     int? torrentId,
     bool isRetry = false,
     PauseReason? pauseReason,
+    // B1: user-configured magnet metadata timeout, forwarded end-to-end from
+    // the engine routing. Null keeps the service default (300s).
+    int? metadataTimeoutSeconds,
   }) async {
     final initFiles = getTorrentFiles?.call();
     final initSummary = normalizeTorrentFiles(initFiles);
@@ -823,6 +860,7 @@ class TorrentDownloadHandler {
 
         Uint8List? preloadedResume;
         List<Map<String, dynamic>>? preloadedFiles;
+        TorrentDegradedSnapshot? preloadedDegraded;
         try {
           // FIX(C4): Use _torrentService.hasResumeData
           if (await _torrentService.hasResumeData(url)) {
@@ -831,6 +869,16 @@ class TorrentDownloadHandler {
             if (preloadedResume != null) {
               preloadedFiles = await TorrentResumeStore.loadFilesForSource(url);
             }
+          } else {
+            // B15: on libtorrent_flutter 1.9.2 the native save returns null,
+            // so pause-time persistence is a meta-only degraded snapshot with
+            // no .resume blob. Load it anyway — it carries the piece bitfield
+            // and per-file rows needed to re-arm progress and drive the
+            // recovery recheck, instead of silently re-downloading from
+            // scratch on every restart / handle loss.
+            preloadedDegraded =
+                await TorrentResumeStore.loadDegradedSnapshotForSource(url);
+            preloadedFiles = preloadedDegraded?.files;
           }
         } catch (e, st) {
           _log.fine('Preload resume data failed: $e', e, st);
@@ -855,21 +903,35 @@ class TorrentDownloadHandler {
             }
 
             // FIX(C1, C2, C4): Injected service call and cancelToken race with safe cleanup
-            // Pass resume data at add-time (the only path libtorrent actually
-            // supports — see lt_add_magnet_resume) instead of relying solely
-            // on the post-add loadResumeData() fallback below, which
-            // libtorrent has no API to make work reliably.
+            // B13: resume data is passed at add-time — the only injection
+            // point the bridge has. NOTE the engine contract: libtorrent
+            // 1.9.2 exposes no lt_add_magnet_resume export, so the native
+            // addMagnet silently ignores resumeData; the snapshot's real
+            // value is the degraded store entry consumed by the preload
+            // route (above) and the recovery recheck in _handleUpdate. The
+            // post-add loadResumeData() call was removed as a guaranteed
+            // no-op on this bridge.
             final metadataFuture = _torrentService.addMagnetWithMetadataTimeout(
               url,
               saveDir,
               resumeData: preloadedResume?.toList(),
+              // B1: forward the user-configured metadata timeout.
+              timeout: metadataTimeoutSeconds != null &&
+                      metadataTimeoutSeconds > 0
+                  ? Duration(seconds: metadataTimeoutSeconds)
+                  : const Duration(seconds: 300),
               onStatusUpdate: (message) {
                 onProgress(_torrentProgress(
                   cycleState: CycleState.fetchingMetadata,
                   statusMessage: message,
                   summary: initSummary,
                   files: initFiles,
-                  torrentId: torrentId,
+                  // B3: the torrentId param is stale while metadata is still
+                  // resolving — the real id exists as soon as addMagnet
+                  // registers the source, so prefer the resolved one.
+                  torrentId: id >= 0
+                      ? id
+                      : (_torrentService.idForSource(url) ?? torrentId),
                   knownFileSize: knownFileSize,
                 ));
               },
@@ -921,7 +983,9 @@ class TorrentDownloadHandler {
                       : 'Failed: Torrent initialization error'),
               summary: initSummary,
               files: initFiles,
-              torrentId: torrentId,
+              // B3: emit the resolved id once known, not the stale param.
+              torrentId:
+                  id >= 0 ? id : (_torrentService.idForSource(url) ?? torrentId),
               knownFileSize: knownFileSize,
             ));
             rethrow;
@@ -994,7 +1058,7 @@ class TorrentDownloadHandler {
         }
 
         final rt = _getRuntime(id);
-        if (id >= 0 && preloadedResume != null) {
+        if (id >= 0 && (preloadedResume != null || preloadedDegraded != null)) {
           hasLoadedResume = true;
           if (preloadedFiles != null && preloadedFiles.isNotEmpty) {
             rt.cachedAccurateFiles = preloadedFiles;
@@ -1014,18 +1078,30 @@ class TorrentDownloadHandler {
                 ? activeSummary.downloaded
                 : initSummary.downloaded,
           );
-          // Resume data was handed to the engine at add-time for both magnet
-          // (lt_add_magnet_resume) and file (lt_add_torrent_file_resume)
-          // sources — the only paths libtorrent supports. A post-add
-          // loadResumeData() is a guaranteed no-op, and the recheckTorrent()
-          // that used to follow it re-hashed every piece on disk, which is
-          // what made resume appear to hang for minutes on large torrents.
+          // B13: resume data was handed to the engine at add-time for both
+          // magnet and file sources — the only injection point the bridge
+          // has. NOTE: libtorrent_flutter 1.9.2 silently ignores it (no
+          // lt_add_*_resume export), and a post-add loadResumeData() is a
+          // guaranteed no-op, so the recovery recheck in _handleUpdate is
+          // what actually restores on-disk progress. The recheckTorrent()
+          // that used to run unconditionally here re-hashed every piece on
+          // disk, which made resume appear to hang for minutes on large
+          // torrents.
           //
           // Seed the last-confirmed byte count from the resume store so the
-          // brief checking phase reports the previously known progress instead
-          // of the engine's verification percentage.
-          rt.lastConfirmedDownloadedBytes = resumeSummary.downloaded;
-          rt.resumeExpectedBytes = resumeSummary.downloaded;
+          // brief checking phase reports the previously known progress
+          // instead of the engine's verification percentage. The degraded
+          // snapshot (B15) derives those bytes from its piece bitfield when
+          // the engine cannot report per-file counts; the piece count is a
+          // last-resort arm so the recovery trigger still has something to
+          // fire on (units differ, but it only gates the one-shot recheck).
+          final storedDegradedBytes = preloadedDegraded?.downloadedBytes ?? 0;
+          rt.lastConfirmedDownloadedBytes = resumeSummary.downloaded > 0
+              ? resumeSummary.downloaded
+              : storedDegradedBytes;
+          rt.resumeExpectedBytes = rt.lastConfirmedDownloadedBytes > 0
+              ? rt.lastConfirmedDownloadedBytes
+              : (preloadedDegraded?.piecesDone ?? 0);
           onProgress(_torrentProgress(
             cycleState: CycleState.verifying,
             statusMessage: 'Verifying resume data…',
@@ -1073,6 +1149,29 @@ class TorrentDownloadHandler {
       TorrentResumeStore.registerSource(id, url);
       _activeTorrentIds.add(id);
       final rt = _getRuntime(id);
+
+      // B13/B15: a torrent re-added outside this handler (e.g. the session
+      // manager's resumeTorrentTask) arrives here with a live handle, so the
+      // preload route above never ran. Arm the resume expectation from the
+      // degraded snapshot so a restart that dropped the add-time snapshot
+      // still triggers the one-shot recovery recheck instead of silently
+      // restarting from zero.
+      if (rt.resumeExpectedBytes == 0 && !rt.resumeRecheckIssued) {
+        try {
+          final snap =
+              await TorrentResumeStore.loadDegradedSnapshotForSource(url);
+          final expected = snap?.downloadedBytes ?? 0;
+          if (expected > 0) {
+            rt.resumeExpectedBytes = expected;
+            if (rt.lastConfirmedDownloadedBytes <= 0) {
+              rt.lastConfirmedDownloadedBytes = expected;
+            }
+          }
+        } catch (e) {
+          _log.fine('Degraded snapshot preload failed for torrent $id: $e');
+        }
+      }
+
       bool torrentCompleted = false;
       bool pauseInitiated = false;
 
@@ -1171,9 +1270,11 @@ class TorrentDownloadHandler {
           rt.watchdogManager?.stop();
           rt.watchdogManager = null;
           await _saveResumeDataBeforePause(id, url);
-          TorrentSubscriptionRegistry.instance.unregister(id, this);
-          await haltTorrent(id);
-          await Future.delayed(const Duration(milliseconds: 50));
+          // B7: the accurate per-file fetch below moved BEFORE haltTorrent —
+          // once the handle is force-stopped, getFiles returns [] and the
+          // fetch was a guaranteed no-op. The handle is still live here, so
+          // the snapshot captures real bytes. Bounded so a wedged engine
+          // cannot delay the force-stop by more than 2s.
 
           List<Map<String, dynamic>>? pauseFiles = getTorrentFiles?.call();
           String normKey(String name) =>
@@ -1215,11 +1316,20 @@ class TorrentDownloadHandler {
                       (f['downloadedBytes'] as num).toInt()
           };
           try {
-            final accurateFiles = await _torrentService.getAccurateFileProgress(
-              id,
-              saveDir,
-              knownSizes: previousLengthByIndex,
-            );
+            final accurateFiles = await _torrentService
+                .getAccurateFileProgress(
+                  id,
+                  saveDir,
+                  knownSizes: previousLengthByIndex,
+                )
+                .timeout(
+                  const Duration(seconds: 2),
+                  onTimeout: () {
+                    _log.warning(
+                        'Accurate file progress fetch on pause timed out for torrent $id');
+                    return const [];
+                  },
+                );
             if (accurateFiles.isNotEmpty) {
               pauseFiles = [
                 for (var i = 0; i < accurateFiles.length; i++)
@@ -1264,6 +1374,12 @@ class TorrentDownloadHandler {
               st,
             );
           }
+          // B7: now that the accurate snapshot is banked, tear the handle
+          // down. (This used to run before the fetch, which made the fetch a
+          // guaranteed no-op.)
+          TorrentSubscriptionRegistry.instance.unregister(id, this);
+          await haltTorrent(id);
+          await Future.delayed(const Duration(milliseconds: 50));
           final pauseSummary = normalizeTorrentFiles(pauseFiles);
           PauseReason? effectivePauseReason = pauseReason;
           if (effectivePauseReason == null) {
@@ -1337,10 +1453,34 @@ class TorrentDownloadHandler {
           );
         }
         if (!cancelToken.isCancelled) {
+          // B25: resumeTorrent internally waits up to 2s for the engine to
+          // confirm the resume; awaiting it (bounded) lets the completion
+          // listeners below attach to a torrent that is actually running,
+          // and lets a failed resume surface as a visible stall instead of
+          // unexplained silence.
+          var resumeConfirmed = true;
           try {
-            _torrentService.resumeTorrent(id);
+            await _torrentService.resumeTorrent(id).timeout(
+                  const Duration(seconds: 3),
+                  onTimeout: () {
+                    resumeConfirmed = false;
+                    _log.warning(
+                        'resumeTorrent confirmation timed out for torrent $id — continuing');
+                  },
+                );
           } catch (e, st) {
+            resumeConfirmed = false;
             _log.warning('resumeTorrent failed: $e', e, st);
+          }
+          if (!resumeConfirmed) {
+            onProgress(_torrentProgress(
+              cycleState: CycleState.stalled,
+              statusMessage: 'Waiting for torrent engine to resume…',
+              summary: postMetadataSummary,
+              files: postMetadataFiles,
+              torrentId: id,
+              knownFileSize: knownFileSize,
+            ));
           }
           if (url.startsWith('magnet:')) {
             try {
@@ -1411,26 +1551,77 @@ class TorrentDownloadHandler {
       }
     } catch (e, st) {
       if (e is! DioException || e.type != DioExceptionType.cancel) {
-        _log.severe(
-            'Post-add setup or download failed for torrent $id: $e', e, st);
-        _safeRemoveTorrent(id);
-        try {
-          TorrentResumeStore.unregisterTorrent(id);
-        } catch (_) {}
-        _activeTorrentIds.remove(id);
-        final rt = _runtime.remove(id);
-        rt?.close();
-        onProgress(_torrentProgress(
-          cycleState: CycleState.failed,
-          statusMessage: 'Failed: Torrent setup error',
-          summary: initSummary,
-          files: initFiles,
-          torrentId: id,
-          knownFileSize: knownFileSize,
-        ));
+        // B9: classify before tearing anything down. A stall or a lost
+        // handle is RECOVERABLE — the engine handle (or at minimum the
+        // resume mapping + source registration) must survive so a retry can
+        // continue from current progress instead of re-fetching and
+        // re-hashing everything. Only fatal failures (disk, metadata,
+        // source) remove the handle and unregister.
+        final recoverableMessage = _recoverableTorrentFailureMessage(e);
+        if (recoverableMessage != null) {
+          _log.warning(
+              'Recoverable torrent failure for $id — keeping resume mapping: $e',
+              e,
+              st);
+          // Engine handle intentionally left untouched: for a stall it is
+          // still alive and reusable; for a lost handle there is nothing to
+          // remove. TorrentResumeStore registration and TorrentService's
+          // source map both survive so retry re-adds with resume data.
+          _activeTorrentIds.remove(id);
+          final rt = _runtime.remove(id);
+          rt?.close();
+          onProgress(_torrentProgress(
+            cycleState: CycleState.failed,
+            statusMessage: recoverableMessage,
+            summary: initSummary,
+            files: initFiles,
+            torrentId: id,
+            knownFileSize: knownFileSize,
+          ));
+        } else {
+          _log.severe(
+              'Post-add setup or download failed for torrent $id: $e', e, st);
+          _safeRemoveTorrent(id);
+          try {
+            TorrentResumeStore.unregisterTorrent(id);
+          } catch (_) {}
+          _activeTorrentIds.remove(id);
+          final rt = _runtime.remove(id);
+          rt?.close();
+          onProgress(_torrentProgress(
+            cycleState: CycleState.failed,
+            statusMessage: 'Failed: Torrent setup error',
+            summary: initSummary,
+            files: initFiles,
+            torrentId: id,
+            knownFileSize: knownFileSize,
+          ));
+        }
       }
       rethrow;
     }
+  }
+
+  /// B9: returns a recoverable failure message for errors whose engine state
+  /// (handle and/or resume mapping) should survive the failure, or null when
+  /// the failure is fatal and the caller may tear everything down.
+  ///
+  /// - [TorrentStallException]: handle is alive; a retry reuses it.
+  /// - 'Torrent handle lost.' / 'Torrent handle lost (aliveness poll).' /
+  ///   'Torrent stream terminated…': handle is gone, but the source
+  ///   registration + resume data stay so the retry re-adds with resume.
+  static String? _recoverableTorrentFailureMessage(Object error) {
+    if (error is TorrentStallException) {
+      return 'Failed: Torrent stalled — retry to resume from current progress';
+    }
+    if (error is DioException) {
+      final detail = error.error?.toString().toLowerCase() ?? '';
+      if (detail.contains('handle lost') ||
+          detail.contains('stream terminated')) {
+        return 'Failed: Torrent handle lost — progress saved for retry';
+      }
+    }
+    return null;
   }
 
   @visibleForTesting
@@ -1869,6 +2060,11 @@ class TorrentDownloadHandler {
         // invoked before `sub` is assigned in _listenForCompletion). Look
         // the live subscription up via the registry instead, which is
         // guaranteed current since register() runs after `sub` is assigned.
+        // B12: this direct cancel covers the race where the completer is
+        // already completed; in the normal path the completeError below
+        // triggers _listenForCompletion's finally, whose _cleanup now also
+        // cancels the current registry sub — so alert sub, watchdogs and
+        // update sub are all torn down on this completion path either way.
         TorrentSubscriptionRegistry.instance.getSubscription(id)?.cancel();
         _activeTorrentIds.remove(id);
         TorrentSubscriptionRegistry.instance.unregister(id, this);
@@ -1993,20 +2189,10 @@ class TorrentDownloadHandler {
         torrent.state == TorrentState.error;
     final now = DateTime.now();
 
-    if (!isTerminal &&
-        rt.lastProgressTick.millisecondsSinceEpoch > 0 &&
-        now.difference(rt.lastProgressTick) > const Duration(minutes: 5) &&
-        tracker.lastTorrentSpeed == 0) {
-      _log.warning(
-        'Torrent $id stalled for >5min without progress tick — triggering fallback announceNow recovery',
-      );
-      try {
-        _torrentService.announceNow(id);
-      } catch (e, st) {
-        _log.warning(
-            'Fallback stall recovery announceNow failed for $id', e, st);
-      }
-    }
+    // B11: the 5-minute in-update announce fallback that used to sit here was
+    // dead code — `lastProgressTick` is reset on every processed tick below,
+    // so the 5-minute condition could never hold. Stall recovery lives in the
+    // watchdog (10-minute forced reannounce), which sees real elapsed time.
 
     if (!isTerminal &&
         !isStateChange &&
@@ -2085,7 +2271,14 @@ class TorrentDownloadHandler {
             ? selectedFilesSum
             : (allFilesSum > 0
                 ? allFilesSum
-                : (knownFileSize > 0 ? knownFileSize : 0)));
+                // B17: once metadata is present, a task's knownFileSize is
+                // stale (it belongs to the task, not this torrent's real
+                // metadata — and may be entirely fabricated). Metadata-
+                // derived sizes must win; the native file probe below fills
+                // the gap when the struct reports nothing.
+                : (knownFileSize > 0 && !torrent.hasMetadata
+                    ? knownFileSize
+                    : 0)));
     if (totalSize <= 0 && (torrent.hasMetadata || torrent.piecesTotal > 0)) {
       try {
         final nf = _torrentService.getFiles(id);
@@ -2177,9 +2370,17 @@ class TorrentDownloadHandler {
       }
     }
 
+    // B16: with deselected files, `totalDone` counts bytes of unwanted files.
+    // When the engine reports no wanted-only progress, it must never stand in
+    // for wanted progress — the correct reading is zero.
+    final bool hasDeselectedFiles = effectiveFiles
+            ?.any((f) =>
+                (f['selected'] as bool?) == false ||
+                (f['priority'] as int? ?? 4) == 0) ??
+        false;
     final rawDownloaded = torrent.totalWantedDone > 0
         ? torrent.totalWantedDone
-        : torrent.totalDone;
+        : (hasDeselectedFiles ? 0 : torrent.totalDone);
 
     // While libtorrent is in checking_files / checking_resume_data /
     // queued_for_checking, `progress` and `totalWantedDone` describe how much
@@ -2208,24 +2409,54 @@ class TorrentDownloadHandler {
     if (!isChecking && !bridgeUntrusted) {
       rt.lastConfirmedDownloadedBytes = rawDownloaded;
       if (rt.resumeExpectedBytes > 0 && torrent.hasMetadata) {
-        // The engine finished checking with nothing on disk while the resume
-        // store claimed real progress: this build's native binary silently
-        // dropped the add-time resume blob (no lt_add_torrent_file_resume /
-        // lt_add_magnet_resume export). Recover the on-disk data with a
-        // one-shot recheck rather than re-downloading from scratch.
-        if (rawDownloaded <= 0 && !rt.resumeRecheckIssued) {
+        // B15: the engine is reporting less than the resume store claimed —
+        // either nothing (this build's native binary silently dropped the
+        // add-time resume blob; there is no lt_add_torrent_file_resume /
+        // lt_add_magnet_resume export) or a partial shortfall. Recover the
+        // on-disk data with a one-shot recheck rather than re-downloading
+        // from scratch.
+        if (!rt.resumeRecheckIssued &&
+            rawDownloaded < rt.resumeExpectedBytes) {
           rt.resumeRecheckIssued = true;
-          _log.warning(
-            'Add-time resume data did not take effect for torrent $id '
-            '(expected ${rt.resumeExpectedBytes} bytes, engine reports 0); '
-            'issuing one recovery recheck',
-          );
+          // B14: when the store holds a piece bitfield, cross-check the
+          // stored piece count against the engine's actual before paying for
+          // a recheck — a matching count means the engine is already
+          // resuming what was stored and the byte shortfall is estimate
+          // noise. Without a stored bitfield the byte comparison alone
+          // decides.
+          var needsRecheck = true;
           try {
-            _torrentService.recheckTorrent(id);
-          } catch (e, st) {
-            _log.warning('Recovery recheck failed for $id', e, st);
+            final snap =
+                await TorrentResumeStore.loadDegradedSnapshotForSource(url);
+            if (snap != null && snap.piecesBitfield.isNotEmpty) {
+              final pieceProgress = await _torrentService.getPieceProgress(id);
+              final actualPieces =
+                  (pieceProgress?['piecesHave'] as num?)?.toInt() ?? -1;
+              if (actualPieces >= 0) {
+                needsRecheck = await TorrentResumeStore.needsRecheckAfterResume(
+                    url, actualPieces);
+              }
+            }
+          } catch (e) {
+            _log.fine('Resume recheck validation failed for $id: $e');
           }
-        } else if (rawDownloaded > 0) {
+          if (needsRecheck) {
+            _log.warning(
+              'Add-time resume data did not take effect for torrent $id '
+              '(expected ${rt.resumeExpectedBytes} bytes, engine reports '
+              '$rawDownloaded); issuing one recovery recheck',
+            );
+            try {
+              _torrentService.recheckTorrent(id);
+            } catch (e, st) {
+              _log.warning('Recovery recheck failed for $id', e, st);
+            }
+          } else {
+            _log.fine(
+                'Resume shortfall for torrent $id is estimate noise (stored '
+                'piece count matches engine) — no recheck needed');
+          }
+        } else if (rawDownloaded >= rt.resumeExpectedBytes) {
           rt.resumeExpectedBytes = 0;
         }
       }
@@ -2233,14 +2464,14 @@ class TorrentDownloadHandler {
 
     int? selectiveDownloadedBytes;
     bool? hasEstimatedFileProgress;
-    final bool hasSelectiveFiles = effectiveFiles != null &&
-        effectiveFiles.any((f) =>
-            (f['selected'] as bool?) == false ||
-            (f['priority'] as int? ?? 4) == 0);
+    // Same predicate as the rawDownloaded derivation above (B16). The
+    // explicit null check preserves type promotion of effectiveFiles.
+    final bool hasSelectiveFiles = hasDeselectedFiles;
     if (torrent.fileProgress.isNotEmpty &&
         hasSelectiveFiles &&
         !isChecking &&
-        !bridgeUntrusted) {
+        !bridgeUntrusted &&
+        effectiveFiles != null) {
       int selectiveSum = 0;
       for (var i = 0; i < torrent.fileProgress.length; i++) {
         if (i < effectiveFiles.length) {
@@ -2255,7 +2486,11 @@ class TorrentDownloadHandler {
       hasEstimatedFileProgress = false;
     }
 
-    if (totalSize <= 0 && !torrent.hasMetadata && torrent.piecesTotal <= 0) {
+    // B2: `piecesTotal` used to be gated here, but the 1.9.2 bridge always
+    // reported at least a fake 1-piece estimate, so this dedicated metadata
+    // emit was unreachable. The fake estimate is gone; gate on metadata
+    // presence and size alone.
+    if (totalSize <= 0 && !torrent.hasMetadata) {
       // Same rule as the main path below: nothing read out of the status struct
       // may be published while the bridge is untrusted.
       final downloadedBytes = bridgeUntrusted ? 0 : rawDownloaded;
@@ -2306,12 +2541,12 @@ class TorrentDownloadHandler {
                     torrent.progress.isFinite &&
                     torrent.progress > 0)
                 ? torrent.progress.clamp(0.0, 1.0)
+                // B16: derive from rawDownloaded only — a totalDone fallback
+                // here would inflate the ratio for torrents with deselected
+                // files.
                 : (rawDownloaded > 0 && totalSize > 0
                     ? (rawDownloaded / totalSize).clamp(0.0, 1.0)
-                    : (torrent.totalDone > 0 && torrent.totalWanted > 0
-                        ? (torrent.totalDone / torrent.totalWanted)
-                            .clamp(0.0, 1.0)
-                        : 0.0));
+                    : 0.0);
     final filesToUpdate = resolvedFiles ?? rt.cachedAccurateFiles;
     // Per-file byte counts reported during a checking phase are verification
     // counters, so leave the cached file list untouched until checking ends.
@@ -2324,29 +2559,36 @@ class TorrentDownloadHandler {
 
       if (torrent.fileProgress.isNotEmpty &&
           torrent.fileProgress.length == filesToUpdate.length) {
-        for (var i = 0; i < filesToUpdate.length; i++) {
-          final f = filesToUpdate[i];
-          final dl = torrent.fileProgress[i];
-          final len = (f['length'] as num?)?.toInt() ?? 0;
-          // FIX(M3): Guard corrupt dl > len log spam
-          if (dl > len && len > 0) {
-            if (!rt.corruptSizeLogged) {
-              rt.corruptSizeLogged = true;
-              _log.warning(
-                  'Corrupt size detected in torrent $id file ${f['name']}: dl=$dl > len=$len; clamping');
-            }
-          }
-          final safeDl = len > 0 ? dl.clamp(0, len) : 0;
-          f['downloadedBytes'] = safeDl;
-          f['progressEstimated'] = false;
-          if (len > 0) {
-            f['progress'] = (safeDl / len).clamp(0.0, 1.0);
-            f['isComplete'] = safeDl >= len;
-          } else {
-            f['progress'] = 0.0;
-            f['isComplete'] = false;
-          }
-        }
+        // B24: copy-on-write. The rows are shared with progress maps already
+        // handed to the UI and with pause snapshots, so mutate a fresh copy
+        // and make it the new authoritative cache — previously a late tick
+        // silently rewrote history in already-emitted maps.
+        final updatedFiles = [
+          for (var i = 0; i < filesToUpdate.length; i++)
+            () {
+              final f = filesToUpdate[i];
+              final dl = torrent.fileProgress[i];
+              final len = (f['length'] as num?)?.toInt() ?? 0;
+              // FIX(M3): Guard corrupt dl > len log spam
+              if (dl > len && len > 0) {
+                if (!rt.corruptSizeLogged) {
+                  rt.corruptSizeLogged = true;
+                  _log.warning(
+                      'Corrupt size detected in torrent $id file ${f['name']}: dl=$dl > len=$len; clamping');
+                }
+              }
+              final safeDl = len > 0 ? dl.clamp(0, len) : 0;
+              return <String, dynamic>{
+                ...f,
+                'downloadedBytes': safeDl,
+                'progressEstimated': false,
+                'progress': len > 0 ? (safeDl / len).clamp(0.0, 1.0) : 0.0,
+                'isComplete': len > 0 && safeDl >= len,
+              };
+            }()
+        ];
+        resolvedFiles = updatedFiles;
+        rt.cachedAccurateFiles = updatedFiles;
         pieceMapped = true;
       } else if (fileCount > 1000) {
         try {
@@ -2358,12 +2600,18 @@ class TorrentDownloadHandler {
                 (pieceProgress['piecesTotal'] as num?)?.toInt() ?? 0;
             if (piecesTotal > 0) {
               final pieceRatio = (piecesHave / piecesTotal).clamp(0.0, 1.0);
+              // B24: estimator mutates rows in place — copy first.
+              final copy = [
+                for (final f in filesToUpdate) Map<String, dynamic>.of(f)
+              ];
               TorrentFileProgressEstimator.updateFilesWithNativeProgress(
-                filesToUpdate,
+                copy,
                 pieceRatio,
                 rawDownloaded,
                 sequential: _torrentService.sequentialDownloadEnabled,
               );
+              resolvedFiles = copy;
+              rt.cachedAccurateFiles = copy;
               pieceMapped = true;
             }
           }
@@ -2373,15 +2621,17 @@ class TorrentDownloadHandler {
       }
 
       if (!pieceMapped) {
+        // B24: same copy-on-write for the estimator path.
+        final copy = [for (final f in filesToUpdate) Map<String, dynamic>.of(f)];
         TorrentFileProgressEstimator.updateFilesWithNativeProgress(
-          filesToUpdate,
+          copy,
           safeProgress,
           rawDownloaded,
           sequential: _torrentService.sequentialDownloadEnabled,
         );
+        resolvedFiles = copy;
+        rt.cachedAccurateFiles = copy;
       }
-      resolvedFiles = filesToUpdate;
-      rt.cachedAccurateFiles = filesToUpdate;
     }
 
     final downloadedBytes =
@@ -2452,7 +2702,10 @@ class TorrentDownloadHandler {
             resolvedStatusMessage = 'Stalled (no peers)';
             resolvedCycleState = CycleState.stalled;
           }
-        } else if (elapsed >= const Duration(seconds: 60)) {
+        } else if (elapsed >= const Duration(seconds: 60) &&
+            // B11: zero speed with peers still connected is a choked swarm,
+            // not an empty one — don't label it "looking for peers".
+            torrent.peerCount == 0) {
           resolvedStatusMessage = 'Looking for peers…';
           resolvedCycleState = CycleState.stalled;
         }
@@ -2550,7 +2803,7 @@ class TorrentDownloadHandler {
     // bytes on disk, which would mark a brand-new download complete.
     if (isChecking || bridgeUntrusted) return;
 
-    _detectCompletion(
+    await _detectCompletion(
       id: id,
       torrent: torrent,
       totalSize: totalSize,
@@ -2565,7 +2818,7 @@ class TorrentDownloadHandler {
     );
   }
 
-  void _detectCompletion({
+  Future<void> _detectCompletion({
     required int id,
     required TorrentUpdateInfo torrent,
     required int totalSize,
@@ -2577,11 +2830,29 @@ class TorrentDownloadHandler {
     required String stateLabel,
     required void Function(DownloadProgress) emitProgress,
     required Completer<void> completer,
-  }) {
+  }) async {
     final rt = _getRuntime(id);
     // Verification counters can transiently satisfy every completion predicate
     // below, so a checking torrent is never treated as complete.
     if (torrent.isChecking) return;
+    // B16: with deselected files in play, torrent-level totals are inflated
+    // (`totalDone` counts bytes of unwanted files), so `downloadedBytes >=
+    // totalSize` alone can fire while the wanted files are still incomplete.
+    // When a selection exists, completion additionally requires every
+    // selected file row with a known length to report its own bytes done.
+    final completionFiles = resolvedFiles ?? rt.cachedAccurateFiles;
+    final bool hasDeselectedFiles =
+        completionFiles?.any((f) => !isTorrentFileSelected(f)) ?? false;
+    if (hasDeselectedFiles && completionFiles != null) {
+      final bool selectedIncomplete = completionFiles.any((f) {
+        if (!isTorrentFileSelected(f)) return false;
+        final len = (f['length'] as num?)?.toInt() ?? 0;
+        if (len <= 0) return false;
+        final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+        return dl < len && f['isComplete'] != true;
+      });
+      if (selectedIncomplete) return;
+    }
     final bool isProgressComplete =
         (torrent.progress >= 0.999 && totalSize > 0) ||
             (totalSize > 0 && downloadedBytes >= totalSize) ||
@@ -2639,7 +2910,11 @@ class TorrentDownloadHandler {
     ));
 
     _activeTorrentIds.remove(id);
-    TorrentSubscriptionRegistry.instance.unregister(id, this);
+    // B19: cancel the CURRENT subscription here — the registry may hold a
+    // replacement the local `sub` no longer points at, and unregistering
+    // without cancelling (the old behavior) leaked it. The finally's
+    // _cleanup still runs afterwards; both are idempotent.
+    await TorrentSubscriptionRegistry.instance.cancelCurrentFor(id, this);
     if (!completer.isCompleted) {
       completer.complete();
     }
@@ -2649,6 +2924,10 @@ class TorrentDownloadHandler {
     final rt = _runtime.remove(id);
     rt?.close();
     await sub?.cancel();
+    // B19: the registry may hold a NEWER subscription than the stale local
+    // `sub` (stream-error replacement) — cancel it too, or it leaks. Covers
+    // the handle-lost path as well, where `sub` arrives as null.
+    await TorrentSubscriptionRegistry.instance.cancelCurrentFor(id, this);
     _activeTorrentIds.remove(id);
     TorrentSubscriptionRegistry.instance.unregister(id, this);
   }

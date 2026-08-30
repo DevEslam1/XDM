@@ -304,7 +304,7 @@ class DownloadTask {
     this.failureCategory,
     this.recoveryHint,
     required this.threadCount,
-    required this.chunks,
+    List<double> chunks = const [],
     required this.createdAt,
     required this.updatedAt,
     this.completedAt,
@@ -316,7 +316,7 @@ class DownloadTask {
     this.seedingLimited = false,
     this.seedingLimitKbps = 500,
     this.uploadedBytes = 0,
-    this.torrentFiles,
+    List<Map<String, dynamic>>? torrentFiles,
     this.downloadPageUrl,
     this.mergedAudioUrl,
     this.audioSize = 0,
@@ -332,7 +332,7 @@ class DownloadTask {
     this.notes,
     this.authUsername,
     this.authPassword,
-    this.customHeaders,
+    Map<String, String>? customHeaders,
     this.isAppUpdate = false,
     this.priority = 0,
     this.queueOrder = 0, // FIX(13)
@@ -340,7 +340,7 @@ class DownloadTask {
     this.playlistTitle,
     this.thumbnailUrl,
     this.expectedSha256,
-    this.mirrorUrls,
+    List<String>? mirrorUrls,
     this.siteType,
     this.siteDisplayName,
     this.contentHint,
@@ -356,7 +356,12 @@ class DownloadTask {
     this.downloadedFileBytes,
     this.torrentId,
     this.infoHash,
-  });
+  })  : chunks = List.unmodifiable(chunks.map((c) => (c.isNaN || c.isInfinite) ? 0.0 : c.clamp(0.0, 1.0))),
+        torrentFiles = torrentFiles != null
+            ? List.unmodifiable(torrentFiles.map((m) => Map<String, dynamic>.unmodifiable(m)))
+            : null,
+        customHeaders = customHeaders != null ? Map.unmodifiable(customHeaders) : null,
+        mirrorUrls = mirrorUrls != null ? List.unmodifiable(mirrorUrls) : null;
 
   DownloadTaskCore get core => DownloadTaskCore(
         id: id,
@@ -870,21 +875,32 @@ class DownloadTask {
     String? youtubeQualityPreset,
     bool clearYoutubeQualityPreset = false,
     String? notes,
+    bool clearNotes = false,
     String? authUsername,
+    bool clearAuthUsername = false,
     String? authPassword,
+    bool clearAuthPassword = false,
     Map<String, String>? customHeaders,
+    bool clearCustomHeaders = false,
     bool? isAppUpdate,
     int? priority,
     int? queueOrder,
     String? playlistId,
+    bool clearPlaylistId = false,
     String? playlistTitle,
+    bool clearPlaylistTitle = false,
     String? thumbnailUrl,
     bool clearThumbnail = false,
     String? expectedSha256,
+    bool clearExpectedSha256 = false,
     List<String>? mirrorUrls,
+    bool clearMirrorUrls = false,
     String? siteType,
+    bool clearSiteType = false,
     String? siteDisplayName,
+    bool clearSiteDisplayName = false,
     String? contentHint,
+    bool clearContentHint = false,
     bool? isMergeInProgress,
     PauseReason? pauseReason,
     bool clearPauseReason = false,
@@ -898,9 +914,13 @@ class DownloadTask {
     CycleState? previousCycleState,
     bool clearPreviousCycleState = false,
     int? totalFiles,
+    bool clearTotalFiles = false,
     int? completedFiles,
+    bool clearCompletedFiles = false,
     int? totalFileBytes,
+    bool clearTotalFileBytes = false,
     int? downloadedFileBytes,
+    bool clearDownloadedFileBytes = false,
     int? torrentId,
     bool clearTorrentId = false,
     String? infoHash,
@@ -999,25 +1019,27 @@ class DownloadTask {
       youtubeQualityPreset: clearYoutubeQualityPreset
           ? null
           : (youtubeQualityPreset ?? this.youtubeQualityPreset),
-      notes: notes ?? this.notes,
-      authUsername: authUsername ?? this.authUsername,
-      authPassword: authPassword ?? this.authPassword,
-      customHeaders: customHeaders ?? this.customHeaders,
+      notes: clearNotes ? null : (notes ?? this.notes),
+      authUsername: clearAuthUsername ? null : (authUsername ?? this.authUsername),
+      authPassword: clearAuthPassword ? null : (authPassword ?? this.authPassword),
+      customHeaders: clearCustomHeaders ? null : (customHeaders ?? this.customHeaders),
       isAppUpdate: isAppUpdate ?? this.isAppUpdate,
       priority: priority ?? this.priority,
       queueOrder: queueOrder ?? this.queueOrder,
-      playlistId: playlistId ?? this.playlistId,
-      playlistTitle: playlistTitle ?? this.playlistTitle,
+      playlistId: clearPlaylistId ? null : (playlistId ?? this.playlistId),
+      playlistTitle: clearPlaylistTitle ? null : (playlistTitle ?? this.playlistTitle),
       thumbnailUrl: clearThumbnail ? null : (thumbnailUrl ?? this.thumbnailUrl),
-      expectedSha256: expectedSha256 ?? this.expectedSha256,
-      mirrorUrls: mirrorUrls != null
-          ? List<String>.from(mirrorUrls)
-          : (this.mirrorUrls != null
-              ? List<String>.from(this.mirrorUrls!)
-              : null),
-      siteType: siteType ?? this.siteType,
-      siteDisplayName: siteDisplayName ?? this.siteDisplayName,
-      contentHint: contentHint ?? this.contentHint,
+      expectedSha256: clearExpectedSha256 ? null : (expectedSha256 ?? this.expectedSha256),
+      mirrorUrls: clearMirrorUrls
+          ? null
+          : (mirrorUrls != null
+              ? List<String>.from(mirrorUrls)
+              : (this.mirrorUrls != null
+                  ? List<String>.from(this.mirrorUrls!)
+                  : null)),
+      siteType: clearSiteType ? null : (siteType ?? this.siteType),
+      siteDisplayName: clearSiteDisplayName ? null : (siteDisplayName ?? this.siteDisplayName),
+      contentHint: clearContentHint ? null : (contentHint ?? this.contentHint),
       pauseReason: clearPauseReason ? null : (pauseReason ?? this.pauseReason),
       totalPieces: clearTotalPieces ? null : (totalPieces ?? this.totalPieces),
       completedPieces: clearCompletedPieces
@@ -1029,10 +1051,10 @@ class DownloadTask {
       previousCycleState: clearPreviousCycleState
           ? null
           : (previousCycleState ?? this.previousCycleState),
-      totalFiles: totalFiles ?? this.totalFiles,
-      completedFiles: completedFiles ?? this.completedFiles,
-      totalFileBytes: totalFileBytes ?? this.totalFileBytes,
-      downloadedFileBytes: downloadedFileBytes ?? this.downloadedFileBytes,
+      totalFiles: clearTotalFiles ? null : (totalFiles ?? this.totalFiles),
+      completedFiles: clearCompletedFiles ? null : (completedFiles ?? this.completedFiles),
+      totalFileBytes: clearTotalFileBytes ? null : (totalFileBytes ?? this.totalFileBytes),
+      downloadedFileBytes: clearDownloadedFileBytes ? null : (downloadedFileBytes ?? this.downloadedFileBytes),
       torrentId: clearTorrentId ? null : (torrentId ?? this.torrentId),
       infoHash: clearInfoHash ? null : (infoHash ?? this.infoHash),
       resumeDataSaved: resumeDataSaved ?? this.resumeDataSaved,

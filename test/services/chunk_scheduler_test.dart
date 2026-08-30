@@ -1,6 +1,6 @@
-import 'package:dmx/core/services/download_journal.dart';
-import 'package:dmx/core/services/engines/http_download_engine.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dmx/core/services/engines/http_download_engine.dart';
+import 'package:dmx/core/services/download_journal.dart';
 
 void main() {
   group('ChunkScheduler.plan', () {
@@ -19,18 +19,15 @@ void main() {
     });
 
     test('clamps thread count to range 1-32', () {
-      final chunksMax =
-          ChunkScheduler.plan(totalSize: 100 * 1024 * 1024, threadCount: 64);
+      final chunksMax = ChunkScheduler.plan(totalSize: 100 * 1024 * 1024, threadCount: 64);
       expect(chunksMax.length, equals(32));
 
-      final chunksMin =
-          ChunkScheduler.plan(totalSize: 100 * 1024 * 1024, threadCount: 0);
+      final chunksMin = ChunkScheduler.plan(totalSize: 100 * 1024 * 1024, threadCount: 0);
       expect(chunksMin.length, equals(1));
     });
 
     test('splits file cleanly into contiguous ranges', () {
-      final chunks =
-          ChunkScheduler.plan(totalSize: 10 * 1024 * 1024, threadCount: 4);
+      final chunks = ChunkScheduler.plan(totalSize: 10 * 1024 * 1024, threadCount: 4);
       expect(chunks.length, equals(4));
       expect(chunks[0].start, equals(0));
       expect(chunks[3].end, equals(10 * 1024 * 1024 - 1));

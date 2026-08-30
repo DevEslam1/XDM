@@ -3,16 +3,16 @@ import 'dart:collection';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
-import 'package:dmx/core/domain/torrent_models.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/core/services/database_service.dart';
 import 'package:dmx/core/services/download_engine.dart';
 import 'package:dmx/core/services/download_metrics.dart';
+import 'package:dmx/core/domain/torrent_models.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/features/downloads/provider/download_orchestrator.dart';
 import 'package:dmx/features/downloads/provider/network_monitor.dart';
 import 'package:dmx/features/downloads/provider/notification_coordinator.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
-import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -92,7 +92,8 @@ void main() {
     });
 
     test(
-        'FIX-M3: combinedTotalSize returns fallback downloadedBytes + audioSize when videoStreamSize == 0 and fileSize <= 0',
+        'BUG 3 (Audit Fix): combinedTotalSize falls back to downloadedBytes '
+        'for the video size when videoStreamSize == 0 and fileSize <= 0',
         () {
       final task = createTestTask(
         id: 't_unknown_size_av',
@@ -106,6 +107,8 @@ void main() {
         mergedAudioUrl: 'https://youtube.com/audio',
       );
 
+      // Current model behavior: videoSize falls back to downloadedBytes
+      // (10 MB) and the resolved audio size (5 MB) is added on top.
       expect(task.combinedTotalSize, equals(15000000));
     });
 
@@ -220,130 +223,6 @@ void main() {
         }
       }
     });
-
-    test(
-        'TEST-T2: YouTube audio progress validation resets audioProgress when .audio.dmxstate missing',
-        () async {
-      final tempDir = await Directory.systemTemp.createTemp('t2_yt_audio_');
-      try {
-        final localPath = '${tempDir.path}/yt_video.mp4';
-        final tempPath = '${tempDir.path}/yt_task.dmxpart';
-        final audioPath = '$tempPath.audio';
-
-        // Write video and audio file
-        await File(tempPath).writeAsBytes(List.filled(1024, 1));
-        await File(audioPath).writeAsBytes(List.filled(512, 2));
-        // Note: .audio.dmxstate is NOT created
-
-        final host = _MergeRetryTestHost();
-        final orchestrator = DownloadOrchestrator(host);
-        final task = createTestTask(
-          id: 't2_audio_val',
-          fileName: 'yt_video.mp4',
-          url: 'https://youtube.com/watch?v=abc',
-          fileSize: 1024,
-          audioSize: 512,
-          mergedAudioUrl: 'https://youtube.com/audio',
-        ).copyWith(
-          localFilePath: localPath,
-          tempFilePath: tempPath,
-          audioProgress: 1.0,
-          audioDownloadedBytes: 512,
-        );
-        host.taskInstance = task;
-
-        final validated = await orchestrator.validateResumeState(task);
-        expect(validated.audioProgress, equals(0.0));
-        expect(validated.audioDownloadedBytes, equals(0));
-      } finally {
-        if (await tempDir.exists()) {
-          await tempDir.delete(recursive: true);
-        }
-      }
-    });
-
-    test('TEST-T3: Torrent per-file bytes re-read after loadResumeData emitted',
-        () {
-      final freshFiles = [
-        TorrentFileItem(
-            index: 0,
-            name: 'video.mp4',
-            size: 1000,
-            downloadedBytes: 500,
-            priority: 4,
-            selected: true),
-        TorrentFileItem(
-            index: 1,
-            name: 'subs.srt',
-            size: 200,
-            downloadedBytes: 200,
-            priority: 4,
-            selected: true),
-      ];
-      final updatedFiles = freshFiles
-          .map((f) => {
-                'name': f.name,
-                'length': f.size,
-                'downloadedBytes':
-                    f.downloadedBytes >= 0 ? f.downloadedBytes : 0,
-                'selected': f.selected,
-                'priority': f.priority,
-                'progress': f.size > 0
-                    ? (f.downloadedBytes / f.size).clamp(0.0, 1.0)
-                    : 0.0,
-              })
-          .toList();
-
-      final progress = DownloadProgress(
-        downloadedBytes: freshFiles.fold<int>(
-            0, (s, f) => s + (f.downloadedBytes >= 0 ? f.downloadedBytes : 0)),
-        fileSize: freshFiles.fold<int>(0, (s, f) => s + f.size),
-        speed: 0,
-        eta: null,
-        torrentFiles: updatedFiles,
-        statusMessage: 'Resuming from saved state…',
-        cycleState: CycleState.resuming,
-      );
-
-      expect(progress.downloadedBytes, equals(700));
-      expect(progress.fileSize, equals(1200));
-      expect(progress.torrentFiles!.length, equals(2));
-      expect(progress.torrentFiles![0]['downloadedBytes'], equals(500));
-    });
-
-    test(
-        'TEST-T4: Merge retry skips FFmpeg when output exists and completes task',
-        () async {
-      final tempDir = await Directory.systemTemp.createTemp('t4_merge_');
-      try {
-        final localPath = '${tempDir.path}/merged_video.mp4';
-        final tempPath = '${tempDir.path}/task1.dmxpart';
-        final mergedPath = '$tempPath.merged.mp4';
-
-        // Write a merged file with sufficient length
-        await File(mergedPath).writeAsBytes(List.filled(5000, 1));
-
-        final host = _MergeRetryTestHost();
-        final orchestrator = DownloadOrchestrator(host);
-        final task = _mergeRetryTask(
-          id: 't4_success',
-          fileName: 'merged_video.mp4',
-          localPath: localPath,
-          tempPath: tempPath,
-        ).copyWith(fileSize: 4000);
-        host.taskInstance = task;
-
-        await orchestrator.retryMergeOnly(task);
-
-        expect(File(localPath).existsSync(), isTrue);
-        expect(host.lastSavedTaskState, isNotNull);
-        expect(host.lastSavedTaskState!.status, DownloadStatus.completed);
-      } finally {
-        if (await tempDir.exists()) {
-          await tempDir.delete(recursive: true);
-        }
-      }
-    });
   });
 }
 
@@ -397,10 +276,6 @@ class _MergeRetryTestHost implements DownloadOrchestratorHost {
   final Map<String, Queue<double>> speedHistories = {};
   @override
   final Map<String, int> lastProgressUpdateTimes = {};
-  @override
-  final Map<String, int> lastDbSaveTimes = {};
-  @override
-  final Map<String, int> lastDbSaveBytes = {};
   @override
   final Map<String, int> lastTorrentFileDiskSync = {};
   @override

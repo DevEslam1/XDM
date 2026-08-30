@@ -1,8 +1,7 @@
 import 'dart:io';
-
 import 'package:crypto/crypto.dart';
-import 'package:dmx/core/services/checksum_service.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dmx/core/services/checksum_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

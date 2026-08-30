@@ -4,16 +4,17 @@ import 'package:flutter/foundation.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../models/download_task.dart';
 import 'download_list_provider.dart';
+import 'download_queue_engine.dart';
 
 /// Single-responsibility provider managing execution queue and concurrency.
 class DownloadQueueProvider extends ChangeNotifier {
   final DownloadListProvider? _listProvider;
   final SettingsProvider? _settings;
   final int? _maxConcurrentOverride;
+  final DownloadQueueEngine _engine = DownloadQueueEngine();
 
   final List<String> _queuedIds = [];
   Timer? _debounceTimer;
-  // FIX-3.4: Add _disposed guard
   bool _disposed = false;
 
   DownloadQueueProvider({
@@ -43,29 +44,15 @@ class DownloadQueueProvider extends ChangeNotifier {
       if (_disposed) return;
       final list = _listProvider;
       if (list == null) return;
-      final activeCount = list.tasks
-          .where((t) => t.status == DownloadStatus.downloading)
-          .length;
-      final maxConcurrent = maxConcurrentDownloads;
-
-      if (activeCount >= maxConcurrent) return;
-
-      final queued =
-          list.tasks.where((t) => t.status == DownloadStatus.queued).toList();
-
-      var currentActive = activeCount;
-      for (final task in queued) {
-        if (_disposed || currentActive >= maxConcurrent) break;
+      _engine.maxConcurrent = maxConcurrentDownloads;
+      _engine.pumpQueue(list.tasks, (task) async {
+        if (_disposed) return;
         if (DownloadStateMachine.canTransitionStatus(
             task.status, DownloadStatus.downloading)) {
-          final sm = DownloadStateMachine(
-            taskId: task.id,
-            initialState: DownloadStateMachine.fromStatus(task.status),
-          );
-          sm.transition(DomainDownloadState.downloading);
-          currentActive++;
+          final updated = task.transitionTo(DownloadStatus.downloading);
+          await list.updateTask(updated);
         }
-      }
+      });
     });
   }
 
@@ -78,11 +65,10 @@ class DownloadQueueProvider extends ChangeNotifier {
     if (task != null &&
         DownloadStateMachine.canTransitionStatus(
             task.status, DownloadStatus.paused)) {
-      final sm = DownloadStateMachine(
-        taskId: task.id,
-        initialState: DownloadStateMachine.fromStatus(task.status),
-      );
-      sm.transition(DomainDownloadState.paused, reason: reason.name);
+      final updated = task
+          .transitionTo(DownloadStatus.paused, reason: reason.name)
+          .copyWith(pauseReason: reason);
+      await list.updateTask(updated);
       pumpQueue();
     }
   }
@@ -95,11 +81,8 @@ class DownloadQueueProvider extends ChangeNotifier {
     if (task != null &&
         DownloadStateMachine.canTransitionStatus(
             task.status, DownloadStatus.queued)) {
-      final sm = DownloadStateMachine(
-        taskId: task.id,
-        initialState: DownloadStateMachine.fromStatus(task.status),
-      );
-      sm.transition(DomainDownloadState.queued);
+      final updated = task.transitionTo(DownloadStatus.queued);
+      await list.updateTask(updated);
       pumpQueue();
     }
   }

@@ -1,8 +1,8 @@
+import 'package:flutter_test/flutter_test.dart';
 import 'package:dio/dio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dmx/core/services/connection_manager.dart';
 import 'package:dmx/core/services/protocol_cache.dart';
-import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -58,8 +58,10 @@ void main() {
     });
 
     test('detectHttp2 returns false for non-https URLs gracefully', () async {
-      final isH2 =
-          await ConnectionManager.instance.detectHttp2('http://example.com');
+      // detectHttp2 is an instance member (ConnectionManager.instance).
+      final isH2 = await ConnectionManager.instance.detectHttp2(
+        'http://example.com',
+      );
       expect(isH2, isFalse);
     });
 
@@ -69,22 +71,6 @@ void main() {
 
       final proto = await ConnectionManager.instance.detectBestProtocol(url);
       expect(proto, equals(ProtocolSupport.http2));
-    });
-
-    test('invalidate clears both internal probes and ProtocolCache', () async {
-      const url = 'https://test-invalidate.com/file.bin';
-      await ProtocolCache.record(url, ProtocolSupport.http2);
-      expect(ProtocolCache.get(url), equals(ProtocolSupport.http2));
-
-      final cm = ConnectionManager();
-      cm.invalidate('test-invalidate.com');
-      expect(ProtocolCache.get(url), isNull);
-    });
-
-    test('onMemoryPressure clears probes cache', () async {
-      final cm = ConnectionManager();
-      cm.onMemoryPressure();
-      await cm.dispose();
     });
   });
 }

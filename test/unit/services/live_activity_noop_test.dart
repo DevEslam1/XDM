@@ -1,5 +1,5 @@
-import 'package:dmx/core/services/live_activity_service.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dmx/core/services/live_activity_service.dart';
 
 void main() {
   group('LiveActivityService on non-iOS', () {

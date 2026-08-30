@@ -3,10 +3,12 @@ import 'package:logging/logging.dart';
 import '../../../../core/domain/cycle_state.dart';
 import '../../models/download_task.dart' show DownloadStatus;
 import '../models/domain_download_state.dart';
+import '../task_state_mapper.dart';
 import 'invalid_transition_error.dart';
 import 'transition_audit_log.dart';
 
 export '../models/domain_download_state.dart';
+export '../task_state_mapper.dart';
 export 'invalid_transition_error.dart';
 export 'transition_audit_log.dart';
 
@@ -159,35 +161,12 @@ class DomainStateMachine {
   }
 
   /// Helper to convert [DownloadStatus] to [DomainDownloadState].
-  static DomainDownloadState fromStatus(DownloadStatus status) {
-    return switch (status) {
-      DownloadStatus.queued => DomainDownloadState.queued,
-      DownloadStatus.downloading => DomainDownloadState.downloading,
-      DownloadStatus.paused => DomainDownloadState.paused,
-      DownloadStatus.completed => DomainDownloadState.completed,
-      DownloadStatus.failed => DomainDownloadState.failed,
-      DownloadStatus.merging => DomainDownloadState.merging,
-    };
-  }
+  static DomainDownloadState fromStatus(DownloadStatus status) =>
+      TaskStateMapper.downloadStatusToDomain(status);
 
   /// Helper to map [DomainDownloadState] back to [DownloadStatus].
-  static DownloadStatus toStatus(DomainDownloadState state) {
-    return switch (state) {
-      DomainDownloadState.idle ||
-      DomainDownloadState.queued =>
-        DownloadStatus.queued,
-      DomainDownloadState.starting ||
-      DomainDownloadState.downloading ||
-      DomainDownloadState.retrying =>
-        DownloadStatus.downloading,
-      DomainDownloadState.paused => DownloadStatus.paused,
-      DomainDownloadState.merging => DownloadStatus.merging,
-      DomainDownloadState.completing ||
-      DomainDownloadState.completed =>
-        DownloadStatus.completed,
-      DomainDownloadState.failed => DownloadStatus.failed,
-    };
-  }
+  static DownloadStatus toStatus(DomainDownloadState state) =>
+      TaskStateMapper.domainToDownloadStatus(state);
 
   /// Validates and returns a consistent [CycleState] corresponding to [status].
   static CycleState validateConsistency(

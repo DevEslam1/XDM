@@ -1,0 +1,17 @@
+// ignore_for_file: avoid_print
+import 'dart:io';
+
+void main() async {
+  final file = File('test_raf.bin');
+  var raf = await file.open(mode: FileMode.write);
+  await raf.truncate(100);
+  await raf.close();
+  raf = await file.open(mode: FileMode.append);
+  await raf.setPosition(10);
+  await raf.writeFrom([1, 2, 3]);
+  await raf.close();
+  final bytes = await file.readAsBytes();
+  print('Byte at 10: ${bytes[10]}');
+  print('File length: ${bytes.length}');
+  await file.delete();
+}

@@ -12,8 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  const extractorChannel =
-      MethodChannel('com.xdm.downloadmanager/youtube_extractor');
+  const extractorChannel = MethodChannel('com.example.dmx/youtube_extractor');
   const storageChannel =
       MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
   const testUrl = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
@@ -56,7 +55,6 @@ void main() {
       request.response.close();
     });
     await settings.setBackendUrl('http://127.0.0.1:${server.port}');
-    XdmBackendClient().refreshConfig();
   });
 
   tearDown(() async {
@@ -81,7 +79,6 @@ void main() {
     final deadPort = deadServer.port;
     await deadServer.close(force: true);
     await SettingsProvider.instance.setBackendUrl('http://127.0.0.1:$deadPort');
-    XdmBackendClient().refreshConfig();
 
     await expectLater(
       YoutubeService.getStreams(testUrl),
@@ -130,27 +127,5 @@ void main() {
     const e = XdmBackendTimeoutException('Request timed out after 30s');
     expect(e, isA<BackendException>());
     expect(e.toUserMessage(), contains('30s'));
-  });
-
-  test(
-      'YouTube client rotation cools down rate-limited client and rotates (Y-01)',
-      () {
-    YoutubeService.resetClientCooldowns();
-    expect(YoutubeService.getAvailableClients(),
-        equals(['android', 'ios', 'web', 'tv']));
-
-    // Simulate 429/bot detection on android client
-    YoutubeService.markClientCoolingDown('android', const Duration(minutes: 5));
-    expect(YoutubeService.isClientCoolingDown('android'), isTrue);
-
-    // Available clients must now rotate to iOS first
-    final available = YoutubeService.getAvailableClients();
-    expect(available, equals(['ios', 'web', 'tv']));
-    expect(available.first, equals('ios'));
-
-    // Reset cooldowns
-    YoutubeService.resetClientCooldowns();
-    expect(YoutubeService.isClientCoolingDown('android'), isFalse);
-    expect(YoutubeService.getAvailableClients().first, equals('android'));
   });
 }

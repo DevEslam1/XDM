@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:dmx/core/domain/torrent_models.dart';
 import 'package:dmx/core/services/power_monitor.dart';
+import 'package:dmx/core/services/torrent/fake_torrent_native.dart';
 import 'package:dmx/core/services/torrent_seeding_manager.dart';
 import 'package:dmx/core/services/torrent_service_ffi.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
@@ -72,18 +73,25 @@ void main() {
       expect(perTask, equals(409));
     });
 
-    test('Bug 2 & 4: resumeBlobFor returns cached data after loadResumeData',
-        () {
+    test('Bug 2 & 4 / B21: resumeBlobFor caches data only after the engine accepts it',
+        () async {
+      final fake = FakeTorrentNative();
+      TorrentService.setNativeForTesting(fake);
+      addTearDown(() => TorrentService.dispose());
+
       final sampleData = Uint8List.fromList([0x64, 0x31, 0x30, 0x65]);
-      TorrentService.loadResumeData(999, sampleData);
 
-      final blob = TorrentService.resumeBlobFor(999);
-      expect(blob, isNotNull);
-      expect(blob, equals(sampleData));
+      // Engine accepts the blob → it is cached and fetchable.
+      expect(TorrentService.loadResumeData(999, sampleData), isTrue);
+      expect(TorrentService.resumeBlobFor(999), equals(sampleData));
+      expect(TorrentService.fetchResumeBytes(999), equals(sampleData));
 
-      final fetched = TorrentService.fetchResumeBytes(999);
-      expect(fetched, isNotNull);
-      expect(fetched, equals(sampleData));
+      // B21: a blob the engine REJECTS (1.9.2: loadResumeData always fails)
+      // must not be cached — the old cache-before-accept behavior made the
+      // pause path trust a phantom blob and skip the degraded snapshot.
+      fake.simulateResumeLoadFailure = true;
+      expect(TorrentService.loadResumeData(998, sampleData), isFalse);
+      expect(TorrentService.resumeBlobFor(998), isNull);
     });
   });
 }

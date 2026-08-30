@@ -496,6 +496,10 @@ class DownloadEngine implements IDownloadEngine {
         clientBuilder: (url) => _dioPool.acquireClient(url: url),
         clientReleaser: (client) => _dioPool.releaseClient(client),
         isRetry: isRetry,
+        // B1: forward the user-configured metadata timeout — it was received
+        // here but silently dropped, so the setting never reached the magnet
+        // add call.
+        metadataTimeoutSeconds: metadataTimeoutSeconds,
       );
     }
 

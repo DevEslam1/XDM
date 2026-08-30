@@ -91,8 +91,17 @@ class TorrentSessionManager {
     }
   }
 
-  /// Resumes a torrent task. If forceStopTorrent was called or the handle is dead/removed,
-  /// re-adds the torrent via addMagnet/addTorrentFile with the saved infoHash + loadResumeData.
+  /// Resumes a torrent task. If forceStopTorrent was called or the handle is
+  /// dead/removed, re-adds the torrent via addMagnet/addTorrentFile, handing
+  /// the stored resume snapshot to the engine AT ADD TIME.
+  /// B13: the previous version added the torrent without resume data and then
+  /// called loadResumeData() afterwards — a guaranteed no-op on
+  /// libtorrent_flutter 1.9.2 (no lt_load_resume_data export), so every
+  /// re-add silently re-hashed from scratch. Add-time is the only injection
+  /// point the bridge has. The degraded (meta-only) snapshot stays in
+  /// [TorrentResumeStore] keyed by source URL; the download handler's preload
+  /// route reads it from there to arm resumeExpectedBytes and drive the
+  /// recovery recheck for this re-added handle.
   /// Does not call resumeTorrent on a removed handle.
   Future<int?> resumeTorrentTask(DownloadTask task) async {
     final tid = _torrentIds[task.id];
@@ -115,26 +124,34 @@ class TorrentSessionManager {
     final saveDir = rawSaveDir.isNotEmpty
         ? rawSaveDir
         : await PermissionService().defaultDownloadDirectory();
+
+    // B13: load the stored snapshot BEFORE the add so it can be handed to the
+    // engine at add-time; on 1.9.2 the degraded snapshot is meta-only (the
+    // native save never produced a blob), which is exactly what the handler's
+    // preload route later consumes.
+    List<int>? resumeBytes;
+    try {
+      final stored = await TorrentResumeStore.loadResumeDataForSource(task.url);
+      if (stored != null && stored.isNotEmpty) resumeBytes = stored.toList();
+    } catch (e) {
+      debugPrint(
+          '[TorrentSessionManager] Failed to load resume data for re-add: $e');
+    }
+
     int newId = -1;
     if (task.url.startsWith('magnet:')) {
-      newId = _torrentService.addMagnet(task.url, saveDir);
+      newId = _torrentService.addMagnet(task.url, saveDir,
+          resumeData: resumeBytes);
     } else {
       newId = _torrentService.addTorrentFile(task.url, saveDir,
-          sourceKey: task.url);
+          sourceKey: task.url, resumeData: resumeBytes);
     }
 
     if (newId >= 0) {
       _torrentIds[task.id] = newId;
-      try {
-        final resumeBytes =
-            await TorrentResumeStore.loadResumeDataForSource(task.url);
-        if (resumeBytes != null && resumeBytes.isNotEmpty) {
-          _torrentService.loadResumeData(newId, resumeBytes);
-        }
-      } catch (e) {
-        debugPrint(
-            '[TorrentSessionManager] Failed to load resume data on re-add: $e');
-      }
+      // Keep the source ↔ id mapping in the store so the handler's preload
+      // route (and the recovery-recheck validation) can find the snapshot.
+      TorrentResumeStore.registerSource(newId, task.url);
       await _torrentService.resumeTorrent(newId);
       return newId;
     }

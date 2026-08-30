@@ -61,11 +61,6 @@ import BackgroundTasks
     }
     
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-        if call.method == "isBackgroundSupported" {
-            result(true)
-            return
-        }
-        
         guard let args = call.arguments as? [String: Any] else {
             if call.method == "scheduleDownload" {
                 scheduleBackgroundProcessing()
@@ -80,23 +75,23 @@ import BackgroundTasks
             return
         }
         
-        let taskId = (args["taskId"] as? String) ?? (args["id"] as? String) ?? ""
+        let taskId = args["taskId"] as? String ?? ""
         let url = args["url"] as? String ?? ""
-        let destinationPath = (args["destinationPath"] as? String) ?? (args["savePath"] as? String) ?? (args["localFilePath"] as? String) ?? ""
+        let destinationPath = args["destinationPath"] as? String ?? ""
         
         switch call.method {
-        case "startNativeDownload", "start":
+        case "startNativeDownload":
             XDMBackgroundDownloadManager.shared.startDownload(taskId: taskId, urlStr: url, destinationPath: destinationPath)
             scheduleBackgroundProcessing()
             result(true)
-        case "pauseNativeDownload", "pause":
+        case "pauseNativeDownload":
             XDMBackgroundDownloadManager.shared.pauseDownload(taskId: taskId)
             result(true)
-        case "resumeNativeDownload", "resume":
+        case "resumeNativeDownload":
             XDMBackgroundDownloadManager.shared.resumeDownload(taskId: taskId, urlStr: url, destinationPath: destinationPath)
             scheduleBackgroundProcessing()
             result(true)
-        case "cancelNativeDownload", "cancel":
+        case "cancelNativeDownload":
             XDMBackgroundDownloadManager.shared.cancelDownload(taskId: taskId)
             result(true)
         case "scheduleDownload":

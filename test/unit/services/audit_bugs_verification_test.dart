@@ -1,16 +1,15 @@
 import 'dart:io';
-
+import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/core/services/download_journal.dart';
 import 'package:dmx/core/services/error_taxonomy.dart';
 import 'package:dmx/core/services/torrent_resume_store.dart';
-import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('Production Readiness Fixes Verification', () {
     test('ErrorTaxonomy maps SocketException to network error', () {
-      const networkError = SocketException('Connection failed');
+      final networkError = const SocketException('Connection failed');
       final classification = ErrorTaxonomy.classify(networkError);
       expect(classification.family, equals(ErrorFamily.network));
     });
@@ -23,8 +22,7 @@ void main() {
     });
 
     test('TorrentResumeStore register and unregister source stability', () {
-      TorrentResumeStore.registerSource(
-          101, 'https://example.com/test.torrent');
+      TorrentResumeStore.registerSource(101, 'https://example.com/test.torrent');
       TorrentResumeStore.unregisterTorrent(101);
       // Ensures no exception thrown and registration is cleaned up safely
     });

@@ -8,6 +8,37 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/bencode_decoder.dart';
 
+/// B15: readable degraded snapshot for engines whose native binary cannot
+/// produce a fast-resume blob (libtorrent_flutter 1.9.2 has no
+/// lt_save_resume_data export, so [TorrentResumeStore.saveAndWait] persists a
+/// meta-only degraded fallback). The handler reads this back on re-add to
+/// re-arm progress and drive the recovery recheck instead of silently
+/// restarting from scratch.
+class TorrentDegradedSnapshot {
+  /// Per-file rows as persisted (name, length, selected, priority,
+  /// downloadedBytes, …).
+  final List<Map<String, dynamic>> files;
+
+  /// Stored piece bitfield. Empty when the engine could not report pieces at
+  /// save time.
+  final List<bool> piecesBitfield;
+  final int piecesTotal;
+  final int piecesDone;
+
+  /// Best-effort byte total the store claimed at pause time. Under 1.9.2
+  /// per-file byte counts are unavailable, so this is derived by mapping the
+  /// piece bitfield onto the selected file sizes.
+  final int downloadedBytes;
+
+  const TorrentDegradedSnapshot({
+    required this.files,
+    required this.piecesBitfield,
+    required this.piecesTotal,
+    required this.piecesDone,
+    required this.downloadedBytes,
+  });
+}
+
 /// Crash-safe persistence for libtorrent fast-resume blobs.
 ///
 /// Invariants:
@@ -77,6 +108,12 @@ class TorrentResumeStore {
     _sourceByTorrentId.remove(torrentId);
     _saveDebounceTimers.remove(torrentId)?.cancel();
   }
+
+  /// B9 test hook: whether [torrentId] still has a source registration —
+  /// recoverable failures (stall / handle lost) must keep it.
+  @visibleForTesting
+  static bool isRegisteredForTesting(int torrentId) =>
+      _sourceByTorrentId.containsKey(torrentId);
 
   static void unregisterSource(String sourceUrl) {
     _sourceByTorrentId.removeWhere((id, url) {
@@ -214,55 +251,13 @@ class TorrentResumeStore {
       await mraf.flush();
       await mraf.close();
 
-      Future<void> safeRename(File tempFile, String targetPath) async {
-        for (var attempt = 1; attempt <= 3; attempt++) {
-          try {
-            final targetFile = File(targetPath);
-            if (await targetFile.exists() && Platform.isWindows) {
-              try {
-                await targetFile.delete();
-              } catch (_) {}
-            }
-            await tempFile.rename(targetPath);
-            return;
-          } catch (e) {
-            if (attempt == 3) {
-              final tmp2 = File('$targetPath.tmp2');
-              try {
-                final bytes = await tempFile.readAsBytes();
-                await tmp2.writeAsBytes(bytes, flush: true);
-                final targetFile = File(targetPath);
-                if (await targetFile.exists()) {
-                  try {
-                    await targetFile.delete();
-                  } catch (_) {}
-                }
-                await tmp2.rename(targetPath);
-              } finally {
-                try {
-                  if (await tmp2.exists()) await tmp2.delete();
-                } catch (_) {}
-              }
-            } else {
-              await Future.delayed(Duration(milliseconds: 50 * attempt));
-            }
-          } finally {
-            if (attempt == 3) {
-              try {
-                if (await tempFile.exists()) await tempFile.delete();
-              } catch (_) {}
-            }
-          }
-        }
-      }
-
       // Rename blob first, then meta (meta references blob)
       if (shouldWriteBlob) {
-        await safeRename(blobTmp, blobFile.path);
+        await _safeRenameFile(blobTmp, blobFile.path);
       } else {
         try { if (await blobTmp.exists()) await blobTmp.delete(); } catch (_) {}
       }
-      await safeRename(metaTmp, metaFile.path);
+      await _safeRenameFile(metaTmp, metaFile.path);
 
       if (shouldWriteBlob && !await blobFile.exists()) {
         debugPrint('[TorrentResumeStore] rename verification failed');
@@ -279,6 +274,51 @@ class TorrentResumeStore {
     } catch (e) {
       debugPrint('[TorrentResumeStore] saveAndWait failed: $e');
       return false;
+    }
+  }
+
+  /// Crash-safe rename used by every meta/blob write: retried, and falls
+  /// back to a copy+rename when Windows holds the target open. Extracted so
+  /// saveMetadataSnapshot uses the same durable handling as saveAndWait (B22).
+  static Future<void> _safeRenameFile(File tempFile, String targetPath) async {
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      try {
+        final targetFile = File(targetPath);
+        if (await targetFile.exists() && Platform.isWindows) {
+          try {
+            await targetFile.delete();
+          } catch (_) {}
+        }
+        await tempFile.rename(targetPath);
+        return;
+      } catch (e) {
+        if (attempt == 3) {
+          final tmp2 = File('$targetPath.tmp2');
+          try {
+            final bytes = await tempFile.readAsBytes();
+            await tmp2.writeAsBytes(bytes, flush: true);
+            final targetFile = File(targetPath);
+            if (await targetFile.exists()) {
+              try {
+                await targetFile.delete();
+              } catch (_) {}
+            }
+            await tmp2.rename(targetPath);
+          } finally {
+            try {
+              if (await tmp2.exists()) await tmp2.delete();
+            } catch (_) {}
+          }
+        } else {
+          await Future.delayed(Duration(milliseconds: 50 * attempt));
+        }
+      } finally {
+        if (attempt == 3) {
+          try {
+            if (await tempFile.exists()) await tempFile.delete();
+          } catch (_) {}
+        }
+      }
     }
   }
 
@@ -343,8 +383,14 @@ class TorrentResumeStore {
     } catch (e, st) {
       debugPrint(
           '[TorrentResumeStore] saveAll failed, scheduling retry: $e\n$st');
-      // FIX-2: Retry once after 5s if batch save fails
-      Timer(const Duration(seconds: 5), () async {
+      // FIX-2: Retry once after 5s if batch save fails.
+      // B23: the retry timer is registered in _saveDebounceTimers so
+      // cancelPendingSaves() / unregisterTorrent() can stop it — an orphaned
+      // timer must not write resume data after dispose. (One Timer object is
+      // registered under every id; cancelling any of them cancels the batch
+      // retry, which is safe — a lost retry degrades to a recheck, never to
+      // corrupt state.)
+      final retryTimer = Timer(const Duration(seconds: 5), () async {
         try {
           for (final id in ids) {
             final source = _sourceByTorrentId[id];
@@ -365,6 +411,10 @@ class TorrentResumeStore {
           } catch (_) {}
         }
       });
+      for (final id in ids) {
+        _saveDebounceTimers.remove(id)?.cancel();
+        _saveDebounceTimers[id] = retryTimer;
+      }
     }
   }
 
@@ -416,7 +466,80 @@ class TorrentResumeStore {
     }
   }
 
+  /// B15: loads the degraded (meta-only) snapshot for [sourceUrl] when no
+  /// native blob exists. Returns the stored piece bitfield, piece counts and
+  /// per-file rows — and the byte total the store claimed at pause time — so
+  /// the download handler can re-arm progress on re-add even though 1.9.2's
+  /// native bridge cannot persist or load a real fast-resume blob.
+  static Future<TorrentDegradedSnapshot?> loadDegradedSnapshotForSource(
+      String sourceUrl) async {
+    try {
+      final dir = await _dir();
+      final key = _stableKey(sourceUrl);
+      final metaFile = File('${dir.path}/$key.meta.json');
+      if (!await metaFile.exists()) return null;
+
+      final meta = jsonDecode(await metaFile.readAsString());
+      if (meta is! Map) return null;
+      // A native blob is handled by loadResumeDataForSource; this path is
+      // exclusively for degraded (meta-only) snapshots.
+      if (meta['degradedFallback'] != true) return null;
+
+      final files = (meta['files'] as List?)
+          ?.whereType<Map>()
+          .map((f) => Map<String, dynamic>.from(f))
+          .toList();
+      final bitfield = (meta['piecesBitfield'] as List?)
+          ?.map((b) => (b as num).toInt() != 0)
+          .toList();
+      final storedPiecesDone = (meta['piecesDone'] as num?)?.toInt();
+      final piecesDone = storedPiecesDone ??
+          (bitfield?.where((b) => b).length ?? 0);
+      final piecesTotal =
+          (meta['piecesTotal'] as num?)?.toInt() ?? bitfield?.length ?? 0;
+
+      final hasSnapshot =
+          (files != null && files.isNotEmpty) || (bitfield != null);
+      if (!hasSnapshot) return null;
+
+      // Byte total: prefer real per-file counts; under 1.9.2 those are
+      // unavailable (the engine reports no per-file progress), so map the
+      // stored bitfield onto the selected file sizes instead.
+      var selectedBytesTotal = 0;
+      var storedFileBytes = 0;
+      if (files != null) {
+        for (final f in files) {
+          final selected = (f['selected'] as bool?) ?? true;
+          if (!selected) continue;
+          final len = (f['length'] as num?)?.toInt() ?? 0;
+          final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+          selectedBytesTotal += len;
+          storedFileBytes += len > 0 ? dl.clamp(0, len) : 0;
+        }
+      }
+      var downloadedBytes = storedFileBytes;
+      if (bitfield != null && bitfield.isNotEmpty && selectedBytesTotal > 0) {
+        final estimated = (selectedBytesTotal * piecesDone / bitfield.length)
+            .round();
+        if (estimated > downloadedBytes) downloadedBytes = estimated;
+      }
+
+      return TorrentDegradedSnapshot(
+        files: files ?? const [],
+        piecesBitfield: bitfield ?? const [],
+        piecesTotal: piecesTotal,
+        piecesDone: piecesDone,
+        downloadedBytes: downloadedBytes,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   // FIX: [Audit] Save metadata/files snapshot discovered by probe without requiring binary resume data.
+  // B22: this must MERGE with any existing meta rather than replace it — a
+  // bare rewrite dropped the sha256/native blob digest and the pieces
+  // bitfield, corrupting (or discarding) the resume data saved alongside it.
   static Future<bool> saveMetadataSnapshot({
     required String sourceUrl,
     required List<Map<String, dynamic>> files,
@@ -430,25 +553,34 @@ class TorrentResumeStore {
       final metaFile = File('${dir.path}/$key.meta.json');
       final metaTmp = File('${dir.path}/$key.meta.json.tmp');
 
-      final meta = jsonEncode({
+      // Preserve everything a previous saveAndWait wrote (blob digest, native
+      // blob copy, piece bitfield/counts, degraded flag); refresh the
+      // mutable snapshot fields.
+      Map<String, dynamic> existing = {};
+      try {
+        if (await metaFile.exists()) {
+          final decoded = jsonDecode(await metaFile.readAsString());
+          if (decoded is Map) existing = Map<String, dynamic>.from(decoded);
+        }
+      } catch (_) {}
+
+      final merged = <String, dynamic>{
+        ...existing,
         'sourceUrl': sourceUrl,
         'torrentId': torrentId,
         'savedAt': DateTime.now().millisecondsSinceEpoch,
         if (name != null && name.isNotEmpty) 'name': name,
         'files': files,
-      });
+      };
 
-      await metaTmp.writeAsString(meta, flush: true);
+      await metaTmp.writeAsString(jsonEncode(merged), flush: true);
       final mraf = await metaTmp.open(mode: FileMode.append);
       await mraf.flush();
       await mraf.close();
 
-      if (await metaFile.exists() && Platform.isWindows) {
-        try {
-          await metaFile.delete();
-        } catch (_) {}
-      }
-      await metaTmp.rename(metaFile.path);
+      // Aligned with saveAndWait's durable rename (3-attempt retry + copy
+      // fallback) instead of the bare delete+rename that previously raced.
+      await _safeRenameFile(metaTmp, metaFile.path);
       return true;
     } catch (e) {
       debugPrint('[TorrentResumeStore] saveMetadataSnapshot failed: $e');

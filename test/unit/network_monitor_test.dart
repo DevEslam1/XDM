@@ -1,7 +1,7 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:dio/dio.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/features/downloads/provider/network_monitor.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Helper to build a minimal [DownloadTask] with the given [status].
@@ -38,7 +38,6 @@ void main() {
     late Map<String, int> torrentIds;
     late Map<String, CancelToken> cancelTokens;
     late bool wifiOnly;
-    late bool pauseOnCellular;
     late List<DownloadTask> setTaskCalls;
     late int pumpQueueCount;
 
@@ -49,7 +48,6 @@ void main() {
       torrentIds = {};
       cancelTokens = {};
       wifiOnly = false;
-      pauseOnCellular = false;
       setTaskCalls = [];
       pumpQueueCount = 0;
 
@@ -58,7 +56,6 @@ void main() {
         torrentIds: () => torrentIds,
         cancelTokens: () => cancelTokens,
         wifiOnly: () => wifiOnly,
-        pauseOnCellular: () => pauseOnCellular,
         setTask: (updated) async {
           setTaskCalls.add(updated);
           // Apply the update back into the task list.
@@ -85,9 +82,12 @@ void main() {
       test('downloading tasks are paused on no-network', () async {
         tasks.add(_task('d1', DownloadStatus.downloading));
         cancelTokens['d1'] = CancelToken();
+        // BUG10: an empty connectivity list now means "unknown" — pin the
+        // disconnected case with an explicit `none` result.
+        monitor.setConnectivityForTesting([ConnectivityResult.none]);
 
-        // checkNetworkConnectivity with empty _currentConnectivity (no
-        // network) should pause the downloading task.
+        // checkNetworkConnectivity with no network should pause the
+        // downloading task.
         await monitor.checkNetworkConnectivity();
 
         expect(setTaskCalls, isNotEmpty);
@@ -98,12 +98,29 @@ void main() {
 
       test('queued tasks are paused on no-network', () async {
         tasks.add(_task('q1', DownloadStatus.queued));
+        monitor.setConnectivityForTesting([ConnectivityResult.none]);
 
         await monitor.checkNetworkConnectivity();
 
         expect(setTaskCalls, isNotEmpty);
         final paused = setTaskCalls.last;
         expect(paused.status, DownloadStatus.paused);
+      });
+
+      test('BUG10: unknown connectivity (empty) does not pause downloads',
+          () async {
+        tasks.add(_task('d2', DownloadStatus.downloading));
+        cancelTokens['d2'] = CancelToken();
+
+        // No connectivity signal resolved yet: the first spurious callback
+        // must not treat "unknown" as "disconnected" and pause everything.
+        await monitor.checkNetworkConnectivity();
+
+        expect(
+          setTaskCalls.where((t) => t.status == DownloadStatus.paused),
+          isEmpty,
+        );
+        expect(tasks.first.status, DownloadStatus.downloading);
       });
     });
 
@@ -131,6 +148,7 @@ void main() {
         setTaskCalls.clear();
         tasks.add(_task('u2', DownloadStatus.downloading));
         cancelTokens['u2'] = CancelToken();
+        monitor.setConnectivityForTesting([ConnectivityResult.none]);
 
         // Step 1: disconnect pauses the task.
         await monitor.checkNetworkConnectivity();
@@ -156,15 +174,15 @@ void main() {
         wifiOnly = true;
         tasks.add(_task('w1', DownloadStatus.downloading));
         cancelTokens['w1'] = CancelToken();
+        // Explicitly on cellular so the wifi-only policy fires (BUG10: an
+        // empty connectivity list is "unknown" and no longer pauses).
+        monitor.setConnectivityForTesting([ConnectivityResult.mobile]);
 
-        // With wifiOnly=true and no wifi in _currentConnectivity (empty),
-        // the monitor should first handle no-network (pause), then
-        // wifi-only logic won't additionally fire because there's nothing
-        // left to pause.
         await monitor.checkNetworkConnectivity();
 
-        // Task should be paused due to no network.
+        // Task should be paused waiting for WiFi.
         expect(tasks.first.status, DownloadStatus.paused);
+        expect(tasks.first.errorMessage, DownloadStatusMessages.waitingWifi);
       });
 
       test('wifi-only resume does not override pausedByUser', () async {
@@ -193,86 +211,11 @@ void main() {
       });
     });
 
-    group('pause-on-cellular gating', () {
-      test('active tasks are paused on cellular when pauseOnCellular is on',
-          () async {
-        pauseOnCellular = true;
-        tasks.add(_task('c1', DownloadStatus.downloading));
-        cancelTokens['c1'] = CancelToken();
-        monitor.setConnectivityForTesting([ConnectivityResult.mobile]);
-
-        await monitor.checkNetworkConnectivity();
-
-        expect(tasks.first.status, DownloadStatus.paused);
-        expect(tasks.first.errorMessage, DownloadStatusMessages.waitingWifi);
-      });
-
-      test('cellular downloads are allowed when pauseOnCellular is off',
-          () async {
-        pauseOnCellular = false;
-        wifiOnly = false;
-        tasks.add(_task('c2', DownloadStatus.downloading));
-        cancelTokens['c2'] = CancelToken();
-        monitor.setConnectivityForTesting([ConnectivityResult.mobile]);
-
-        await monitor.checkNetworkConnectivity();
-
-        // No pause on cellular when neither gate is enabled.
-        final paused = setTaskCalls.where(
-          (t) => t.id == 'c2' && t.status == DownloadStatus.paused,
-        );
-        expect(paused, isEmpty);
-        expect(tasks.first.status, DownloadStatus.downloading);
-      });
-
-      test('tasks are not paused on wifi when pauseOnCellular is on', () async {
-        pauseOnCellular = true;
-        tasks.add(_task('c3', DownloadStatus.downloading));
-        cancelTokens['c3'] = CancelToken();
-        monitor.setConnectivityForTesting([ConnectivityResult.wifi]);
-
-        await monitor.checkNetworkConnectivity();
-
-        final paused = setTaskCalls.where(
-          (t) => t.id == 'c3' && t.status == DownloadStatus.paused,
-        );
-        expect(paused, isEmpty);
-        expect(tasks.first.status, DownloadStatus.downloading);
-      });
-
-      test('cellular-paused tasks resume when wifi returns', () async {
-        pauseOnCellular = true;
-        tasks.add(_task(
-          'c4',
-          DownloadStatus.paused,
-          errorMessage: DownloadStatusMessages.waitingWifi,
-        ));
-        monitor.setConnectivityForTesting([ConnectivityResult.wifi]);
-
-        await monitor.checkNetworkConnectivity();
-
-        expect(tasks.first.status, DownloadStatus.queued);
-      });
-
-      test('wifiOnly still pauses on cellular regardless of pauseOnCellular',
-          () async {
-        wifiOnly = true;
-        pauseOnCellular = false;
-        tasks.add(_task('c5', DownloadStatus.downloading));
-        cancelTokens['c5'] = CancelToken();
-        monitor.setConnectivityForTesting([ConnectivityResult.mobile]);
-
-        await monitor.checkNetworkConnectivity();
-
-        expect(tasks.first.status, DownloadStatus.paused);
-        expect(tasks.first.errorMessage, DownloadStatusMessages.waitingWifi);
-      });
-    });
-
     group('re-entrant guard', () {
       test('concurrent checkNetworkConnectivity is coalesced', () async {
         tasks.add(_task('r1', DownloadStatus.downloading));
         cancelTokens['r1'] = CancelToken();
+        monitor.setConnectivityForTesting([ConnectivityResult.none]);
 
         // Fire two checks concurrently. The re-entrant guard should
         // prevent double-processing.

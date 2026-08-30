@@ -65,6 +65,28 @@ class PositionalFileWriter
 
   static const int defaultMaxPendingBytes = 8 * 1024 * 1024; // 8MB
 
+  /// F23: maps an OS write/flush error onto [InsufficientStorageException]
+  /// when it is a disk-full condition — errno 28 (ENOSPC) on POSIX, OS error
+  /// 112 (ERROR_DISK_FULL) on Windows, or the message heuristics used by
+  /// [_flushBufferInternal]. Returns null for any other error. Shared with
+  /// the single-stream path, whose raw RandomAccessFile writes bypass
+  /// [write]'s internal mapping.
+  static InsufficientStorageException? mapDiskFullError(Object error) {
+    if (error is FileSystemException) {
+      final osError = error.osError;
+      if (osError != null &&
+          (osError.errorCode == 28 || osError.errorCode == 112)) {
+        return const InsufficientStorageException();
+      }
+      final msg = error.message.toLowerCase();
+      if (msg.contains('no space left') ||
+          msg.contains('not enough space')) {
+        return const InsufficientStorageException();
+      }
+    }
+    return null;
+  }
+
   final String path;
   final int totalSize;
   final int threadCount;
@@ -143,7 +165,7 @@ class PositionalFileWriter
         }
         await raf.close();
       } else {
-        final raf = await file.open(mode: FileMode.writeOnly);
+        final raf = await file.open(mode: FileMode.append);
         try {
           if (totalSize != null && totalSize > 0) {
             final len = await raf.length();
@@ -185,11 +207,7 @@ class PositionalFileWriter
         if (!_handles.containsKey(handleKey)) {
           try {
             final file = File(path);
-            // FIX P0-1: Use writeOnly (O_WRONLY|O_CREAT, no O_APPEND/O_TRUNC)
-            // so setPosition+writeFrom respects absolutePosition.
-            // FileMode.append (O_APPEND) forces every write to EOF on POSIX,
-            // corrupting multi-threaded positional writes.
-            final raf = await file.open(mode: FileMode.writeOnly);
+            final raf = await file.open(mode: FileMode.append);
             _handles[handleKey] = raf;
             _handleLocks[handleKey] = Lock();
           } catch (e) {

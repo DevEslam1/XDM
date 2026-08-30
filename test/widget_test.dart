@@ -1,14 +1,13 @@
 import 'dart:io';
-
-import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
+import 'package:flutter/services.dart';
 import 'package:dmx/core/services/database_service.dart';
 import 'package:dmx/features/downloads/provider/download_provider.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
 import 'package:dmx/main.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 
 class MockConnectivityPlatform extends ConnectivityPlatform {
   @override
@@ -61,7 +60,7 @@ void main() {
     // Register mock handlers for platform channels
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-      const MethodChannel('com.xdm.downloadmanager/widget'),
+      const MethodChannel('com.example.dmx/widget'),
       (methodCall) async => null,
     );
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -93,7 +92,7 @@ void main() {
     final app = (await tester.runAsync(() => _buildTestApp()))!;
     await tester.pumpWidget(app);
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.textContaining('XDM'), findsWidgets);
   });

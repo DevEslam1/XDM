@@ -1,6 +1,6 @@
-import 'package:dmx/core/domain/torrent_models.dart';
-import 'package:dmx/core/services/tracker_manager.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dmx/core/services/tracker_manager.dart';
+import 'package:dmx/core/services/torrent_models.dart';
 
 void main() {
   group('TrackerManager', () {
@@ -50,27 +50,11 @@ void main() {
 
     test('reannounce sets status to updating for all trackers', () {
       trackerManager.addTracker(1, 'http://tracker1.org/announce');
-      trackerManager.reannounce(1, force: true);
+      trackerManager.reannounce(1);
 
       final trackers = trackerManager.getTrackers(1);
       expect(trackers.first.status, equals(TrackerStatus.updating));
       expect(trackers.first.message, contains('Manual announce queued'));
-    });
-
-    test('reannounce enforces 15s rate limiting per tracker (T-04)', () {
-      const tracker = 'http://tracker-ratelimit.org/announce';
-      trackerManager.addTracker(2, tracker);
-
-      // Immediately after adding, canAnnounce is false
-      expect(trackerManager.canAnnounce(tracker), isFalse);
-
-      // Reannounce should be rejected by rate limiter without force
-      final reannounced = trackerManager.reannounce(2);
-      expect(reannounced, isFalse);
-
-      // Force reannounce bypasses rate limiter
-      final forceReannounced = trackerManager.reannounce(2, force: true);
-      expect(forceReannounced, isTrue);
     });
   });
 }

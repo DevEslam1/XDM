@@ -9,6 +9,7 @@ enum PauseReason {
   appRestarted,
   urlExpired,
   permissionRevoked,
+  timeout,
   unknown;
 
   static const PauseReason userRequested = PauseReason.user;
@@ -45,6 +46,7 @@ enum PauseReason {
       'permission_revoked' ||
       'permission' =>
         PauseReason.permissionRevoked,
+      'timeout' || 'hardtimeout' || 'hard_timeout' => PauseReason.timeout,
       _ => fallback,
     };
   }

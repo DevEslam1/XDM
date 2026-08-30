@@ -55,6 +55,62 @@ class ScriptableHttpServer {
     _ignoreRanges = ignore;
   }
 
+  /// One-shot FIFO responders consumed before the default responder.
+  final List<Future<void> Function(HttpRequest request)> _scripted = [];
+
+  /// Queues a one-shot responder for the next request(s).
+  void enqueue(Future<void> Function(HttpRequest request) responder) =>
+      _scripted.add(responder);
+
+  /// Scripted helper: serves the full payload with a bare [status],
+  /// ignoring any Range header.
+  Future<void> respondFull(HttpRequest request, {int status = 200}) async {
+    final response = request.response;
+    response.statusCode = status;
+    response.headers.set('ETag', _etag);
+    response.headers.set('Accept-Ranges', 'bytes');
+    response.headers
+        .set('Content-Length', _payload.length.toString());
+    request.response.add(_payload);
+    await request.response.close();
+  }
+
+  /// Scripted helper: serves a bare status code with an empty body.
+  Future<void> respondStatus(HttpRequest request, int status) async {
+    final response = request.response;
+    response.statusCode = status;
+    response.headers.set('Content-Length', '0');
+    await response.close();
+  }
+
+  /// Scripted helper: serves [bytes] with full control over [status] and
+  /// extra [headers] (Content-Length is set from [bytes] unless overridden).
+  Future<void> respondBytes(
+    HttpRequest request,
+    List<int> bytes, {
+    int status = 200,
+    Map<String, String> headers = const {},
+    bool chunked = false,
+  }) async {
+    final response = request.response;
+    response.statusCode = status;
+    headers.forEach(response.headers.set);
+    if (!chunked && !headers.containsKey(HttpHeaders.contentLengthHeader)) {
+      response.headers
+          .set(HttpHeaders.contentLengthHeader, bytes.length.toString());
+    }
+    for (var sent = 0; sent < bytes.length; sent += _chunkSize) {
+      final end = (sent + _chunkSize < bytes.length) ? sent + _chunkSize : bytes.length;
+      response.add(Uint8List.fromList(bytes.sublist(sent, end)));
+      await response.flush();
+    }
+    await response.close();
+  }
+
+  /// Scripted helper: never responds — the request hangs until the client
+  /// cancels or the server is torn down.
+  Future<void> hang(HttpRequest request) => Completer<void>().future;
+
   /// Force 416 Range Not Satisfiable
   void setReturn416(bool return416) {
     _return416 = return416;
@@ -86,6 +142,7 @@ class ScriptableHttpServer {
     _redirectFinalPath = null;
     _redirectIndex = 0;
     _byteDelay = Duration.zero;
+    _scripted.clear();
     capturedRequests.clear();
   }
 
@@ -110,6 +167,19 @@ class ScriptableHttpServer {
       rangeHeader: rangeHeader,
       ifRangeHeader: ifRangeHeader,
     ));
+
+    // Scripted one-shot responders take precedence.
+    if (_scripted.isNotEmpty) {
+      final responder = _scripted.removeAt(0);
+      try {
+        await responder(request);
+      } catch (_) {
+        try {
+          await request.response.close();
+        } catch (_) {}
+      }
+      return;
+    }
 
     // Handle Redirect Chains
     if (_redirectIndex < _redirectChain.length) {

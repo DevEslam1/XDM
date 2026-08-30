@@ -1,7 +1,6 @@
 import 'dart:io';
-
-import 'package:dmx/core/services/single_instance_service.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dmx/core/services/single_instance_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

@@ -1,8 +1,7 @@
-import 'dart:io';
-
-import 'package:dmx/core/utils/file_utils.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'dart:io';
 import 'package:path/path.dart' as p;
+import 'package:dmx/core/utils/file_utils.dart';
 
 void main() {
   group('file_utils tests', () {

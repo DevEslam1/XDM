@@ -72,9 +72,12 @@ class NetworkMonitor implements IConnectivity {
       _currentConnectivity.contains(ConnectivityResult.mobile);
 
   /// Whether there is no network connection available.
+  ///
+  /// BUG10: an empty connectivity list means "unknown", not "disconnected" —
+  /// treating unknown as disconnected paused every download on the first
+  /// spurious platform callback before any real signal arrived.
   bool get hasNoNetwork =>
-      _currentConnectivity.contains(ConnectivityResult.none) ||
-      _currentConnectivity.isEmpty;
+      _currentConnectivity.contains(ConnectivityResult.none);
 
   /// Whether there is any active network connection.
   bool get hasAnyNetworkConnection => !hasNoNetwork;
@@ -157,8 +160,12 @@ class NetworkMonitor implements IConnectivity {
     }
     _checkingNetwork = true;
     try {
-      final hasNoNet = _currentConnectivity.contains(ConnectivityResult.none) ||
-          _currentConnectivity.isEmpty;
+      // BUG10: unknown connectivity (empty list — no signal resolved yet)
+      // must not be read as "disconnected" nor drive wifi-only/cellular
+      // pause decisions on the first spurious callback.
+      final unknownConnectivity = _currentConnectivity.isEmpty;
+      final hasNoNet = !unknownConnectivity &&
+          _currentConnectivity.contains(ConnectivityResult.none);
 
       if (_onNetworkChanged != null) {
         await _onNetworkChanged!(
@@ -175,6 +182,10 @@ class NetworkMonitor implements IConnectivity {
         return;
       } else {
         await _resumeFromNetworkDisconnect(skipPump: skipPump);
+        if (unknownConnectivity) {
+          // Connectivity is still unknown — skip policy decisions.
+          return;
+        }
       }
 
       if (!_wifiOnly() && !_pauseOnCellular()) {
@@ -294,6 +305,18 @@ class NetworkMonitor implements IConnectivity {
           TorrentService.pauseTorrent(torrentId);
         }
         _cancelTokens()[task.id]?.cancel('wifi_only_pause');
+        // BUG3: mirror the disconnect path — await the in-flight engine
+        // future (bounded) so late progress ticks settle before the pause
+        // is published and the progress guards start dropping them.
+        final fut = _activeFutures()[task.id];
+        if (fut != null) {
+          try {
+            await fut.timeout(const Duration(seconds: 5));
+          } catch (e, st) {
+            LoggingService.logger('NetworkMonitor')
+                .warning('Operation failed', e, st);
+          }
+        }
         _cancelTokens().remove(task.id);
       }
       final sm = DownloadStateMachine(
@@ -302,7 +325,8 @@ class NetworkMonitor implements IConnectivity {
       );
       sm.transition(
         DomainDownloadState.paused,
-        reason: 'networkLost',
+        // BUG10: label the pause with its real reason instead of 'networkLost'.
+        reason: 'wifi_only_pause',
         caller: 'NetworkMonitor',
       );
       await _setTask(task.copyWith(

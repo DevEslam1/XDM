@@ -1,6 +1,6 @@
-import 'package:dmx/core/services/user_script_manager.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:dmx/core/services/user_script_manager.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -14,7 +14,7 @@ void main() {
     test('Script with eval or Function is rejected during validation', () {
       final manager = UserScriptManager();
 
-      const invalidScript = UserScript(
+      final invalidScript = const UserScript(
         id: 'bad_1',
         name: 'Eval Attack',
         urlPattern: '*',
@@ -27,7 +27,7 @@ void main() {
     test('Script with new Function is rejected during validation', () {
       final manager = UserScriptManager();
 
-      const invalidScript = UserScript(
+      final invalidScript = const UserScript(
         id: 'bad_2',
         name: 'Function Attack',
         urlPattern: '*',
@@ -40,7 +40,7 @@ void main() {
     test('Sandbox JS generation includes network and cookie blocking wrappers',
         () async {
       final manager = UserScriptManager();
-      const script = UserScript(
+      final script = const UserScript(
         id: 's1',
         name: 'Test Script',
         urlPattern: 'https://example.com/*',
@@ -58,13 +58,11 @@ void main() {
 
     test('Glob pattern matching works accurately', () {
       expect(
-        UserScriptManager.matchesPattern(
-            'https://example.com/*', 'https://example.com/page'),
+        UserScriptManager.matchesPattern('https://example.com/*', 'https://example.com/page'),
         isTrue,
       );
       expect(
-        UserScriptManager.matchesPattern(
-            'https://other.com/*', 'https://example.com/page'),
+        UserScriptManager.matchesPattern('https://other.com/*', 'https://example.com/page'),
         isFalse,
       );
     });

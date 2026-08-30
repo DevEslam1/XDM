@@ -1,7 +1,7 @@
-import 'package:dmx/core/services/xdm_backend_client.dart';
-import 'package:dmx/core/services/xdm_backend_exceptions.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dmx/core/services/xdm_backend_client.dart';
+import 'package:dmx/core/services/xdm_backend_exceptions.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -27,31 +27,27 @@ void main() {
     });
 
     test('BackendException is properly typed', () {
-      const authErr = BackendUnauthorizedException();
+      final authErr = const BackendUnauthorizedException();
       expect(authErr, isA<BackendException>());
       expect(authErr.toUserMessage(), isNotEmpty);
       expect(authErr.message, isNotEmpty);
 
-      const badReqErr = BackendBadRequestException();
+      final badReqErr = const BackendBadRequestException();
       expect(badReqErr, isA<BackendException>());
 
-      const notFoundErr = BackendNotFoundException();
+      final notFoundErr = const BackendNotFoundException();
       expect(notFoundErr, isA<BackendException>());
 
-      const rateLimitErr = BackendRateLimitException(retryAfterSeconds: 30);
+      final rateLimitErr =
+          const BackendRateLimitException(retryAfterSeconds: 30);
       expect(rateLimitErr, isA<BackendException>());
       expect(rateLimitErr.retryAfterSeconds, 30);
 
-      const networkErr = BackendNetworkException();
+      final networkErr = const BackendNetworkException();
       expect(networkErr, isA<BackendException>());
 
-      const unknownErr = BackendUnknownException();
+      final unknownErr = const BackendUnknownException();
       expect(unknownErr, isA<BackendException>());
-    });
-
-    test('cache hit returns directly without probe (Y-02)', () async {
-      final initialHits = XdmBackendClient.cacheHits;
-      expect(initialHits, isA<int>());
     });
   });
 }

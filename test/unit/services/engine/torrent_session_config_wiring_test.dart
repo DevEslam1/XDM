@@ -49,7 +49,11 @@ void main() {
       expect(config.uploadRateLimit, 250 * 1024);
 
       // Session-level state that lives on TorrentService rather than BtConfig.
-      expect(TorrentService.sequentialDownloadEnabled, isTrue);
+      // The raw setting is captured on configureSession; the capability-gated
+      // `sequentialDownloadEnabled` getter stays false on 1.9.2 (the native
+      // setter is a stub — see the FIX(H-9) gate), so the wiring guard asserts
+      // the captured setting, not the gated getter.
+      expect(TorrentService.sequentialDownloadSettingForTesting, isTrue);
       expect(TorrentService.shareRatioLimit, 3.0);
       expect(TorrentService.maxSeedingTimeMinutes, 120);
     });

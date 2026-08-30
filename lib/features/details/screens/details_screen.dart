@@ -980,33 +980,27 @@ class _ActionRail extends StatelessWidget with HapticHelper {
             settings,
           );
 
+          if (!context.mounted) return;
+
           if (deleteFiles != null) {
+            Navigator.pop(context);
             final ok =
                 await provider.deleteTask(task.id, deleteFiles: deleteFiles);
 
             if (context.mounted) {
-              if (ok) {
-                ThemedSnackbar.show(
-                  context,
-                  message: isRtl
-                      ? 'تم حذف التنزيل بنجاح'
-                      : 'Download deleted successfully',
-                  color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                  icon: Icons.delete,
-                  isDarkMode: isDark,
-                );
-
-                Navigator.pop(context);
-              } else {
-                ThemedSnackbar.show(
-                  context,
-                  message:
-                      isRtl ? 'فشل حذف التنزيل' : 'Failed to delete download',
-                  color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                  icon: Icons.error_outline,
-                  isDarkMode: isDark,
-                );
-              }
+              ThemedSnackbar.show(
+                context,
+                message: ok
+                    ? (isRtl
+                        ? 'تم حذف التنزيل بنجاح'
+                        : 'Download deleted successfully')
+                    : (isRtl
+                        ? 'فشل حذف التنزيل'
+                        : 'Failed to delete download'),
+                color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                icon: ok ? Icons.delete : Icons.error_outline,
+                isDarkMode: isDark,
+              );
             }
           }
         },

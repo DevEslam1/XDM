@@ -1,16 +1,13 @@
 import 'dart:async';
-
-import 'package:dmx/core/services/database_service.dart';
-import 'package:dmx/features/downloads/models/download_task.dart';
-import 'package:dmx/features/downloads/provider/download_provider.dart';
-import 'package:dmx/features/settings/provider/settings_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:get_it/get_it.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
+import 'package:dmx/core/services/database_service.dart';
+import 'package:dmx/features/downloads/provider/download_provider.dart';
+import 'package:dmx/features/settings/provider/settings_provider.dart';
+import 'package:dmx/features/downloads/models/download_task.dart';
 import 'fake_services.dart';
 
 void setupTestPluginMocks() {
@@ -114,7 +111,7 @@ DownloadTask createTestTask({
   DownloadStatus status = DownloadStatus.downloading,
   double progress = 0.45,
   int fileSize = 104857600, // 100 MB
-  int? downloadedBytes,
+  int downloadedBytes = 47185920, // ~45 MB
   double speed = 5242880.0, // 5 MB/s
   int eta = 11,
   int threadCount = 8,
@@ -136,7 +133,7 @@ DownloadTask createTestTask({
     url: effectiveUrl,
     status: status,
     fileSize: fileSize,
-    downloadedBytes: downloadedBytes ?? (fileSize * progress).round(),
+    downloadedBytes: (fileSize * progress).round(),
     speed: speed,
     eta: eta,
     threadCount: threadCount,
@@ -150,17 +147,6 @@ DownloadTask createTestTask({
     createdAt: createdAt ?? DateTime.now(),
     updatedAt: DateTime.now(),
   );
-}
-
-/// Registers fake services in GetIt for unit testing.
-void registerTestServices() {
-  final getIt = GetIt.instance;
-  getIt.reset();
-  getIt.registerLazySingleton<DatabaseService>(() => FakeDatabaseService());
-  getIt.registerLazySingleton<SettingsProvider>(
-      () => createMockSettingsProvider());
-  getIt.registerLazySingleton<DownloadProvider>(
-      () => createMockDownloadProvider());
 }
 
 /// Creates a list of mixed-status tasks for testing.

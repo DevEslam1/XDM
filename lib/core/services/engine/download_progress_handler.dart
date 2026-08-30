@@ -55,7 +55,9 @@ class DownloadProgressHandler {
 
   void dispose() {
     _disposed = true;
-    if (_pendingProgress != null && !cancelToken.isCancelled) {
+    if (_pendingProgress != null &&
+        (!cancelToken.isCancelled ||
+            _pendingProgress!.cycleState == CycleState.paused)) {
       final pending = _pendingProgress!;
       _pendingProgress = null;
       emit(pending);
@@ -180,7 +182,11 @@ class DownloadProgressHandler {
   }
 
   void emit(DownloadProgress progress) {
-    if (cancelToken.isCancelled) return;
+    // F20: a paused emission is the worker's final goodbye after a cancel —
+    // it must pass through the cancelled token so the paused state (with the
+    // final byte counts) reaches the UI. Everything else stays suppressed.
+    final isPausedEmission = progress.cycleState == CycleState.paused;
+    if (cancelToken.isCancelled && !isPausedEmission) return;
     _lastEmittedCycleState = progress.cycleState;
     onProgress(progress);
   }
@@ -246,8 +252,11 @@ class DownloadProgressHandler {
     HttpDownloadEngine? httpEngine,
     bool isCounterpartUnregistered = false,
   }) async {
-    // FIX-06: Guard against post-dispose worker progress
-    if (_disposed || cancelToken.isCancelled) return;
+    // FIX-06 / F20: guard against post-dispose worker progress. A cancelled
+    // cancelToken must NOT drop the worker's final Paused progress — the
+    // classification below forces such messages to CycleState.paused so the
+    // UI receives the final byte counts; only disposal drops them.
+    if (_disposed) return;
 
     if (adaptiveThreads && httpEngine != null) {
       final speed = (p['speed'] as num?)?.toDouble() ?? 0.0;
@@ -453,8 +462,7 @@ class DownloadProgressHandler {
             ? chunkList.length
             : chunkList
                 .where((c) =>
-                    c.isComplete ||
-                    (c.isIndeterminate && c.downloaded > 0 && c.size >= 0))
+                    c.isComplete || (c.isIndeterminate && c.downloaded > 0))
                 .length)
         : (pCompletedChunks ??
             (isDone ? totalParts : lastCompletedChunks ?? 0));
@@ -581,7 +589,9 @@ class DownloadProgressHandler {
         _throttleTimer =
             Timer(Duration(milliseconds: remainingMs.clamp(1, intervalMs)), () {
           _throttleTimer = null;
-          if (cancelToken.isCancelled) {
+          final pendingIsPaused =
+              _pendingProgress?.cycleState == CycleState.paused;
+          if (cancelToken.isCancelled && !pendingIsPaused) {
             _pendingProgress = null;
             return;
           }

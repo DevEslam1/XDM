@@ -1,5 +1,5 @@
-import 'package:dmx/core/services/share_url_handler.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dmx/core/services/share_url_handler.dart';
 
 void main() {
   group('ShareUrlHandler - App Intents & Deep Links', () {

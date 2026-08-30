@@ -21,6 +21,7 @@ class TaskExecutor {
 
   final Map<String, TaskMailbox> _mailboxes = {};
   final Map<String, DomainStateMachine> _stateMachines = {};
+  final Set<String> _tombstones = {};
   final StreamController<DownloadEvent> _eventController =
       StreamController<DownloadEvent>.broadcast();
 
@@ -35,6 +36,8 @@ class TaskExecutor {
 
   Stream<DownloadEvent> get events => _eventController.stream;
 
+  bool isTombstoned(String taskId) => _tombstones.contains(taskId);
+
   DomainStateMachine stateMachineFor(
     String taskId, {
     DomainDownloadState initialState = DomainDownloadState.idle,
@@ -46,6 +49,7 @@ class TaskExecutor {
         initialState: initialState,
         auditLog: auditLog,
         onTransitionHook: (id, from, to, cmd) async {
+          if (_tombstones.contains(id)) return;
           if (snapshotStore != null) {
             await snapshotStore!.onTaskStateChanged(
               id,
@@ -81,12 +85,15 @@ class TaskExecutor {
   Future<void> dispatch(DownloadCommand command) async {
     switch (command) {
       case final TaskCommand taskCmd:
+        if (_tombstones.contains(taskCmd.id) && taskCmd is! DeleteTask) {
+          return;
+        }
         final mailbox = await _withEnqueueLock(() async {
           return _mailboxes.putIfAbsent(
             taskCmd.id,
             () => TaskMailbox(
               taskId: taskCmd.id,
-              handler: (cmd) => _executeTaskCommand(taskCmd.id, cmd),
+              handler: (cmd, gen) => _executeTaskCommand(taskCmd.id, cmd, gen),
             ),
           );
         });
@@ -112,7 +119,10 @@ class TaskExecutor {
 
   /// Core task command handler executed sequentially within a task's mailbox.
   Future<void> _executeTaskCommand(
-      String taskId, DownloadCommand command) async {
+      String taskId, DownloadCommand command, int generation) async {
+    if (_tombstones.contains(taskId) && command is! DeleteTask) {
+      return;
+    }
     final sm = stateMachineFor(taskId);
 
     switch (command) {
@@ -246,8 +256,9 @@ class TaskExecutor {
             filesDeleted: deleteCmd.deleteFiles,
           ),
         );
+        _tombstones.add(taskId);
         await _withEnqueueLock(() async {
-          _mailboxes[taskId]?.close();
+          _mailboxes[taskId]?.markTombstone();
           _mailboxes.remove(taskId);
           _stateMachines.remove(taskId);
         });

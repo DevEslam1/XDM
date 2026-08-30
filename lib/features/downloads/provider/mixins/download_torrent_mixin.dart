@@ -150,8 +150,24 @@ mixin DownloadTorrentMixin {
           );
         }
       }
-    } catch (e) {
+    } catch (e, st) {
+      // BUG9: a swallowed seeding restart used to be completely silent —
+      // log it at severe and surface a one-line status on the task.
+      LoggingService.logger('DownloadTorrentMixin').severe(
+          'Failed to restart seeding for task ${task.id}', e, st);
       debugPrint('Failed to restart seeding for task ${task.id}: $e');
+      try {
+        final tIdx = providerTasks.indexWhere((t) => t.id == task.id);
+        if (tIdx != -1) {
+          final marked = providerTasks[tIdx]
+              .copyWith(statusMessage: 'Seeding resume failed');
+          providerTasks[tIdx] = marked;
+          await providerDatabaseService.saveTask(marked);
+          providerNotifyListeners();
+        }
+      } catch (inner) {
+        debugPrint('[DMX] BUG9: failed to surface seeding error: $inner');
+      }
     }
   }
 

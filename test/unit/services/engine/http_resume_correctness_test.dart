@@ -8,7 +8,7 @@ import 'package:dmx/core/services/engine/engine_models.dart';
 import 'package:dmx/core/services/engine/http_transfer_job.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../../../../test/helpers/fake_services.dart';
+import '../../../../test/helpers/scriptable_http_server.dart';
 
 void main() {
   late Directory tempDir;

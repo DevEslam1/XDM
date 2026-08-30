@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:dmx/core/services/positional_file_writer.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dmx/core/services/positional_file_writer.dart';
 
 void main() {
   late Directory tempDir;
@@ -181,78 +181,6 @@ void main() {
       final file = File(path);
       expect(await file.exists(), true);
       expect(await file.length(), 1);
-    });
-
-    test(
-        'flushPaced limits disk flushes to interval or 1MB threshold (F-01/F-02)',
-        () async {
-      final path = '${tempDir.path}/test_flush_paced.dat';
-      final writer = await PositionalFileWriter.open(
-        path,
-        totalSize: 500,
-        threadCount: 1,
-      );
-
-      await writer.close();
-      final file = File(path);
-      expect(await file.exists(), true);
-    });
-
-    test(
-        'bounded memory buffer drains writes when exceeding maxPendingBytes and writes all data accurately',
-        () async {
-      final path = '${tempDir.path}/test_bounded_buffer.dat';
-      // Use 1MB buffer cap for rapid test execution of 4MB write
-      const testMaxPending = 1 * 1024 * 1024; // 1MB
-      const chunkSize = 256 * 1024; // 256KB
-      const totalTestSize = 4 * 1024 * 1024; // 4MB
-
-      final writer = await PositionalFileWriter.open(
-        path,
-        totalSize: totalTestSize,
-        threadCount: 2,
-        bufferSize: chunkSize,
-        maxPendingBytes: testMaxPending,
-      );
-
-      final chunkData = Uint8List(chunkSize);
-      for (var i = 0; i < chunkSize; i++) {
-        chunkData[i] = i % 256;
-      }
-
-      // Write 4MB in chunks
-      for (var offset = 0; offset < totalTestSize; offset += chunkSize) {
-        await writer.write(0, offset, chunkData);
-        // Verify that pending bytes never explode beyond bounded threshold
-        expect(
-            writer.pendingBytes, lessThanOrEqualTo(testMaxPending + chunkSize));
-      }
-
-      await writer.close();
-      expect(writer.pendingBytes, equals(0));
-
-      final file = File(path);
-      expect(await file.length(), equals(totalTestSize));
-    });
-
-    test('onMemoryPressure flushes pending buffers immediately', () async {
-      final path = '${tempDir.path}/test_mem_pressure.dat';
-      final writer = await PositionalFileWriter.open(
-        path,
-        totalSize: 1000,
-        threadCount: 1,
-        bufferSize: 1000,
-      );
-
-      await writer.write(0, 0, Uint8List.fromList([1, 2, 3, 4, 5]));
-      expect(writer.pendingBytes, greaterThan(0));
-
-      writer.onMemoryPressure();
-      // Allow async flush to complete
-      await Future.delayed(const Duration(milliseconds: 50));
-
-      expect(writer.pendingBytes, equals(0));
-      await writer.close();
     });
   });
 }

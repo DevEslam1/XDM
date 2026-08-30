@@ -1,12 +1,8 @@
 import 'package:dmx/core/services/database_service.dart';
 import 'package:dmx/core/services/download_engine.dart';
 import 'package:dmx/core/services/permission_service.dart';
-import 'package:dmx/features/browser/models/bookmark.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
-
-export 'fake_download_engine.dart';
-export 'fake_torrent_service.dart';
-export 'scriptable_http_server.dart';
+import 'package:dmx/features/browser/models/bookmark.dart';
 
 class FakeDatabaseService extends DatabaseService {
   final List<DownloadTask> _tasks = [];
@@ -29,13 +25,6 @@ class FakeDatabaseService extends DatabaseService {
   Future<void> saveTask(DownloadTask task) async {
     _tasks.removeWhere((t) => t.id == task.id);
     _tasks.add(task);
-  }
-
-  @override
-  Future<void> saveTasks(Iterable<DownloadTask> tasks) async {
-    for (final task in tasks) {
-      await saveTask(task);
-    }
   }
 
   @override
@@ -106,18 +95,8 @@ class FakePermissionService extends PermissionService {
   bool storageGranted = true;
   bool notificationGranted = true;
 
-  @override
-  Future<String> defaultDownloadDirectory() async => 'build/test_downloads';
-
-  @override
-  Future<bool> ensureStorageAccess() async => storageGranted;
-
-  @override
-  Future<bool> isStoragePermissionValid() async => storageGranted;
-
-  @override
-  Future<bool> isBatteryOptimizationExempt() async => true;
-
-  @override
-  Future<bool> requestBatteryOptimizationExemption() async => true;
+  Future<bool> hasStoragePermission() async => storageGranted;
+  Future<bool> requestStoragePermission() async => storageGranted;
+  Future<bool> hasNotificationPermission() async => notificationGranted;
+  Future<bool> requestNotificationPermission() async => notificationGranted;
 }

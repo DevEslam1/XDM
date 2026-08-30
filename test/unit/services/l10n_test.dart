@@ -1,10 +1,10 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:dmx/core/utils/localization.dart';
+import 'package:dmx/core/utils/l10n/app_en.dart';
 import 'package:dmx/core/utils/l10n/app_ar.dart';
 import 'package:dmx/core/utils/l10n/app_de.dart';
-import 'package:dmx/core/utils/l10n/app_en.dart';
 import 'package:dmx/core/utils/l10n/app_es.dart';
 import 'package:dmx/core/utils/l10n/app_fr.dart';
-import 'package:dmx/core/utils/localization.dart';
-import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

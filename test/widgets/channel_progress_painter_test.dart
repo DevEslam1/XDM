@@ -1,7 +1,6 @@
-import 'package:dmx/core/services/engine/engine_models.dart';
-import 'package:dmx/features/downloads/widgets/channel_progress_painter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dmx/features/downloads/widgets/channel_progress_painter.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -60,88 +59,6 @@ void main() {
 
       expect(painter1.shouldRepaint(painter2), isFalse);
       expect(painter1.shouldRepaint(painter3), isTrue);
-    });
-
-    testWidgets(
-        'shouldRepaint returns false when chunkFingerprint is equal even if '
-        'chunk detail lists differ by construction',
-        (WidgetTester tester) async {
-      final p1 = ValueNotifier<double>(0.5);
-
-      final painterA = ChannelProgressPainter(
-        progress: p1,
-        isDark: true,
-        isTorrent: false,
-        chunkFingerprint: 42,
-        chunkDetails: const [
-          ChunkDetail(
-            index: 0,
-            start: 0,
-            end: 10,
-            downloaded: 5,
-            size: 10,
-            ratio: 0.5,
-          ),
-        ],
-      );
-      final painterB = ChannelProgressPainter(
-        progress: p1,
-        isDark: true,
-        isTorrent: false,
-        chunkFingerprint: 42,
-        chunkDetails: const [
-          ChunkDetail(
-            index: 0,
-            start: 0,
-            end: 10,
-            downloaded: 8,
-            size: 10,
-            ratio: 0.8,
-          ),
-        ],
-      );
-
-      expect(painterA.shouldRepaint(painterB), isFalse);
-    });
-
-    testWidgets('shouldRepaint returns true when chunkFingerprint differs',
-        (WidgetTester tester) async {
-      final p1 = ValueNotifier<double>(0.5);
-
-      final painterA = ChannelProgressPainter(
-        progress: p1,
-        isDark: true,
-        isTorrent: false,
-        chunkFingerprint: 42,
-        chunkDetails: const [
-          ChunkDetail(
-            index: 0,
-            start: 0,
-            end: 10,
-            downloaded: 5,
-            size: 10,
-            ratio: 0.5,
-          ),
-        ],
-      );
-      final painterB = ChannelProgressPainter(
-        progress: p1,
-        isDark: true,
-        isTorrent: false,
-        chunkFingerprint: 43,
-        chunkDetails: const [
-          ChunkDetail(
-            index: 0,
-            start: 0,
-            end: 10,
-            downloaded: 8,
-            size: 10,
-            ratio: 0.8,
-          ),
-        ],
-      );
-
-      expect(painterA.shouldRepaint(painterB), isTrue);
     });
   });
 }

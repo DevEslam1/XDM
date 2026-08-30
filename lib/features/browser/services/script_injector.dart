@@ -433,6 +433,52 @@ class ScriptInjector {
     return kMediaDomains.any((d) => host.contains(d));
   }
 
+  /// Phase-0 repair: the original timer-speed injector was lost during the
+  /// part-wiring refactor; the browser screen still calls it on every page
+  /// start (browser_screen_webview.dart `_onPageStart`), right after
+  /// [AdBlockerService.intervalCleanupJs]. Conservative reconstruction:
+  /// accelerates `setTimeout`/`setInterval` countdown gates ("please wait N
+  /// seconds" link-lockers / ad countdowns) on media/file-hosting domains
+  /// only ([kMediaDomains]), so normal browsing is unaffected. Idempotent via
+  /// the `__xdmTimerSpeed` flag.
+  static const String kTimerSpeedScript = '''
+    (function() {
+      if (window.__xdmTimerSpeed) return;
+      window.__xdmTimerSpeed = true;
+      var _origSetTimeout = window.setTimeout;
+      var _origSetInterval = window.setInterval;
+      function accel(delay) {
+        try {
+          delay = Number(delay) || 0;
+          if (delay >= 1000) return Math.max(50, Math.floor(delay / 10));
+        } catch (e) {}
+        return delay;
+      }
+      window.setTimeout = function(fn, delay) {
+        var args = Array.prototype.slice.call(arguments);
+        args[1] = accel(delay);
+        return _origSetTimeout.apply(window, args);
+      };
+      window.setInterval = function(fn, delay) {
+        var args = Array.prototype.slice.call(arguments);
+        args[1] = accel(delay);
+        return _origSetInterval.apply(window, args);
+      };
+    })();
+  ''';
+
+  /// Injects the countdown-acceleration script on media/file-hosting pages.
+  /// See [kTimerSpeedScript] for scope and rationale.
+  Future<void> injectTimerSpeedScript(BrowserTab tab) async {
+    final url = tab.url;
+    if (url.isEmpty || !isMediaDomain(url)) return;
+    try {
+      await tab.controller?.evaluateJavascript(source: kTimerSpeedScript);
+    } catch (e) {
+      _log.warning('[DMX Browser] Failed to inject timer speed script: $e');
+    }
+  }
+
   Future<void> injectLongPressScriptToTab(BrowserTab tab) async {
     try {
       await tab.controller?.evaluateJavascript(source: kLongPressScript);

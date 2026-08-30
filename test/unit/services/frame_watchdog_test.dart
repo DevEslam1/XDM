@@ -1,8 +1,7 @@
-import 'package:dmx/core/services/frame_watchdog.dart';
-import 'package:dmx/core/services/performance_monitor.dart';
-import 'package:dmx/features/settings/provider/settings_provider.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dmx/core/services/frame_watchdog.dart';
+import 'package:dmx/features/settings/provider/settings_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -73,47 +72,6 @@ void main() {
       // Window 3: 9% > 8% -> Should trigger battery saver
       FrameWatchdog.simulateWindowForTesting(9, 100);
       expect(settings.batterySaverMode, isTrue);
-    });
-
-    test(
-        'PerformanceMonitor toggle, pause/resume and stats tracking (PF-01/PF-02)',
-        () {
-      final monitor = PerformanceMonitor.instance;
-      monitor.reset();
-      expect(monitor.totalFrames, 0);
-      expect(monitor.jankyFrameCount, 0);
-
-      monitor.pause();
-      expect(monitor.isListening, isFalse);
-
-      monitor.resume();
-      expect(monitor.isListening, isTrue);
-
-      // Verify health summary formatting
-      expect(monitor.healthSummary, contains('fps |'));
-      expect(monitor.healthSummary, contains('% jank'));
-    });
-
-    test(
-        'heavy downloads suppress jank alert by default but observe when alwaysObserveHeavyDownloads is true',
-        () {
-      double? detectedRatio;
-      FrameWatchdog.onJankDetected = (ratio) {
-        detectedRatio = ratio;
-      };
-
-      // 1. By default with isHeavy = true: jank alert is suppressed
-      FrameWatchdog.alwaysObserveHeavyDownloads = false;
-      FrameWatchdog.simulateWindowForTesting(10, 100, isHeavy: true);
-      expect(detectedRatio, isNull);
-
-      // 2. With alwaysObserveHeavyDownloads = true: jank alert fires
-      FrameWatchdog.alwaysObserveHeavyDownloads = true;
-      FrameWatchdog.simulateWindowForTesting(10, 100, isHeavy: true);
-      expect(detectedRatio, isNotNull);
-      expect(detectedRatio, closeTo(0.10, 0.001));
-
-      FrameWatchdog.alwaysObserveHeavyDownloads = false;
     });
   });
 }

@@ -3,28 +3,25 @@ import 'dart:collection';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
-import 'package:dmx/core/domain/torrent_models.dart';
-import 'package:dmx/core/services/database_service.dart';
 import 'package:dmx/core/services/download_engine.dart';
-import 'package:dmx/core/services/download_metrics.dart';
-import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/features/downloads/provider/download_orchestrator.dart';
-import 'package:dmx/features/downloads/provider/network_monitor.dart';
-import 'package:dmx/features/downloads/provider/notification_coordinator.dart';
-import 'package:dmx/features/settings/provider/settings_provider.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/services.dart';
+
+import 'package:dmx/features/settings/provider/settings_provider.dart';
+import 'package:dmx/core/services/database_service.dart';
+import 'package:dmx/features/downloads/models/download_task.dart';
+import 'package:dmx/core/services/download_metrics.dart';
+import 'package:dmx/core/domain/torrent_models.dart';
+import 'package:dmx/features/downloads/provider/notification_coordinator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:dmx/features/downloads/provider/network_monitor.dart';
 
 /// Minimal stub implementing [DownloadOrchestratorHost] so we can instantiate
 /// [DownloadOrchestrator] and exercise its @visibleForTesting helpers.
 class _StubHost implements DownloadOrchestratorHost {
   @override
   void pushProgressTick(String taskId, double progress, double speed) {}
-
-  @override
-  final Map<String, ({CancelToken video, CancelToken audio})>
-      orchestratorTokens = {};
 
   @override
   bool get enableBackgroundTimers => false;
@@ -45,7 +42,7 @@ void main() {
 
   group('isRetryableError', () {
     test('SocketException is retryable', () {
-      const error = SocketException('connection reset');
+      final error = const SocketException('connection reset');
       expect(orchestrator.isRetryableError(error), isTrue);
     });
 
@@ -60,7 +57,7 @@ void main() {
     });
 
     test('DownloadIntegrityException is NOT retryable', () {
-      const error = DownloadIntegrityException('checksum mismatch');
+      final error = const DownloadIntegrityException('checksum mismatch');
       expect(orchestrator.isRetryableError(error), isFalse);
     });
 
@@ -180,14 +177,14 @@ void main() {
 
   group('errorMessage', () {
     test('DownloadIntegrityException includes message', () {
-      const error = DownloadIntegrityException('size mismatch');
+      final error = const DownloadIntegrityException('size mismatch');
       final msg = orchestrator.errorMessage(error);
       expect(msg, contains('Download integrity check failed'));
       expect(msg, contains('size mismatch'));
     });
 
     test('IsolateSpawnTimeoutException returns its message', () {
-      const error = IsolateSpawnTimeoutException('spawn timed out');
+      final error = const IsolateSpawnTimeoutException('spawn timed out');
       expect(orchestrator.errorMessage(error), equals('spawn timed out'));
     });
 
@@ -441,9 +438,6 @@ class _TestEscalationHost implements DownloadOrchestratorHost {
   @override
   final Map<String, CancelToken> cancelTokens = {};
   @override
-  final Map<String, ({CancelToken video, CancelToken audio})>
-      orchestratorTokens = {};
-  @override
   final Map<String, Future<void>> activeFutures = {};
   @override
   final Map<String, DownloadMetrics> downloadMetrics = {};
@@ -452,10 +446,6 @@ class _TestEscalationHost implements DownloadOrchestratorHost {
   final Map<String, Queue<double>> speedHistories = {};
   @override
   final Map<String, int> lastProgressUpdateTimes = {};
-  @override
-  final Map<String, int> lastDbSaveTimes = {};
-  @override
-  final Map<String, int> lastDbSaveBytes = {};
   @override
   final Map<String, int> lastTorrentFileDiskSync = {};
   @override
