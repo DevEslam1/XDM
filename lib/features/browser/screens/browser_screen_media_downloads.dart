@@ -618,7 +618,7 @@ mixin _MediaDownloadsMixin on _BrowserScreenStateBase {
                                   String? filename;
                                   if (title != null && title.isNotEmpty) {
                                     filename =
-                                        ext != null ? "$title.$ext" : title;
+                                        ext != null ? '$title.$ext' : title;
                                   }
                                   BrowserDownloadSheet.show(
                                     context,
@@ -772,7 +772,7 @@ mixin _MediaDownloadsMixin on _BrowserScreenStateBase {
       String? webArchiveSavedPath;
       if (Platform.isAndroid && tab.controller != null) {
         try {
-          final archivePath = p.join(path, "$title.mhtml");
+          final archivePath = p.join(path, '$title.mhtml');
           final res = await tab.controller
               ?.saveWebArchive(filePath: archivePath, autoname: false);
           if (res != null && res.isNotEmpty) {
@@ -787,16 +787,16 @@ mixin _MediaDownloadsMixin on _BrowserScreenStateBase {
 
       if (webArchiveSavedPath != null &&
           File(webArchiveSavedPath).existsSync()) {
-        fileName = "$title.mhtml";
+        fileName = '$title.mhtml';
         filePath = webArchiveSavedPath;
         size = await File(webArchiveSavedPath).length();
       } else {
-        fileName = "$title.html";
+        fileName = '$title.html';
         filePath = p.join(path, fileName);
         String rawHtml = '';
         try {
           final result = await tab.controller?.evaluateJavascript(
-            source: "document.documentElement.outerHTML",
+            source: 'document.documentElement.outerHTML',
           );
           if (result is String) {
             rawHtml = result;
@@ -845,11 +845,11 @@ mixin _MediaDownloadsMixin on _BrowserScreenStateBase {
         url: tab.url,
         fileSize: size,
         downloadedBytes: size,
-        category: "Document",
+        category: 'Document',
         status: DownloadStatus.completed,
         savePath: path,
         localFilePath: filePath,
-        tempFilePath: "",
+        tempFilePath: '',
         threadCount: 1,
         chunks: [1.0],
         createdAt: DateTime.now(),
@@ -1145,7 +1145,7 @@ mixin _MediaDownloadsMixin on _BrowserScreenStateBase {
               : null;
           String? filename;
           if (title != null && title.isNotEmpty) {
-            filename = ext != null ? "$title.$ext" : title;
+            filename = ext != null ? '$title.$ext' : title;
           }
           BrowserDownloadSheet.show(
             context,

@@ -1,11 +1,10 @@
 import 'dart:io';
 
 import 'package:dio/dio.dart';
-import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
 import 'package:dmx/core/services/mirror_failover.dart';
 import 'package:dmx/core/services/mirror_health_store.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -18,7 +17,7 @@ void main() {
 
   group('MirrorHealthStore', () {
     test('blacklists a mirror after 5 failures with 6h TTL', () async {
-      final url = 'https://mirror-a.com/file';
+      const url = 'https://mirror-a.com/file';
       for (var i = 0; i < 5; i++) {
         await MirrorHealthStore.recordFailure(url, statusCode: 500);
       }
@@ -27,7 +26,7 @@ void main() {
     });
 
     test('success resets failures and clears blacklist', () async {
-      final url = 'https://mirror-b.com/file';
+      const url = 'https://mirror-b.com/file';
       for (var i = 0; i < 5; i++) {
         await MirrorHealthStore.recordFailure(url);
       }
@@ -59,10 +58,10 @@ void main() {
 
   group('orderMirrorUrls', () {
     test('primary first, then speed-ranked, blacklisted last', () async {
-      final slow = 'https://slow.com/file';
-      final fast = 'https://fast.com/file';
-      final black = 'https://black.com/file';
-      final primary = 'https://primary.com/file';
+      const slow = 'https://slow.com/file';
+      const fast = 'https://fast.com/file';
+      const black = 'https://black.com/file';
+      const primary = 'https://primary.com/file';
 
       await MirrorHealthStore.recordSuccess(slow, speedBps: 100);
       await MirrorHealthStore.recordSuccess(fast, speedBps: 900000);
@@ -105,7 +104,7 @@ void main() {
     });
 
     test('blacklisted mirror is skipped', () async {
-      final black = 'https://black.com';
+      const black = 'https://black.com';
       for (var i = 0; i < 5; i++) {
         await MirrorHealthStore.recordFailure(black);
       }

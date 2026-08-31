@@ -1076,7 +1076,7 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
     try {
       // Bug #15 fix: opening a Blob URL in a new tab/controller fails because Blob URLs
       // are origin-scoped. Instead, evaluate the print dialog directly on the current tab's controller.
-      await controller.evaluateJavascript(source: "window.print();");
+      await controller.evaluateJavascript(source: 'window.print();');
     } catch (e, st) {
       Logger('browser_screen').warning('[browser_screen] print failed', e, st);
       if (mounted) {

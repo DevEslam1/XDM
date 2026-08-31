@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dmx/core/services/torrent_resume_store.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:dmx/core/services/torrent_resume_store.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -123,7 +123,7 @@ void main() {
       final file = File(torrentFilePath);
 
       // Raw bencoded torrent bytes containing an info dict
-      final bencodedStr = 'd4:infod4:name4:test6:lengthi100eee';
+      const bencodedStr = 'd4:infod4:name4:test6:lengthi100eee';
       final bencodedBytes = Uint8List.fromList(utf8.encode(bencodedStr));
       await file.writeAsBytes(bencodedBytes);
 

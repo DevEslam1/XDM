@@ -1,8 +1,8 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:battery_plus/battery_plus.dart';
-import 'package:dmx/core/services/power_monitor.dart';
-import 'package:dmx/core/services/download_engine.dart';
 import 'package:dmx/core/services/database_service.dart';
+import 'package:dmx/core/services/download_engine.dart';
+import 'package:dmx/core/services/power_monitor.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -27,7 +27,9 @@ void main() {
       await sub.cancel();
     });
 
-    test('DownloadIsolatePool scales effective max size when battery low or screen off', () {
+    test(
+        'DownloadIsolatePool scales effective max size when battery low or screen off',
+        () {
       PowerMonitor.setBatteryStateForTesting(BatteryState.discharging);
       PowerMonitor.setBatteryLevelForTesting(15);
       expect(PowerMonitor.batteryLevel, equals(15));
@@ -37,7 +39,8 @@ void main() {
       expect(pool.effectiveMaxSize, lessThanOrEqualTo(2));
     });
 
-    test('DatabaseService flushPendingSaves completes without throwing', () async {
+    test('DatabaseService flushPendingSaves completes without throwing',
+        () async {
       await DatabaseService.instance.flushPendingSaves();
     });
   });

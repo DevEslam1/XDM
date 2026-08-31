@@ -1,8 +1,8 @@
+import 'package:dmx/features/settings/provider/settings_provider.dart';
+import 'package:dmx/shared/mixins/pausable_loop_animation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:dmx/shared/mixins/pausable_loop_animation.dart';
-import 'package:dmx/features/settings/provider/settings_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _TestWidget extends StatefulWidget {

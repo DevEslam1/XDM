@@ -1,17 +1,17 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/core/services/update_service.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test('UpdateInfo JSON parsing test', () {
     final json = {
-      "latestVersion": "3.1.0",
-      "versionCode": 310,
-      "apkUrl":
-          "https://raw.githubusercontent.com/DevEslam1/XDM/main/app-release.apk",
-      "changelog": "Added OTA self-update feature",
-      "mandatory": false,
-      "minSupportedVersionCode": 200,
-      "sha256": "abcdef1234567890"
+      'latestVersion': '3.1.0',
+      'versionCode': 310,
+      'apkUrl':
+          'https://raw.githubusercontent.com/DevEslam1/XDM/main/app-release.apk',
+      'changelog': 'Added OTA self-update feature',
+      'mandatory': false,
+      'minSupportedVersionCode': 200,
+      'sha256': 'abcdef1234567890'
     };
 
     final update = UpdateInfo.fromJson(json);

@@ -1,5 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/features/browser/services/element_picker_service.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -15,7 +15,7 @@ void main() {
     });
 
     test('pickerScript contains required JS event handlers and namespace', () {
-      final js = ElementPickerService.pickerScript;
+      const js = ElementPickerService.pickerScript;
       expect(js, contains('window.__xdmPicker'));
       expect(js, contains('window.XdmPickerChannel'));
       expect(js, contains('display:none;'));

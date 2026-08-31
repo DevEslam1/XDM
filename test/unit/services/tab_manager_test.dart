@@ -1,5 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/features/browser/models/browser_tab.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   /// URL scheme safety validation mirrors the logic in TabManager.restoreTabs:

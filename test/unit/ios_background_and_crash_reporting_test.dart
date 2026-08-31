@@ -1,6 +1,6 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:dmx/core/services/ios_background_service.dart';
 import 'package:dmx/core/services/crash_reporting_service.dart';
+import 'package:dmx/core/services/ios_background_service.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

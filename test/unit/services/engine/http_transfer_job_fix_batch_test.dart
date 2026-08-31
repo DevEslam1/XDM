@@ -188,7 +188,7 @@ void main() {
         'F17: resume clamps chunks that claim bytes beyond the real disk length',
         () async {
       final tempPath = '${tempDir.path}/f17.bin.tmp';
-      final mid = fileSize ~/ 2;
+      const mid = fileSize ~/ 2;
       // Disk only holds 100000 real bytes, but chunk 0 claims all 262144.
       // Pre-fix, openForResume pre-extended the file to totalSize so the
       // stale J4 pre-flight never fired: chunk 0 was already "complete",

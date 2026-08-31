@@ -1,6 +1,7 @@
+import 'package:dmx/features/add_download/widgets/add_download_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:dmx/features/add_download/widgets/add_download_dialog.dart';
+
 import '../helpers/test_helpers.dart';
 
 void main() {

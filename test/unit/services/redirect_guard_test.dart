@@ -1,5 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/core/services/redirect_guard.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('RedirectGuard Heuristics', () {
@@ -26,7 +26,7 @@ void main() {
     });
 
     test('loop guard blocks identical sequential navigations', () async {
-      final url = 'https://adf.ly/go/target';
+      const url = 'https://adf.ly/go/target';
       guard.addToChain('tab1', url);
 
       final res = await guard.evaluate(tabId: 'tab1', navigatingTo: url);
@@ -34,7 +34,7 @@ void main() {
     });
 
     test('reset clears loop history for the tab', () async {
-      final url = 'https://adf.ly/go/target';
+      const url = 'https://adf.ly/go/target';
       guard.addToChain('tab1', url);
 
       guard.reset('tab1');

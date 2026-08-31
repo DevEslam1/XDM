@@ -96,6 +96,7 @@ dev_dependencies:
   # FIX M-4: Moved from production dependencies — test utility only
   fake_async: ^1.3.3
 
+  sqlite3: any
 flutter_launcher_icons:
   android: "ic_launcher"
   ios: true

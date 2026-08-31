@@ -1,8 +1,8 @@
 import 'package:dmx/core/services/database_service.dart';
 import 'package:dmx/core/services/download_engine.dart';
 import 'package:dmx/core/services/permission_service.dart';
-import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/features/browser/models/bookmark.dart';
+import 'package:dmx/features/downloads/models/download_task.dart';
 
 class FakeDatabaseService extends DatabaseService {
   final List<DownloadTask> _tasks = [];

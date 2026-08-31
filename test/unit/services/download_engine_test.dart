@@ -1,16 +1,22 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter_test/flutter_test.dart';
+
 import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/features/downloads/provider/download_orchestrator.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 class _MockOrchestratorHost implements DownloadOrchestratorHost {
   DownloadTask? lastTaskState;
+  DownloadTask? taskInstance;
 
   @override
   Future<void> setTaskState(DownloadTask task) async {
     lastTaskState = task;
+    taskInstance = task;
   }
+
+  @override
+  DownloadTask? findTaskById(String id) => taskInstance;
 
   @override
   void pushProgressTick(String taskId, double progress, double speed) {}

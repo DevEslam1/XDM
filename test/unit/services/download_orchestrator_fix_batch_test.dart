@@ -4,9 +4,6 @@ import 'dart:io';
 
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 import 'package:dio/dio.dart';
-import 'package:drift/drift.dart' as drift;
-import 'package:flutter/services.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/core/domain/torrent_models.dart';
 import 'package:dmx/core/services/database_service.dart';
 import 'package:dmx/core/services/download_engine.dart';
@@ -18,6 +15,9 @@ import 'package:dmx/features/downloads/provider/download_provider.dart';
 import 'package:dmx/features/downloads/provider/network_monitor.dart';
 import 'package:dmx/features/downloads/provider/notification_coordinator.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
+import 'package:drift/drift.dart' as drift;
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -134,7 +134,7 @@ void main() {
         () {
       final orch = DownloadOrchestrator(_RecordingHost());
       // Disk full (errno 28).
-      final diskFull = FileSystemException(
+      const diskFull = FileSystemException(
           'Write failed', '/tmp/f', OSError('No space left on device', 28));
       expect(orch.isRetryableError(diskFull), isFalse);
       expect(orch.isRetryableError(const InsufficientStorageException()),
@@ -454,7 +454,7 @@ void main() {
 Object _transientError() => DioException(
       requestOptions: RequestOptions(path: '/'),
       type: DioExceptionType.connectionError,
-      error: SocketException('Simulated network failure'),
+      error: const SocketException('Simulated network failure'),
     );
 
 Future<void> _waitUntil(bool Function() cond,

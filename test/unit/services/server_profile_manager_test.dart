@@ -1,5 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/core/services/engines/server_profile_manager.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('ServerProfileManager', () {

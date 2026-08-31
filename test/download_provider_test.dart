@@ -2,20 +2,20 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 import 'package:dio/dio.dart';
-import 'package:drift/drift.dart' as drift;
 import 'package:dmx/core/services/database_service.dart';
 import 'package:dmx/core/services/download_engine.dart';
 import 'package:dmx/core/services/permission_service.dart';
-import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/core/services/youtube_service.dart';
+import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/features/downloads/provider/download_provider.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
+import 'package:drift/drift.dart' as drift;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 
 class MockConnectivityPlatform extends ConnectivityPlatform {
   static List<ConnectivityResult> results = [ConnectivityResult.wifi];
@@ -224,11 +224,16 @@ void main() {
     );
 
     // Wait for the debounced queue pump + async start chain to commit the
-    // first download (a fixed 50ms wait races the cold start path).
+    // first download. The engine.download() call lands *after* the task is
+    // marked downloading, so poll for the full expected state (started URL
+    // + 1 downloading + 1 queued) instead of a fixed wait, which raced the
+    // cold start path.
     final pumpWatch = Stopwatch()..start();
-    while (provider.downloadingTasksCount < 1 &&
-        pumpWatch.elapsed < const Duration(seconds: 5)) {
-      await Future<void>.delayed(const Duration(milliseconds: 25));
+    while ((engine.startedUrls.isEmpty ||
+            provider.downloadingTasksCount < 1 ||
+            provider.queuedTasksCount < 1) &&
+        pumpWatch.elapsed < const Duration(seconds: 30)) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
     }
 
     expect(provider.downloadingTasksCount, 1);

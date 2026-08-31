@@ -1,8 +1,8 @@
 import 'dart:io';
 
+import 'package:dmx/core/services/torrent_resume_store.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:dmx/core/services/torrent_resume_store.dart';
 
 /// Regression tests for the torrent-resume-store fix batch
 /// (B15 degraded round-trip, B22 meta merge, B23 tracked retry timer).

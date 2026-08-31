@@ -1,6 +1,6 @@
+import 'package:dmx/features/downloads/widgets/channel_progress_painter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:dmx/features/downloads/widgets/channel_progress_painter.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

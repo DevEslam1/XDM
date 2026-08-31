@@ -1,12 +1,13 @@
-import 'package:flutter/foundation.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
+import 'package:flutter/foundation.dart';
+
 // DownloadListProvider expects the data-layer [TaskRepository] abstraction,
 // not the provider-layer repository of the same name.
 import '../data/task_repository.dart';
+import 'download_filter_provider.dart';
 import 'download_list_provider.dart';
 import 'download_queue_provider.dart';
 import 'torrent_provider.dart';
-import 'download_filter_provider.dart';
 
 class DownloadCoordinator extends ChangeNotifier {
   factory DownloadCoordinator({
@@ -26,18 +27,15 @@ class DownloadCoordinator extends ChangeNotifier {
   }
 
   DownloadCoordinator._internal({
-    required DownloadListProvider listProvider,
-    required DownloadQueueProvider queueProvider,
-    required TorrentProvider torrentProvider,
-    required DownloadFilterProvider filterProvider,
-  })  : listProvider = listProvider,
-        queueProvider = queueProvider,
-        torrentProvider = torrentProvider,
-        filterProvider = filterProvider {
-    this.listProvider.addListener(notifyListeners);
-    this.queueProvider.addListener(notifyListeners);
-    this.torrentProvider.addListener(notifyListeners);
-    this.filterProvider.addListener(notifyListeners);
+    required this.listProvider,
+    required this.queueProvider,
+    required this.torrentProvider,
+    required this.filterProvider,
+  }) {
+    listProvider.addListener(notifyListeners);
+    queueProvider.addListener(notifyListeners);
+    torrentProvider.addListener(notifyListeners);
+    filterProvider.addListener(notifyListeners);
   }
 
   final DownloadListProvider listProvider;

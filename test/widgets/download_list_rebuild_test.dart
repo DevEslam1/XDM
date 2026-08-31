@@ -1,5 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   testWidgets('DownloadTask == compares by id only, while provider revision changes',

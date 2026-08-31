@@ -1,7 +1,7 @@
 import 'package:dio/dio.dart';
-import 'package:flutter_test/flutter_test.dart';
-import 'package:dmx/core/services/retry_engine.dart';
 import 'package:dmx/core/services/error_taxonomy.dart';
+import 'package:dmx/core/services/retry_engine.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('RetryEngine', () {
@@ -55,7 +55,8 @@ void main() {
       expect(delay2.inMilliseconds, greaterThan(delay0.inMilliseconds));
     });
 
-    test('execute throws RetryCancelledException when cancelToken is cancelled', () async {
+    test('execute throws RetryCancelledException when cancelToken is cancelled',
+        () async {
       final engine = RetryEngine(maxRetries: 3);
       final token = CancelToken();
       token.cancel('user cancelled');

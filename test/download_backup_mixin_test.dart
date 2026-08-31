@@ -22,7 +22,7 @@ void main() {
     });
 
     test('round-trips encrypted backups with the correct password', () {
-      final original = 'hello backup payload';
+      const original = 'hello backup payload';
       final encrypted = provider.encryptBackup(original, 'secret');
 
       expect(encrypted, isNotEmpty);
@@ -46,7 +46,7 @@ void main() {
     });
 
     test('decrypts legacy XDMCRYPT v1 payloads using XOR', () {
-      final payload = 'legacy payload';
+      const payload = 'legacy payload';
       final keyBytes = sha256.convert(utf8.encode('legacy-password')).bytes;
       final cipherBytes = List<int>.generate(
         payload.length,

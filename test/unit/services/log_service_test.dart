@@ -1,5 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/core/services/logging_service.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('LoggingService', () {
@@ -38,7 +38,7 @@ void main() {
     });
 
     test('sanitize does not modify safe messages', () {
-      final message = 'Download completed successfully';
+      const message = 'Download completed successfully';
       expect(LoggingService.sanitize(message), message);
     });
   });

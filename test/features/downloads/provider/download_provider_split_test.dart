@@ -1,9 +1,10 @@
-import 'package:flutter_test/flutter_test.dart';
+import 'package:dmx/features/downloads/data/task_repository.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
+import 'package:dmx/features/downloads/provider/download_coordinator.dart';
+import 'package:dmx/features/downloads/provider/download_filter_provider.dart';
 import 'package:dmx/features/downloads/provider/download_list_provider.dart';
 import 'package:dmx/features/downloads/provider/download_queue_provider.dart';
-import 'package:dmx/features/downloads/provider/download_filter_provider.dart';
-import 'package:dmx/features/downloads/provider/download_coordinator.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -34,15 +35,15 @@ void main() {
   }
 
   group('DownloadListProvider', () {
-    test('Adds and removes task correctly', () {
-      final provider = DownloadListProvider();
+    test('Adds and removes task correctly', () async {
+      final provider = DownloadListProvider(InMemoryTaskRepository());
       final task = createTestTask(
         id: 'task_1',
         fileName: 'file.zip',
         url: 'https://example.com/file.zip',
       );
 
-      provider.addTask(task);
+      await provider.addTask(task);
       expect(provider.count, equals(1));
       expect(provider.getTask('task_1'), equals(task));
 
@@ -65,7 +66,8 @@ void main() {
 
   group('DownloadFilterProvider', () {
     test('Filters tasks by search query', () {
-      final filter = DownloadFilterProvider();
+      final list = DownloadListProvider(InMemoryTaskRepository());
+      final filter = DownloadFilterProvider(list);
       final tasks = [
         createTestTask(id: '1', fileName: 'alpha.mp4', url: 'http://a.com'),
         createTestTask(id: '2', fileName: 'beta.zip', url: 'http://b.com'),
@@ -79,9 +81,9 @@ void main() {
   });
 
   group('DownloadCoordinator', () {
-    test('Coordinating updates exposes filtered tasks', () {
-      final list = DownloadListProvider();
-      final filter = DownloadFilterProvider();
+    test('Coordinating updates exposes filtered tasks', () async {
+      final list = DownloadListProvider(InMemoryTaskRepository());
+      final filter = DownloadFilterProvider(list);
       final coordinator = DownloadCoordinator(
         listProvider: list,
         filterProvider: filter,
@@ -89,7 +91,7 @@ void main() {
 
       final task = createTestTask(id: '1', fileName: 'doc.pdf', url: 'http://a.com');
 
-      list.addTask(task);
+      await list.addTask(task);
       expect(coordinator.filteredTasks.length, equals(1));
 
       filter.setSearchQuery('nonexistent');

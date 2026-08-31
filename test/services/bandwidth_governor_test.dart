@@ -1,9 +1,11 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/core/services/bandwidth_governor.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('BandwidthGovernor', () {
-    test('isUnlimited returns true when global limit is <= 0 or activeConsumers == 0', () {
+    test(
+        'isUnlimited returns true when global limit is <= 0 or activeConsumers == 0',
+        () {
       final governor = BandwidthGovernor(0);
       expect(governor.isUnlimited, isTrue);
 

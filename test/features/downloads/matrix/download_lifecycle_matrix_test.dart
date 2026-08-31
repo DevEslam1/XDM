@@ -10,7 +10,9 @@ import 'package:dmx/core/services/engine/http_transfer_job.dart';
 import 'package:dmx/features/downloads/domain/state_machine/domain_state_machine.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../../../../test/helpers/fake_services.dart';
+import '../../../../test/helpers/fake_download_engine.dart';
+import '../../../../test/helpers/fake_torrent_service.dart';
+import '../../../../test/helpers/scriptable_http_server.dart';
 
 void main() {
   late Directory tempDir;

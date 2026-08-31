@@ -1,13 +1,15 @@
 import 'dart:io';
-import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:dmx/core/domain/torrent_models.dart';
+import 'package:dmx/core/services/download_engine.dart';
+import 'package:dmx/core/services/notification_service.dart';
+import 'package:dmx/features/downloads/data/task_repository.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/features/downloads/provider/download_list_provider.dart';
 import 'package:dmx/features/downloads/provider/download_queue_provider.dart';
 import 'package:dmx/features/downloads/provider/torrent_provider.dart';
-import 'package:dmx/core/services/download_engine.dart';
-import 'package:dmx/core/services/torrent_models.dart';
-import 'package:dmx/core/services/notification_service.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -54,10 +56,10 @@ void main() {
 
   group('Download Lifecycle Integration Tests (21 Tests)', () {
     test('1. Start HTTP download -> progress updates -> completion', () async {
-      final list = DownloadListProvider();
+      final list = DownloadListProvider(InMemoryTaskRepository());
       var task = createMockTask(id: 'task_1', fileName: 'file1.bin');
 
-      list.addTask(task);
+      await list.addTask(task);
       expect(task.status, equals(DownloadStatus.queued));
 
       // Simulate progress update
@@ -65,7 +67,7 @@ void main() {
         status: DownloadStatus.downloading,
         downloadedBytes: 512,
       );
-      list.updateTask(task);
+      await list.updateTask(task);
       expect(list.getTask('task_1')?.progress, equals(0.5));
 
       // Simulate completion
@@ -73,35 +75,38 @@ void main() {
         status: DownloadStatus.completed,
         downloadedBytes: 1024,
       );
-      list.updateTask(task);
+      await list.updateTask(task);
       expect(list.getTask('task_1')?.status, equals(DownloadStatus.completed));
     });
 
     test('2. Pause download -> resume -> completion', () async {
-      final list = DownloadListProvider();
+      final list = DownloadListProvider(InMemoryTaskRepository());
       var task = createMockTask(id: 'task_2', fileName: 'file2.bin');
 
-      list.addTask(task);
+      await list.addTask(task);
       task = task.copyWith(status: DownloadStatus.paused, downloadedBytes: 300);
-      list.updateTask(task);
+      await list.updateTask(task);
       expect(list.getTask('task_2')?.status, equals(DownloadStatus.paused));
 
-      task = task.copyWith(status: DownloadStatus.downloading, downloadedBytes: 600);
-      list.updateTask(task);
-      expect(list.getTask('task_2')?.status, equals(DownloadStatus.downloading));
+      task = task.copyWith(
+          status: DownloadStatus.downloading, downloadedBytes: 600);
+      await list.updateTask(task);
+      expect(
+          list.getTask('task_2')?.status, equals(DownloadStatus.downloading));
 
-      task = task.copyWith(status: DownloadStatus.completed, downloadedBytes: 1024);
-      list.updateTask(task);
+      task = task.copyWith(
+          status: DownloadStatus.completed, downloadedBytes: 1024);
+      await list.updateTask(task);
       expect(list.getTask('task_2')?.status, equals(DownloadStatus.completed));
     });
 
     test('3. Cancel download -> cleanup files', () async {
-      final list = DownloadListProvider();
+      final list = DownloadListProvider(InMemoryTaskRepository());
       final taskFile = File('${tempDir.path}/cancel_file.tmp');
       await taskFile.writeAsString('partial_data');
 
       final task = createMockTask(id: 'task_3', fileName: 'cancel_file.bin');
-      list.addTask(task);
+      await list.addTask(task);
 
       if (await taskFile.exists()) {
         await taskFile.delete();
@@ -113,34 +118,37 @@ void main() {
     });
 
     test('4. Download fails -> retry -> success', () async {
-      final list = DownloadListProvider();
+      final list = DownloadListProvider(InMemoryTaskRepository());
       var task = createMockTask(id: 'task_4', fileName: 'file4.bin');
-      list.addTask(task);
+      await list.addTask(task);
 
       // Failure
-      task = task.copyWith(status: DownloadStatus.failed, errorMessage: 'Timeout');
-      list.updateTask(task);
+      task =
+          task.copyWith(status: DownloadStatus.failed, errorMessage: 'Timeout');
+      await list.updateTask(task);
       expect(list.getTask('task_4')?.status, equals(DownloadStatus.failed));
 
       // Retry -> Success
-      task = task.copyWith(status: DownloadStatus.downloading, errorMessage: null);
-      list.updateTask(task);
-      task = task.copyWith(status: DownloadStatus.completed, downloadedBytes: 1024);
-      list.updateTask(task);
+      task =
+          task.copyWith(status: DownloadStatus.downloading, errorMessage: null);
+      await list.updateTask(task);
+      task = task.copyWith(
+          status: DownloadStatus.completed, downloadedBytes: 1024);
+      await list.updateTask(task);
 
       expect(list.getTask('task_4')?.status, equals(DownloadStatus.completed));
     });
 
     test('5. Download fails permanently -> error state', () async {
-      final list = DownloadListProvider();
+      final list = DownloadListProvider(InMemoryTaskRepository());
       var task = createMockTask(id: 'task_5', fileName: 'file5.bin');
-      list.addTask(task);
+      await list.addTask(task);
 
       task = task.copyWith(
         status: DownloadStatus.failed,
         errorMessage: '404 Not Found',
       );
-      list.updateTask(task);
+      await list.updateTask(task);
 
       expect(list.getTask('task_5')?.status, equals(DownloadStatus.failed));
       expect(list.getTask('task_5')?.errorMessage, contains('404'));
@@ -181,20 +189,24 @@ void main() {
       expect(selectedFiles.first['name'], equals('video.mp4'));
     });
 
-    test('9. Network disconnect -> auto-pause -> reconnect -> auto-resume', () async {
-      final list = DownloadListProvider();
+    test('9. Network disconnect -> auto-pause -> reconnect -> auto-resume',
+        () async {
+      final list = DownloadListProvider(InMemoryTaskRepository());
       var task = createMockTask(id: 'task_9', fileName: 'file9.bin');
-      list.addTask(task);
+      await list.addTask(task);
 
       // Disconnect
-      task = task.copyWith(status: DownloadStatus.paused, statusMessage: 'Network disconnected');
-      list.updateTask(task);
+      task = task.copyWith(
+          status: DownloadStatus.paused, statusMessage: 'Network disconnected');
+      await list.updateTask(task);
       expect(list.getTask('task_9')?.statusMessage, contains('disconnected'));
 
       // Reconnect
-      task = task.copyWith(status: DownloadStatus.downloading, statusMessage: 'Downloading...');
-      list.updateTask(task);
-      expect(list.getTask('task_9')?.status, equals(DownloadStatus.downloading));
+      task = task.copyWith(
+          status: DownloadStatus.downloading, statusMessage: 'Downloading...');
+      await list.updateTask(task);
+      expect(
+          list.getTask('task_9')?.status, equals(DownloadStatus.downloading));
     });
 
     test('10. Disk full -> error -> user notification', () async {
@@ -205,7 +217,8 @@ void main() {
     });
 
     test('11. URL expired -> refresh URL -> resume', () async {
-      final ex = const UrlExpiredException('URL expired', refreshAllMirrors: true);
+      const ex =
+          UrlExpiredException('URL expired', refreshAllMirrors: true);
       expect(ex.refreshAllMirrors, isTrue);
     });
 
@@ -230,12 +243,14 @@ void main() {
       queue.addToQueue('t2');
       queue.addToQueue('t3');
 
-      final activeSlots = queue.queueTaskIds.take(queue.maxConcurrentDownloads).toList();
+      final activeSlots =
+          queue.queueTaskIds.take(queue.maxConcurrentDownloads).toList();
       expect(activeSlots, equals(['t1', 't2']));
     });
 
     test('15. Category assignment', () async {
-      final task = createMockTask(id: 't15', fileName: 'song.mp3', category: 'Audio');
+      final task =
+          createMockTask(id: 't15', fileName: 'song.mp3', category: 'Audio');
       expect(task.category, equals('Audio'));
     });
 
@@ -266,16 +281,16 @@ void main() {
     });
 
     test('20. Delete download without files', () async {
-      final list = DownloadListProvider();
+      final list = DownloadListProvider(InMemoryTaskRepository());
       final task = createMockTask(id: 't20', fileName: 'del20.bin');
-      list.addTask(task);
+      await list.addTask(task);
 
       list.removeTask('t20');
       expect(list.getTask('t20'), isNull);
     });
 
     test('21. Backup/restore download list', () async {
-      final list = DownloadListProvider();
+      final list = DownloadListProvider(InMemoryTaskRepository());
       final t1 = createMockTask(id: 'b1', fileName: 'backup1.zip');
       final t2 = createMockTask(id: 'b2', fileName: 'backup2.zip');
       list.setTasks([t1, t2]);
@@ -283,9 +298,9 @@ void main() {
       final backupJson = list.tasks.map((t) => t.toMap()).toList();
       expect(backupJson.length, equals(2));
 
-      final restoredList = DownloadListProvider();
-      restoredList.setTasks(
-          backupJson.map((m) => DownloadTask.fromMap(m)).toList());
+      final restoredList = DownloadListProvider(InMemoryTaskRepository());
+      restoredList
+          .setTasks(backupJson.map((m) => DownloadTask.fromMap(m)).toList());
       expect(restoredList.count, equals(2));
       expect(restoredList.getTask('b1')?.fileName, equals('backup1.zip'));
     });

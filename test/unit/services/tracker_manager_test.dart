@@ -1,6 +1,6 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:dmx/core/services/tracker_manager.dart';
 import 'package:dmx/core/services/torrent_models.dart';
+import 'package:dmx/core/services/tracker_manager.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('TrackerManager', () {
