@@ -618,6 +618,15 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
     if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
     final tab = _tabs[_currentTabIndex];
     if (tab.isHome) return;
+
+    tab.onFindResultReceived = (activeOrdinal, numberOfMatches, isDoneCounting) {
+      if (!mounted) return;
+      setState(() {
+        _findMatchCount = numberOfMatches;
+        _findActiveMatch = numberOfMatches > 0 ? (activeOrdinal + 1) : 0;
+      });
+    };
+
     final controller = tab.findInteractionController;
     if (controller == null) return;
 
@@ -641,6 +650,7 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
     if (!mounted) return;
     if (_currentTabIndex >= 0 && _currentTabIndex < _tabs.length) {
       final tab = _tabs[_currentTabIndex];
+      tab.onFindResultReceived = null;
       try {
         tab.findInteractionController?.clearMatches();
       } catch (_) {}
@@ -657,7 +667,7 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
     if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
     final controller = _tabs[_currentTabIndex].findInteractionController;
     if (controller == null) return;
-    if (_findMatchCount <= 0) return;
+    if (_findMatchCount <= 0 && _findTextController.text.trim().isEmpty) return;
     try {
       controller.findNext(forward: forward);
     } catch (_) {}
@@ -666,6 +676,13 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
   @override
   void _updateFindQuery(BrowserTab tab, String query) {
     tab.findQuery = query;
+    tab.onFindResultReceived = (activeOrdinal, numberOfMatches, isDoneCounting) {
+      if (!mounted) return;
+      setState(() {
+        _findMatchCount = numberOfMatches;
+        _findActiveMatch = numberOfMatches > 0 ? (activeOrdinal + 1) : 0;
+      });
+    };
     final controller = tab.findInteractionController;
     if (query.isEmpty) {
       try {
@@ -1091,40 +1108,64 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
     }
   }
 
-  /// UX 3.20: Keyboard shortcuts (desktop only): Ctrl+T/W/L/R/F.
+  /// UX 3.20: Keyboard shortcuts (desktop only): Ctrl+T/W/L/R/F/D/H, Alt+Left/Right.
   @override
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (!_shortcutsActive || event is! KeyDownEvent) {
       return KeyEventResult.ignored;
     }
     final hw = HardwareKeyboard.instance;
-    final modifierPressed = hw.isControlPressed || hw.isMetaPressed;
-    if (!modifierPressed) return KeyEventResult.ignored;
+    final isCtrl = hw.isControlPressed || hw.isMetaPressed;
+    final isAlt = hw.isAltPressed;
+
+    if (!isCtrl && !isAlt) return KeyEventResult.ignored;
 
     final logical = event.logicalKey;
-    if (logical == LogicalKeyboardKey.keyT) {
-      _newTabViaShortcut();
-      return KeyEventResult.handled;
-    }
-    if (logical == LogicalKeyboardKey.keyW) {
-      _closeActiveTabViaShortcut();
-      return KeyEventResult.handled;
-    }
-    if (logical == LogicalKeyboardKey.keyL) {
-      _focusUrlBar();
-      return KeyEventResult.handled;
-    }
-    if (logical == LogicalKeyboardKey.keyR) {
-      if (_currentTabIndex >= 0 && _currentTabIndex < _tabs.length) {
-        final tab = _tabs[_currentTabIndex];
-        if (!tab.isHome) _safeReloadTab(tab);
+    if (isCtrl) {
+      if (logical == LogicalKeyboardKey.keyT) {
+        _newTabViaShortcut();
+        return KeyEventResult.handled;
       }
-      return KeyEventResult.handled;
+      if (logical == LogicalKeyboardKey.keyW) {
+        _closeActiveTabViaShortcut();
+        return KeyEventResult.handled;
+      }
+      if (logical == LogicalKeyboardKey.keyL) {
+        _focusUrlBar();
+        return KeyEventResult.handled;
+      }
+      if (logical == LogicalKeyboardKey.keyR) {
+        if (_currentTabIndex >= 0 && _currentTabIndex < _tabs.length) {
+          final tab = _tabs[_currentTabIndex];
+          if (!tab.isHome) _safeReloadTab(tab);
+        }
+        return KeyEventResult.handled;
+      }
+      if (logical == LogicalKeyboardKey.keyF) {
+        _openFindPanel();
+        return KeyEventResult.handled;
+      }
+      if (logical == LogicalKeyboardKey.keyD) {
+        _openBookmarks();
+        return KeyEventResult.handled;
+      }
+      if (logical == LogicalKeyboardKey.keyH) {
+        _openHistory();
+        return KeyEventResult.handled;
+      }
     }
-    if (logical == LogicalKeyboardKey.keyF) {
-      _openFindPanel();
-      return KeyEventResult.handled;
+
+    if (isAlt) {
+      if (logical == LogicalKeyboardKey.arrowLeft) {
+        _tabManager.activeTab?.controller?.goBack();
+        return KeyEventResult.handled;
+      }
+      if (logical == LogicalKeyboardKey.arrowRight) {
+        _tabManager.activeTab?.controller?.goForward();
+        return KeyEventResult.handled;
+      }
     }
+
     return KeyEventResult.ignored;
   }
 

@@ -24,23 +24,14 @@ mixin _TabsMixin on _BrowserScreenStateBase {
 
   @override
   void _ensureTabsExist() {
-    if ((_tabs.isEmpty ||
-            (_tabs.length == 1 &&
-                _tabs.first.url.isEmpty &&
-                !_tabs.first.isIncognito)) &&
-        !_isRestoring) {
+    if (!_hasRestoredTabsOnStartup && !_isRestoring) {
+      _hasRestoredTabsOnStartup = true;
       _restoreTabs();
+      return;
     }
-  }
-
-  @override
-  void _debouncedSiteSettingsReload(BrowserTab tab) {
-    _siteSettingsReloadTimer?.cancel();
-    _siteSettingsReloadTimer = Timer(const Duration(milliseconds: 300), () {
-      if (mounted) {
-        tab.controller?.reload();
-      }
-    });
+    if (_tabs.isEmpty) {
+      _openInNewTab('about:blank', switchToTab: true);
+    }
   }
 
   @override
@@ -694,6 +685,8 @@ mixin _TabsMixin on _BrowserScreenStateBase {
             _cleanupTabState(t.id);
           }
           _tabManager.clearAllTabs();
+          _openInNewTab('about:blank', switchToTab: true);
+          _currentTabIndex = 0;
           _urlController.text = '';
         });
         _saveTabs();

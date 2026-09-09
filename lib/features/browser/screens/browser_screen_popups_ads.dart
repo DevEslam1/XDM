@@ -21,33 +21,6 @@ mixin _PopupsAdsMixin on _BrowserScreenStateBase {
     }
   }
 
-  /// ValueNotifier for the currently-active tab's blocked-ad count.
-  @override
-  ValueNotifier<int> get _activeBlockedAdsNotifier {
-    if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) {
-      if (_zeroNotifierTabId != null) {
-        _zeroNotifierTabId = null;
-        _zeroNotifier.value = 0;
-      }
-      return _zeroNotifier;
-    }
-    final tabId = _tabs[_currentTabIndex].id;
-    final count = _blockedAdsPerTab[tabId] ?? 0;
-    final existing = _blockedAdsNotifiers[tabId];
-    if (existing != null) {
-      // Sync the cached notifier with the latest count to prevent stale badge.
-      if (existing.value != count) {
-        existing.value = count;
-      }
-      return existing;
-    }
-    if (_zeroNotifierTabId != tabId) {
-      _zeroNotifierTabId = tabId;
-      _zeroNotifier.value = count;
-    }
-    return _zeroNotifier;
-  }
-
   /// Blocked popups for the currently-active tab.
   // ignore: unused_element — tracked for future snackbar/badge display.
   int get _blockedPopupCount {

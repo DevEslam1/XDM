@@ -749,6 +749,18 @@ mixin _MediaDownloadsMixin on _BrowserScreenStateBase {
   Future<void> _savePageOffline(BrowserTab tab) async {
     if (tab.isHome) return;
     final settings = _settings;
+    if (tab.isIncognito) {
+      if (mounted) {
+        ThemedSnackbar.show(
+          context,
+          message: 'Cannot save offline pages in incognito mode',
+          color: settings.isDarkMode ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+          icon: Icons.shield_outlined,
+          isDarkMode: settings.isDarkMode,
+        );
+      }
+      return;
+    }
     triggerHaptic(settings);
     try {
       final offlineTitle =

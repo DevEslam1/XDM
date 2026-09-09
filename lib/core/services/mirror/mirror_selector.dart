@@ -12,7 +12,17 @@ import 'mirror_registry.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Mirror Manager & Mirror Stats
-// ═══════════════════════════════════════════════════════════════════════════
+/// Thrown when all racing mirrors fail.
+class MirrorRaceException implements Exception {
+  final String message;
+  final List<Object> errors;
+
+  const MirrorRaceException(this.message, [this.errors = const []]);
+
+  @override
+  String toString() =>
+      'MirrorRaceException: $message${errors.isNotEmpty ? ' (${errors.length} errors: ${errors.join(', ')})' : ''}';
+}
 
 class MirrorManager {
   static final _log = Logger('MirrorManager');
@@ -152,37 +162,121 @@ class MirrorParallelEngine implements DisposableService {
 
   static Future<T> raceMirrors<T>(
     List<String> urls,
-    Future<T> Function(String url, CancelToken cancelToken) fetch,
-  ) async {
+    Future<T> Function(String url, CancelToken cancelToken) fetch, {
+    Duration? timeout,
+    CancelToken? parentCancelToken,
+  }) async {
     if (urls.isEmpty) {
       throw ArgumentError('No mirror URLs provided for race');
     }
+
     if (urls.length == 1) {
       final token = CancelToken();
-      return fetch(urls.first, token);
+      void onParentCancel() {
+        if (!token.isCancelled) token.cancel('parent_cancelled');
+      }
+
+      parentCancelToken?.whenCancel.then((_) => onParentCancel());
+
+      try {
+        Future<T> future;
+        try {
+          future = fetch(urls.first, token);
+        } catch (err, st) {
+          future = Future<T>.error(err, st);
+        }
+
+        if (timeout != null) {
+          future = future.timeout(
+            timeout,
+            onTimeout: () {
+              if (!token.isCancelled) token.cancel('mirror_race_timeout');
+              throw TimeoutException('Mirror request timed out after $timeout');
+            },
+          );
+        }
+        return await future;
+      } finally {
+        // ensure no leaked listener
+      }
     }
 
     final completer = Completer<T>();
     final tokens = <CancelToken>[];
+    final errors = <Object>[];
     int failures = 0;
+    Timer? timeoutTimer;
+
+    void cancelAllTokens(String reason, {CancelToken? except}) {
+      for (final t in tokens) {
+        if (t != except && !t.isCancelled) {
+          try {
+            t.cancel(reason);
+          } catch (_) {}
+        }
+      }
+    }
+
+    if (parentCancelToken != null) {
+      if (parentCancelToken.isCancelled) {
+        throw parentCancelToken.cancelError ??
+            DioException(
+              requestOptions: RequestOptions(path: urls.first),
+              type: DioExceptionType.cancel,
+              message: 'Mirror race cancelled',
+            );
+      }
+      parentCancelToken.whenCancel.then((_) {
+        if (!completer.isCompleted) {
+          cancelAllTokens('parent_cancelled');
+          completer.completeError(
+            parentCancelToken.cancelError ??
+                DioException(
+                  requestOptions: RequestOptions(path: urls.first),
+                  type: DioExceptionType.cancel,
+                  message: 'Mirror race cancelled',
+                ),
+          );
+        }
+      });
+    }
+
+    if (timeout != null) {
+      timeoutTimer = Timer(timeout, () {
+        if (!completer.isCompleted) {
+          cancelAllTokens('mirror_race_timeout');
+          completer.completeError(
+            TimeoutException('Mirror race timed out after $timeout'),
+          );
+        }
+      });
+    }
 
     for (final url in urls) {
       final token = CancelToken();
       tokens.add(token);
-      fetch(url, token).then((result) {
+
+      Future<T> fetchFuture;
+      try {
+        fetchFuture = fetch(url, token);
+      } catch (err, st) {
+        fetchFuture = Future<T>.error(err, st);
+      }
+
+      fetchFuture.then((result) {
         if (!completer.isCompleted) {
+          timeoutTimer?.cancel();
+          cancelAllTokens('mirror_race_winner_found', except: token);
           completer.complete(result);
-          for (final t in tokens) {
-            if (t != token && !t.isCancelled) {
-              t.cancel('mirror_race_winner_found');
-            }
-          }
         }
       }).catchError((dynamic err) {
         failures++;
+        if (err != null) errors.add(err);
         if (failures >= urls.length && !completer.isCompleted) {
+          timeoutTimer?.cancel();
+          cancelAllTokens('all_mirrors_failed');
           completer.completeError(
-            err ?? Exception('All mirrors failed during race'),
+            MirrorRaceException('All mirrors failed during race', errors),
           );
         }
       });
@@ -538,4 +632,17 @@ class MirrorSelector {
     failover = MirrorFailover(mirrorUrls);
     parallelEngine = MirrorParallelEngine(mirrorUrls, failover: failover);
   }
+
+  static Future<T> raceMirrors<T>(
+    List<String> urls,
+    Future<T> Function(String url, CancelToken cancelToken) fetch, {
+    Duration? timeout,
+    CancelToken? parentCancelToken,
+  }) =>
+      MirrorParallelEngine.raceMirrors<T>(
+        urls,
+        fetch,
+        timeout: timeout,
+        parentCancelToken: parentCancelToken,
+      );
 }

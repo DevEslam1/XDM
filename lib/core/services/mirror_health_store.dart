@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:synchronized/synchronized.dart';
 
 /// Persists mirror health data across app restarts.
 ///
@@ -13,84 +14,92 @@ class MirrorHealthStore {
   static final _log = Logger('MirrorHealthStore');
   static const _storeKey = 'mirror_health_data';
   static const _blacklistTtl = Duration(hours: 6);
+  static final Lock _lock = Lock();
   static Map<String, _PersistedMirrorState>? _cache;
 
   /// Loads persisted health data from [SharedPreferences].
   /// Safe to call repeatedly; already-loaded data is refreshed from disk.
   static Future<void> init() async {
-    await flushPending();
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_storeKey);
-    if (raw == null) {
-      _cache = {};
-      return;
-    }
-    try {
-      final map = jsonDecode(raw) as Map<String, dynamic>;
-      _cache = map.map(
-        (k, v) => MapEntry(k, _PersistedMirrorState.fromJson(v)),
-      );
-      final countBefore = _cache!.length;
-      _cache!.removeWhere((_, state) => state.isExpired);
-      if (_cache!.length != countBefore) {
-        await _persist();
+    await _lock.synchronized(() async {
+      await flushPending();
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_storeKey);
+      if (raw == null) {
+        _cache = {};
+        return;
       }
-    } catch (e) {
-      _log.warning('Failed to decode mirror health data: $e');
-      _cache = {};
-    }
+      try {
+        final map = jsonDecode(raw) as Map<String, dynamic>;
+        _cache = map.map(
+          (k, v) => MapEntry(k, _PersistedMirrorState.fromJson(v)),
+        );
+        final countBefore = _cache!.length;
+        _cache!.removeWhere((_, state) => state.isExpired);
+        if (_cache!.length != countBefore) {
+          await _persist();
+        }
+      } catch (e) {
+        _log.warning('Failed to decode mirror health data: $e');
+        _cache = {};
+      }
+    });
   }
 
   /// Record a failure for a mirror URL.
   static Future<void> recordFailure(String url, {int statusCode = 0}) async {
-    _cache ??= {};
-    final state = _cache!.putIfAbsent(url, () => _PersistedMirrorState());
-    state.failures++;
-    state.lastFailure = DateTime.now().millisecondsSinceEpoch;
-    state.lastStatusCode = statusCode;
+    await _lock.synchronized(() async {
+      _cache ??= {};
+      final state = _cache!.putIfAbsent(url, () => _PersistedMirrorState());
+      state.failures++;
+      state.lastFailure = DateTime.now().millisecondsSinceEpoch;
+      state.lastStatusCode = statusCode;
 
-    // Blacklist if > 5 failures in the current session/window.
-    if (state.failures >= 5) {
-      state.blacklistedUntil =
-          DateTime.now().add(_blacklistTtl).millisecondsSinceEpoch;
-      _log.warning(
-        '[MirrorHealth] Blacklisted $url for ${_blacklistTtl.inHours}h',
-      );
-    }
-    await _persist();
+      // Blacklist if > 5 failures in the current session/window.
+      if (state.failures >= 5) {
+        state.blacklistedUntil =
+            DateTime.now().add(_blacklistTtl).millisecondsSinceEpoch;
+        _log.warning(
+          '[MirrorHealth] Blacklisted $url for ${_blacklistTtl.inHours}h',
+        );
+      }
+      await _persist();
+    });
   }
 
   /// Record a success — resets the failure count and clears blacklist.
   static Future<void> recordSuccess(String url, {double speedBps = 0.0}) async {
-    _cache ??= {};
-    final state = _cache!.putIfAbsent(url, () => _PersistedMirrorState());
-    state.failures = 0;
-    state.lastSuccess = DateTime.now().millisecondsSinceEpoch;
-    state.averageSpeedBps = speedBps;
-    state.blacklistedUntil = 0;
-    await _persist();
+    await _lock.synchronized(() async {
+      _cache ??= {};
+      final state = _cache!.putIfAbsent(url, () => _PersistedMirrorState());
+      state.failures = 0;
+      state.lastSuccess = DateTime.now().millisecondsSinceEpoch;
+      state.averageSpeedBps = speedBps;
+      state.blacklistedUntil = 0;
+      await _persist();
+    });
   }
 
   /// Record speed for a mirror URL using a rolling average of the last 10 samples.
   static Future<void> recordSpeed(String url, double bytesPerSec) async {
-    _cache ??= {};
-    final state = _cache!.putIfAbsent(url, () => _PersistedMirrorState());
-    state.speedSamples.add(bytesPerSec);
-    if (state.speedSamples.length > 10) {
-      state.speedSamples.removeAt(0);
-    }
-    state.averageSpeedBps =
-        state.speedSamples.reduce((a, b) => a + b) / state.speedSamples.length;
-    await _persist();
+    await _lock.synchronized(() async {
+      _cache ??= {};
+      final state = _cache!.putIfAbsent(url, () => _PersistedMirrorState());
+      state.speedSamples.add(bytesPerSec);
+      if (state.speedSamples.length > 10) {
+        state.speedSamples.removeAt(0);
+      }
+      state.averageSpeedBps = state.speedSamples.reduce((a, b) => a + b) /
+          state.speedSamples.length;
+      await _persist();
+    });
   }
 
   /// Get active mirror URLs ranked by average speed descending, excluding blacklisted mirrors.
   static List<String> getMirrorRanking() {
     if (_cache == null) return [];
-    final valid = _cache!.entries
-        .where((e) => !isBlacklisted(e.key))
-        .toList();
-    valid.sort((a, b) => b.value.averageSpeedBps.compareTo(a.value.averageSpeedBps));
+    final valid = _cache!.entries.where((e) => !isBlacklisted(e.key)).toList();
+    valid.sort(
+        (a, b) => b.value.averageSpeedBps.compareTo(a.value.averageSpeedBps));
     return valid.map((e) => e.key).toList();
   }
 
@@ -181,11 +190,13 @@ class MirrorHealthStore {
 
   /// Clear all persisted mirror health data.
   static Future<void> clear() async {
-    _cache = {};
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_storeKey);
-    await prefs.remove(_rankingCacheKey);
-    await prefs.remove(_rankingTtlKey);
+    await _lock.synchronized(() async {
+      _cache = {};
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_storeKey);
+      await prefs.remove(_rankingCacheKey);
+      await prefs.remove(_rankingTtlKey);
+    });
   }
 }
 

@@ -143,7 +143,17 @@ class TorrentSessionManager {
       newId = _torrentService.addMagnet(task.url, saveDir,
           resumeData: resumeBytes);
     } else {
-      newId = _torrentService.addTorrentFile(task.url, saveDir,
+      String torrentPath = task.url;
+      if (torrentPath.startsWith('file://')) {
+        torrentPath = Uri.parse(torrentPath).toFilePath();
+      } else if (torrentPath.startsWith('http://') ||
+          torrentPath.startsWith('https://')) {
+        final cached = await TorrentResumeStore.getTorrentFile(task.url);
+        if (cached != null && await cached.exists()) {
+          torrentPath = cached.path;
+        }
+      }
+      newId = _torrentService.addTorrentFile(torrentPath, saveDir,
           sourceKey: task.url, resumeData: resumeBytes);
     }
 

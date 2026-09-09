@@ -460,41 +460,34 @@ class HttpTransferJob {
     // destroy progress. The indeterminate chunk is carried verbatim instead.
     final hasIndeterminateProgress =
         _state!.chunks.any((c) => c.isIndeterminate);
+    // FIX(CORRUPT-RESUME): If progress has already been downloaded (> 0 bytes),
+    // NEVER re-partition chunks into a new grid. In multithreaded downloads,
+    // progress across chunks is non-contiguous. Summing overlaps into a single
+    // linear chunk prefix skips un-downloaded byte ranges, creating permanent
+    // zero-byte holes on disk.
+    // Instead, retain existing chunk boundaries (which map 1:1 to physical disk
+    // segments); the worker pool naturally processes pending chunks.
+    // If downloadedBytes == 0, re-planning to the new thread count is safe.
     if (_state!.chunks.isNotEmpty &&
         _state!.chunks.length != cmd.threadCount &&
         _state!.totalSize > 0 &&
-        !hasIndeterminateProgress &&
-        _state!.downloadedBytes > 0) {
-      final savedBytes = _state!.downloadedBytes;
-      final total = _state!.totalSize;
-      final oldChunks = List<ChunkState>.from(_state!.chunks);
-      final newChunks = ChunkScheduler.plan(
-        totalSize: total,
-        threadCount: cmd.threadCount,
-      );
-      for (var ni = 0; ni < newChunks.length; ni++) {
-        final nc = newChunks[ni];
-        int overlap = 0;
-        for (final oc in oldChunks) {
-          if (oc.isIndeterminate || (oc.end < 0 && !oc.isComplete)) continue;
-          final oStart = oc.start;
-          final oEnd = oc.isComplete
-              ? (oc.end >= 0 ? oc.end + 1 : oc.start + oc.downloaded)
-              : oc.start + oc.downloaded;
-          final nStart = nc.start;
-          final nEnd = nc.end >= 0 ? nc.end + 1 : nc.start + nc.size;
-          if (nEnd < 0) continue;
-          final lo = max(oStart, nStart);
-          final hi = min(oEnd, nEnd);
-          if (hi > lo) overlap += (hi - lo);
-        }
-        nc.downloaded = overlap.clamp(0, nc.size >= 0 ? nc.size : overlap);
+        !hasIndeterminateProgress) {
+      if (_state!.downloadedBytes == 0) {
+        _state!.chunks = ChunkScheduler.plan(
+          totalSize: _state!.totalSize,
+          threadCount: cmd.threadCount,
+        );
+        _state!.threadCount = cmd.threadCount;
+        debugPrint(
+          '[Resume] Re-planned 0-progress chunks: '
+          '${load.state.chunks.length} → ${cmd.threadCount}',
+        );
+      } else {
+        debugPrint(
+          '[Resume] Preserving ${_state!.chunks.length} physical chunks '
+          '(${_state!.downloadedBytes} bytes downloaded) for concurrency ${cmd.threadCount}',
+        );
       }
-      _state!.chunks = newChunks;
-      debugPrint(
-        '[FIX-2] Redistributed $savedBytes bytes from '
-        '${load.state.chunks.length} → ${cmd.threadCount} chunks with range-overlap mapping',
-      );
     }
 
     _state!.status = DmxStateStatus.active;
@@ -1128,14 +1121,17 @@ class HttpTransferJob {
               final split = ChunkScheduler.trySplitChunk(parent);
               if (split != null) {
                 final (first, second) = split;
-                parent.end = first.end;
-                st.chunks.add(second);
-                st.threadCount = st.chunks.length;
-                chunkIndex = st.chunks.length - 1;
-                debugPrint(
-                  '[AdaptiveScheduler] Split hottest chunk $bestHottest -> '
-                  'new chunk $chunkIndex (range ${second.start}-${second.end})',
-                );
+                // Guard: verify second chunk starts strictly ahead of parent's current progress
+                if (second.start > parent.start + parent.downloaded) {
+                  parent.end = first.end;
+                  st.chunks.add(second);
+                  st.threadCount = st.chunks.length;
+                  chunkIndex = st.chunks.length - 1;
+                  debugPrint(
+                    '[AdaptiveScheduler] Split hottest chunk $bestHottest -> '
+                    'new chunk $chunkIndex (range ${second.start}-${second.end})',
+                  );
+                }
               }
             }
           }
@@ -2351,10 +2347,28 @@ class HttpTransferJob {
       }
       final finalFile = File(cmd.localFilePath);
       await finalFile.parent.create(recursive: true);
-      if (await finalFile.exists()) await finalFile.delete();
-      try {
-        await File(cmd.tempFilePath).rename(cmd.localFilePath);
-      } catch (e) {
+
+      // Windows sharing violation resilience: retry delete/rename with backoff
+      var moveSuccess = false;
+      Object? lastMoveError;
+      for (var attempt = 0; attempt < 5; attempt++) {
+        try {
+          if (await finalFile.exists()) {
+            await finalFile.delete();
+          }
+          await File(cmd.tempFilePath).rename(cmd.localFilePath);
+          moveSuccess = true;
+          break;
+        } catch (err) {
+          lastMoveError = err;
+          if (attempt < 4) {
+            await Future.delayed(Duration(milliseconds: 100 * (attempt + 1)));
+          }
+        }
+      }
+
+      if (!moveSuccess) {
+        // Fallback to stream copy if rename/delete failed
         final srcFile = File(cmd.tempFilePath);
         final dstFile = File(cmd.localFilePath);
         try {
@@ -2365,9 +2379,15 @@ class HttpTransferJob {
           final srcLen = await srcFile.length();
           final dstLen = await dstFile.length();
           if (srcLen == dstLen) {
-            await srcFile.delete();
+            try {
+              await srcFile.delete();
+            } catch (_) {}
           } else {
-            if (await dstFile.exists()) await dstFile.delete();
+            if (await dstFile.exists()) {
+              try {
+                await dstFile.delete();
+              } catch (_) {}
+            }
             throw DownloadIntegrityException(
                 'File copy length mismatch ($srcLen != $dstLen) on rename fallback.');
           }
@@ -2377,7 +2397,8 @@ class HttpTransferJob {
               await dstFile.delete();
             } catch (_) {}
           }
-          rethrow;
+          throw DownloadIntegrityException(
+              'Finalize failed to move temp file ($lastMoveError) and copy fallback failed: $copyErr');
         }
       }
     } else {

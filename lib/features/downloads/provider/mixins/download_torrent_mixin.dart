@@ -6,6 +6,7 @@ import 'package:logging/logging.dart';
 import '../../../../core/services/database_service.dart';
 import '../../../../core/services/logging_service.dart';
 import '../../../../core/services/retry_engine.dart';
+import '../../../../core/services/torrent_resume_store.dart';
 import '../../../../core/services/torrent_service.dart';
 import '../../../../core/utils/file_utils.dart';
 import '../../../../core/utils/torrent_id_resolver.dart';
@@ -42,6 +43,7 @@ mixin DownloadTorrentMixin {
   Map<int, TorrentUpdateInfo> get providerLatestTorrentStats;
   SettingsProvider get providerSettingsProvider;
   DownloadTask? findTaskById(String id);
+  void updateProgressTask(DownloadTask updated);
   DatabaseService get providerDatabaseService;
   void providerNotifyListeners();
   void providerStartWidgetTimer();
@@ -93,6 +95,15 @@ mixin DownloadTorrentMixin {
     }
     try {
       final saveDir = task.savePath;
+      List<int>? resumeBytes;
+      try {
+        final stored =
+            await TorrentResumeStore.loadResumeDataForSource(task.url);
+        if (stored != null && stored.isNotEmpty) {
+          resumeBytes = stored.toList();
+        }
+      } catch (_) {}
+
       // ERR-RESILIENCE-2.1/5.1: Centralized retry for the native add
       // operation. A rejected handle (torrentId < 0) or a transient native
       // error is retried once after a short backoff before the task is failed.
@@ -104,18 +115,26 @@ mixin DownloadTorrentMixin {
       ).execute(
         () async {
           if (task.url.startsWith('magnet:')) {
-            final id = TorrentService.addMagnet(task.url, saveDir);
+            final id = TorrentService.addMagnet(task.url, saveDir,
+                resumeData: resumeBytes);
             if (id < 0) throw const TorrentAddRejectedException();
             return id;
           }
           String filePath = task.url;
           if (task.url.startsWith('file://')) {
             filePath = Uri.parse(task.url).toFilePath();
+          } else if (filePath.startsWith('http://') ||
+              filePath.startsWith('https://')) {
+            final cached = await TorrentResumeStore.getTorrentFile(task.url);
+            if (cached != null && await cached.exists()) {
+              filePath = cached.path;
+            }
           }
           final id = TorrentService.addTorrentFile(
             filePath,
             saveDir,
             sourceKey: task.url,
+            resumeData: resumeBytes,
           );
           if (id < 0) throw const TorrentAddRejectedException();
           return id;
@@ -375,7 +394,7 @@ mixin DownloadTorrentMixin {
       for (final taskId in List<String>.from(providerTorrentIds.keys)) {
         final task = findTaskById(taskId);
         if (task != null && task.seedingEnabled && task.seedingLimited) {
-          final taskLimitBytes = (task.seedingLimitKbps * 1000) ~/ 8;
+          final taskLimitBytes = task.seedingLimitKbps * 1024;
           if (taskLimitBytes > 0) {
             totalTaskLimitsBytes += taskLimitBytes;
             hasSpecificTaskLimit = true;
@@ -385,7 +404,7 @@ mixin DownloadTorrentMixin {
 
       final globalLimitBytes = providerSettingsProvider
               .globalTorrentSeedingLimited
-          ? (providerSettingsProvider.globalTorrentSeedingLimitKbps * 1000) ~/ 8
+          ? providerSettingsProvider.globalTorrentSeedingLimitKbps * 1024
           : 0;
 
       // FIX: [Audit] Sum per-task limits rather than taking minimum to avoid throttling all torrents
@@ -426,6 +445,7 @@ mixin DownloadTorrentMixin {
           }
         }
         providerTasks[i] = task.copyWith(speed: speed);
+        updateProgressTask(providerTasks[i]);
         changed = true;
 
         final lastCheck = _lastSeedingCheck[task.id];
@@ -453,6 +473,7 @@ mixin DownloadTorrentMixin {
         }
       } else if (task.speed > 0 && task.status == DownloadStatus.completed) {
         providerTasks[i] = task.copyWith(speed: 0);
+        updateProgressTask(providerTasks[i]);
         changed = true;
       }
     }

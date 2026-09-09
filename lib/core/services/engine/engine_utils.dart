@@ -202,6 +202,8 @@ Dio buildTransferDio({
     adapter.validateCertificate = null;
     adapter.createHttpClient = () {
       final httpClient = HttpClient();
+      httpClient.maxConnectionsPerHost = 64;
+      httpClient.idleTimeout = const Duration(seconds: 30);
       httpClient.badCertificateCallback = DebugCertOverride.getCallback(url);
       if (useHttpProxy) {
         // dart:io HttpClient supports HTTP CONNECT proxies only; SOCKS5 is

@@ -145,6 +145,7 @@ class _BrowserTabViewState extends State<BrowserTabView>
         }
         return InAppWebView(
           key: ValueKey('webview_${tab.id}'),
+          findInteractionController: tab.findInteractionController,
           initialUrlRequest:
               tab.url.isNotEmpty && tab.url != BrowserTab.canonicalBlankUrl
                   ? URLRequest(url: WebUri(tab.url))
@@ -161,6 +162,7 @@ class _BrowserTabViewState extends State<BrowserTabView>
             builtInZoomControls: true,
             displayZoomControls: false,
             isInspectable: kDebugMode,
+            isFindInteractionEnabled: true,
             forceDark: settings.forceDarkMode ? ForceDark.ON : ForceDark.OFF,
             algorithmicDarkeningAllowed: settings.forceDarkMode,
             forceDarkStrategy:

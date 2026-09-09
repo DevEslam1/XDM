@@ -22,6 +22,22 @@ List<String> orderMirrorUrls(List<String> urls, {String? primary}) {
   return list;
 }
 
+class AllMirrorsUnavailableException implements Exception {
+  final String message;
+  final Duration retryAfter;
+  final List<String> mirrors;
+
+  const AllMirrorsUnavailableException({
+    this.message = 'All mirrors unavailable (circuits open)',
+    this.retryAfter = const Duration(minutes: 5),
+    this.mirrors = const [],
+  });
+
+  @override
+  String toString() =>
+      'AllMirrorsUnavailableException: $message (retryAfter: $retryAfter)';
+}
+
 class MirrorFailover {
   MirrorFailover(List<String> urls)
       : _urls = List<String>.unmodifiable(
@@ -44,6 +60,9 @@ class MirrorFailover {
   int get remainingAlternatives => _urls.length - 1 - _index;
   int get mirrorSwitches => _switches;
   ProtocolSupport? get protocolHint => _protocolHint;
+
+  @visibleForTesting
+  CircuitBreaker? getCircuitForTesting(String url) => _circuits[url];
 
   int _compareCandidates(String urlA, String urlB) {
     final speedA = MirrorHealthStore.getPersistedSpeed(urlA);
@@ -97,9 +116,22 @@ class MirrorFailover {
 
     if (available.isEmpty) {
       debugPrint(
-        '[MirrorFailover] Warning: All mirror circuits open! Falling back to round-robin.',
+        '[MirrorFailover] Warning: All mirror circuits open! Selecting least-bad mirror for controlled probe.',
       );
-      available = candidates;
+      final alternativeCandidates =
+          candidates.where((u) => u != activeUrl).toList();
+      final pool =
+          alternativeCandidates.isNotEmpty ? alternativeCandidates : candidates;
+      String leastBad = pool.first;
+      int minFailures = 999999;
+      for (final u in pool) {
+        final f = MirrorHealthStore.getFailureCount(u);
+        if (f < minFailures) {
+          minFailures = f;
+          leastBad = u;
+        }
+      }
+      available = [leastBad];
     }
 
     available.sort(_compareCandidates);
@@ -141,13 +173,17 @@ class MirrorFailover {
   Future<String?> run(
     Future<void> Function(String url) action, {
     double measuredBytesPerSec = 0.0,
+    int? maxRetriesPerMirror,
   }) async {
     final validUrls =
         _urls.where((u) => !MirrorHealthStore.isBlacklisted(u)).toList();
-    final candidateUrls =
-        validUrls.isNotEmpty ? List<String>.from(validUrls) : List<String>.from(_urls);
+    final candidateUrls = validUrls.isNotEmpty
+        ? List<String>.from(validUrls)
+        : List<String>.from(_urls);
 
     candidateUrls.sort(_compareCandidates);
+
+    final retries = maxRetriesPerMirror ?? (candidateUrls.length > 1 ? 0 : 2);
 
     for (var i = 0; i < candidateUrls.length; i++) {
       final url = candidateUrls[i];
@@ -162,25 +198,38 @@ class MirrorFailover {
           openTimeout: const Duration(minutes: 30),
         ),
       );
+
       if (!circuit.allowRequest()) {
-        debugPrint('[MirrorFailover] circuit open for mirror $url, skipping');
-        continue;
+        final allOpen =
+            candidateUrls.every((u) => _circuits[u]?.isOpen == true);
+        if (!allOpen) {
+          debugPrint('[MirrorFailover] circuit open for mirror $url, skipping');
+          continue;
+        }
+        debugPrint(
+            '[MirrorFailover] all circuits open; probing least-bad mirror $url');
       }
+
       try {
-        await RetryEngine(
-          maxRetries: 2,
-          baseDelay: const Duration(seconds: 2),
-          backoffMultiplier: 2.0,
-          maxDelay: const Duration(seconds: 10),
-        ).execute(
-          () => action(url),
-          onRetry: (error, attempt, delay) {
-            debugPrint(
-              '[MirrorFailover] mirror $url attempt $attempt failed ($error); retrying in ${delay.inMilliseconds}ms',
-            );
-          },
-        );
-        await MirrorHealthStore.recordSuccess(url, speedBps: measuredBytesPerSec);
+        if (retries > 0) {
+          await RetryEngine(
+            maxRetries: retries,
+            baseDelay: const Duration(seconds: 2),
+            backoffMultiplier: 2.0,
+            maxDelay: const Duration(seconds: 10),
+          ).execute(
+            () => action(url),
+            onRetry: (error, attempt, delay) {
+              debugPrint(
+                '[MirrorFailover] mirror $url attempt $attempt failed ($error); retrying in ${delay.inMilliseconds}ms',
+              );
+            },
+          );
+        } else {
+          await action(url);
+        }
+        await MirrorHealthStore.recordSuccess(url,
+            speedBps: measuredBytesPerSec);
         await MirrorHealthStore.recordSpeed(url, measuredBytesPerSec);
         circuit.recordSuccess();
         _index = _urls.indexOf(url);

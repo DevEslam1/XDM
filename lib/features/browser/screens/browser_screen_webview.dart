@@ -219,100 +219,6 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
   }
 
   @override
-  void _showSiteSettingsSheet(BrowserTab tab) async {
-    if (tab.isHome || tab.url.isEmpty) return;
-    final uri = Uri.tryParse(tab.url);
-    if (uri == null || uri.host.isEmpty) return;
-    final host = uri.host.toLowerCase();
-
-    final settings = _settings;
-    final isDark = settings.isDarkMode;
-    final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-
-    final siteSettings = await _siteSettingsStore.getForHost(host);
-    bool siteDesktop = siteSettings.desktopMode ?? settings.desktopMode;
-    bool siteAdBlock =
-        siteSettings.adBlockEnabled ?? AdBlockerService.instance.isEnabled;
-
-    if (!mounted) return;
-
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (context, setSheetState) => Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                host,
-                style: TextStyle(
-                  fontFamily: 'Space Grotesk',
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color:
-                      isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Site settings overrides',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-                ),
-              ),
-              const SizedBox(height: 16),
-              SwitchListTile(
-                title: const Text('Desktop Site'),
-                subtitle: const Text('Force desktop version of this site'),
-                value: siteDesktop,
-                activeThumbColor: accent,
-                onChanged: (val) async {
-                  setSheetState(() => siteDesktop = val);
-                  await _siteSettingsStore.updateForHost(
-                      host,
-                      SiteSettings(
-                        desktopMode: siteDesktop,
-                        adBlockEnabled: siteAdBlock,
-                      ));
-                  await _applySiteSettings(tab, tab.url);
-                  if (mounted) setState(() {});
-                  _debouncedSiteSettingsReload(tab);
-                },
-              ),
-              SwitchListTile(
-                title: const Text('AdBlocker'),
-                subtitle: const Text('Block ads and trackers on this site'),
-                value: siteAdBlock,
-                activeThumbColor: accent,
-                onChanged: (val) async {
-                  setSheetState(() => siteAdBlock = val);
-                  await _siteSettingsStore.updateForHost(
-                      host,
-                      SiteSettings(
-                        desktopMode: siteDesktop,
-                        adBlockEnabled: siteAdBlock,
-                      ));
-                  await _applySiteSettings(tab, tab.url);
-                  if (mounted) setState(() {});
-                  _debouncedSiteSettingsReload(tab);
-                },
-              ),
-              const SizedBox(height: 12),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  @override
   void _onPageStart(BrowserTab tab, String url) async {
     // Do NOT reset (_navigatingBackForwardTabIds[tab.id] ?? false) here. Page lifecycle callbacks
     // (onLoadStart/onLoadStop/onUrlChange) fire BEFORE client-side redirects
@@ -441,19 +347,29 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
         tab.isTimedOut = false;
       });
       tab.controller?.getTitle().then((t) {
-        if (t != null && t.isNotEmpty && mounted) {
-          // Fix #5: Always update the title and record history regardless of
-          // whether the title changed. The old `t != tab.title` guard silently
-          // skipped history for SPAs and sites where consecutive pages share
-          // the same title (e.g. news article feeds with a constant site name).
-          setState(() {
-            tab.title = t;
-          });
-          if (!tab.isIncognito &&
-              !settings.incognitoEnabled &&
-              settings.saveBrowserHistory) {
-            _recordHistory(url, title: t);
-          }
+        if (!mounted) return;
+        final effectiveTitle = (t != null && t.trim().isNotEmpty)
+            ? t.trim()
+            : (Uri.tryParse(url)?.host.isNotEmpty == true
+                ? Uri.tryParse(url)!.host
+                : (tab.title.isNotEmpty ? tab.title : url));
+        setState(() {
+          tab.title = effectiveTitle;
+        });
+        if (!tab.isIncognito &&
+            !settings.incognitoEnabled &&
+            settings.saveBrowserHistory) {
+          _recordHistory(url, title: effectiveTitle);
+        }
+      }).catchError((_) {
+        if (!mounted) return;
+        final fallbackTitle = Uri.tryParse(url)?.host.isNotEmpty == true
+            ? Uri.tryParse(url)!.host
+            : (tab.title.isNotEmpty ? tab.title : url);
+        if (!tab.isIncognito &&
+            !settings.incognitoEnabled &&
+            settings.saveBrowserHistory) {
+          _recordHistory(url, title: fallbackTitle);
         }
       });
     }

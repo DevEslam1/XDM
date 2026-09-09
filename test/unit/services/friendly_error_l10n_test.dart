@@ -27,7 +27,11 @@ void main() {
           'EACCES: permission denied, open /private/var/...');
       final result = ErrorTaxonomy.classify(exc);
 
-      expect(result.family, equals(ErrorFamily.disk));
+      // FIX(false-storage): a permission-denied writer failure is not a
+      // storage-full condition, so it no longer maps to ErrorFamily.disk.
+      // The friendly message, no-path-leak guarantee and showSettings
+      // recovery action are unchanged.
+      expect(result.family, equals(ErrorFamily.unknown));
       expect(
           result.message,
           equals(

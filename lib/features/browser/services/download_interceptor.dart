@@ -407,11 +407,8 @@ class DownloadInterceptor {
     }
     try {
       final activeTab = resolveActiveTab();
-      if (activeTab == null) {
-        return const InterceptDownloadResult(InterceptDownloadStatus.skipped);
-      }
-      final resolvedOriginUrl =
-          downloadPageUrl ?? (activeTab.isHome ? null : activeTab.url);
+      final resolvedOriginUrl = downloadPageUrl ??
+          (activeTab != null && !activeTab.isHome ? activeTab.url : null);
       final isTorrent = isTorrentUrl(url, fileName: finalFileName);
       await downloadProvider.addDownload(
         name: finalFileName,

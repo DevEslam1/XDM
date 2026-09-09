@@ -348,7 +348,7 @@ class HttpDownloadOrchestrator {
           }).catchError((_) {}));
 
           if (!completer.isCompleted) {
-            completer.completeError(_mapWorkerError(errData, punyUrl));
+            completer.completeError(mapWorkerError(errData, punyUrl));
           }
           break;
         case EngineMessageType.hello:
@@ -371,7 +371,8 @@ class HttpDownloadOrchestrator {
     }
   }
 
-  Exception _mapWorkerError(Map<String, dynamic> data, String url) {
+  @visibleForTesting
+  static Exception mapWorkerError(Map<String, dynamic> data, String url) {
     final result = TransferResult.fromMap(data);
     final msg = result.message ?? 'Unknown error';
     final status = result.httpStatus;
@@ -384,8 +385,28 @@ class HttpDownloadOrchestrator {
         message: msg,
       );
     }
-    if (taxonomy == 'disk' || taxonomy == 'diskFull') {
+    if (taxonomy == 'diskFull') {
       return const InsufficientStorageException();
+    }
+    if (taxonomy == 'disk') {
+      // FIX(false-storage): the whole disk family used to collapse into
+      // InsufficientStorageException, so permission/IO errors and invalid
+      // paths were reported as "no storage". Only genuine space-exhaustion
+      // messages keep that meaning; anything else preserves its real cause
+      // by falling through to the generic mapping below.
+      final lowerMsg = msg.toLowerCase();
+      if (lowerMsg.contains('invalid storage path')) {
+        return InvalidPathException(msg);
+      }
+      final isSpace = lowerMsg.contains('storage full') ||
+          lowerMsg.contains('not enough storage') ||
+          lowerMsg.contains('not enough space') ||
+          lowerMsg.contains('no space') ||
+          lowerMsg.contains('disk full') ||
+          lowerMsg.contains('insufficient storage');
+      if (isSpace) {
+        return const InsufficientStorageException();
+      }
     }
     if (taxonomy == 'integrity') {
       return DownloadIntegrityException(msg);

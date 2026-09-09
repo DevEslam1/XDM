@@ -607,18 +607,48 @@ class TorrentResumeStore {
     }
   }
 
+  /// Persistently caches the raw bytes of a remote .torrent file so that subsequent
+  /// resumes or re-adds can access a valid local file instead of failing HTTP fopen.
+  static Future<File> saveTorrentFile(String sourceUrl, List<int> bytes) async {
+    final dir = await _dir();
+    final key = _stableKey(sourceUrl);
+    final torrentFile = File('${dir.path}/$key.torrent');
+    final tmpFile = File('${dir.path}/$key.torrent.tmp');
+    await tmpFile.writeAsBytes(bytes, flush: true);
+    final raf = await tmpFile.open(mode: FileMode.append);
+    await raf.flush();
+    await raf.close();
+    await _safeRenameFile(tmpFile, torrentFile.path);
+    return torrentFile;
+  }
+
+  /// Returns the persistent local .torrent file for [sourceUrl] if it exists on disk.
+  static Future<File?> getTorrentFile(String sourceUrl) async {
+    try {
+      final dir = await _dir();
+      final key = _stableKey(sourceUrl);
+      final file = File('${dir.path}/$key.torrent');
+      if (await file.exists() && await file.length() > 0) {
+        return file;
+      }
+    } catch (_) {}
+    return null;
+  }
+
   static Future<void> deleteResumeDataForSource(String sourceUrl) async {
     try {
       final dir = await _dir();
       final key = _stableKey(sourceUrl);
-      // FIX-M12: Delete all resume and metadata artifacts including temp files
+      // FIX-M12: Delete all resume, metadata and cached torrent artifacts including temp files
       for (final suffix in [
         '.bin',
         '.meta.json',
         '.bin.tmp',
         '.resume',
         '.resume.tmp',
-        '.meta.json.tmp'
+        '.meta.json.tmp',
+        '.torrent',
+        '.torrent.tmp',
       ]) {
         final f = File('${dir.path}/$key$suffix');
         if (await f.exists()) await f.delete();

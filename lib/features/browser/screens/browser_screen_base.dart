@@ -117,6 +117,8 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
 
   bool _isRestoring = false;
 
+  bool _hasRestoredTabsOnStartup = false;
+
   /// Tracks when a back/forward navigation is in progress so that
   /// [shouldOverrideUrlLoading] doesn't intercept it. Without this,
   /// back/forward to certain pages (e.g. Google search) gets intercepted
@@ -288,8 +290,6 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
 
   Future<void> _handleCloseOrQuit();
 
-  ValueNotifier<int> get _activeBlockedAdsNotifier;
-
   void _navigateToUrl(String input);
 
   Future<void> _handleYouTubeGrab(BrowserTab tab, SettingsProvider settings);
@@ -355,10 +355,6 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
   void _notifyScriptsInjected();
 
   Future<void> _injectCustomJsCss(BrowserTab tab);
-
-  void _debouncedSiteSettingsReload(BrowserTab tab);
-
-  void _showSiteSettingsSheet(BrowserTab tab);
 
   String _cleanUrl(String url);
 

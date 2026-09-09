@@ -147,69 +147,103 @@ class DownloadEngine implements IDownloadEngine {
     }
 
     final result = await hasEnoughDiskSpaceOrNull(saveDir, requiredBytes);
-    final finalResult = result ?? false;
-    _diskCheckCache[normDir] = _DiskSpaceCacheEntry(
-      hasSpace: finalResult,
-      checkedBytes: requiredBytes,
-      timestamp: now,
-    );
+    final finalResult = result ?? true;
+    if (result != null) {
+      _diskCheckCache[normDir] = _DiskSpaceCacheEntry(
+        hasSpace: finalResult,
+        checkedBytes: requiredBytes,
+        timestamp: now,
+      );
+    }
     return finalResult;
   }
 
   /// Like [hasEnoughDiskSpace] but returns `null` when the free-space check
   /// itself fails (unknown), so callers can distinguish "no space" from
-  /// "could not determine". The non-nullable variant is fail-safe: it
-  /// conservatively reports `false` when the check cannot complete.
+  /// "could not determine".
   Future<bool?> hasEnoughDiskSpaceOrNull(
       String saveDir, int requiredBytes) async {
     try {
       if (requiredBytes <= 0) return true;
       final dir = Directory(saveDir);
       if (!await dir.exists()) {
-        await dir.create(recursive: true);
+        try {
+          await dir.create(recursive: true);
+        } catch (_) {
+          // If directory creation failed, fallback safely
+          return true;
+        }
       }
 
       if (Platform.isIOS) {
         // iOS/App Store: Process.run is unavailable. Use a stat-based heuristic:
-        // Write a 1-byte probe file and check if it succeeds; for larger checks
-        // rely on NSFileSystemFreeSize surfaced via path_provider-like APIs.
+        // Write a 1-byte probe file and check if it succeeds.
         // Returning `true` and letting the OS error is safer than spawning a process.
         try {
           final probe = File(p.join(saveDir, '.dmx_probe'));
           await probe.writeAsBytes([0]);
           await probe.delete();
+        } on FileSystemException catch (e) {
+          final osError = e.osError;
+          // FIX(false-storage): only a genuine disk-full probe failure means
+          // "no space". Any other failure (permissions, sandbox, path) is
+          // unknown: assume space and let the real write error surface later
+          // with proper errno mapping.
+          if (osError != null &&
+              (osError.errorCode == 28 || osError.errorCode == 112)) {
+            return false;
+          }
+          return null;
         } catch (_) {
-          return false; // write failed → full or inaccessible
+          return null;
         }
         return true;
       } else if (Platform.isAndroid || Platform.isLinux || Platform.isMacOS) {
-        // df reports 1K-blocks; column 4 (0-indexed) is available blocks.
-        final stat = await Process.run('df', [saveDir]);
-        final lines = stat.stdout.toString().split('\n');
-        if (lines.length > 1) {
-          final parts = lines[1].trim().split(RegExp(r'\s+'));
-          if (parts.length >= 4) {
-            final availableKb = int.tryParse(parts[3]) ?? 0;
-            return (availableKb * 1024) > requiredBytes;
+        try {
+          // df -k reports 1K-blocks across POSIX/Android implementations.
+          final stat = await Process.run('df', ['-k', saveDir]);
+          if (stat.exitCode == 0) {
+            final lines = stat.stdout.toString().trim().split('\n');
+            if (lines.length > 1) {
+              final lastLine = lines.last.trim();
+              final parts = lastLine.split(RegExp(r'\s+'));
+              if (parts.length >= 4) {
+                final availableKb = int.tryParse(parts[3]);
+                if (availableKb != null) {
+                  return (availableKb * 1024) > requiredBytes;
+                }
+              }
+            }
           }
+        } catch (e) {
+          debugPrint('[DiskCheck] df failed or restricted: $e');
         }
+        return true; // fallback: assume enough space if df cannot be run
       } else if (Platform.isWindows) {
-        // FIX P1-6: Escape single quotes to prevent PowerShell injection.
-        // Path "C:\a'; rm ..." previously broke out of single quotes.
-        final escaped = saveDir.replaceAll("'", "''");
-        final result = await Process.run('powershell', [
-          '-NoProfile',
-          '-NonInteractive',
-          '-Command',
-          "(Get-PSDrive -Name (Get-Item -LiteralPath '$escaped').PSDrive.Name).Free"
-        ]);
-        final freeBytes = int.tryParse(result.stdout.toString().trim()) ?? 0;
-        return freeBytes > requiredBytes;
+        try {
+          // FIX P1-6: Escape single quotes to prevent PowerShell injection.
+          final escaped = saveDir.replaceAll("'", "''");
+          final result = await Process.run('powershell', [
+            '-NoProfile',
+            '-NonInteractive',
+            '-Command',
+            "(Get-PSDrive -Name (Get-Item -LiteralPath '$escaped').PSDrive.Name).Free"
+          ]);
+          if (result.exitCode == 0) {
+            final freeBytes = int.tryParse(result.stdout.toString().trim());
+            if (freeBytes != null && freeBytes > 0) {
+              return freeBytes > requiredBytes;
+            }
+          }
+        } catch (e) {
+          debugPrint('[DiskCheck] PowerShell check failed: $e');
+        }
+        return true;
       }
       return true; // fallback: assume enough space
     } catch (e) {
       debugPrint('[DiskCheck] Failed to check disk space: $e');
-      return null;
+      return true;
     }
   }
 

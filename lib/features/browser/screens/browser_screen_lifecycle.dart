@@ -7,6 +7,7 @@ mixin _LifecycleMixin on _BrowserScreenStateBase {
   void initState() {
     super.initState();
     _adBlocker.addListener(_updateAdBlockSettings);
+    _tabManager.addListener(_onTabManagerChanged);
     WidgetsBinding.instance.addObserver(this);
 
     _focusNode.addListener(() {
@@ -121,6 +122,12 @@ mixin _LifecycleMixin on _BrowserScreenStateBase {
     }
   }
 
+  void _onTabManagerChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
   @override
   void dispose() {
     _disposeTimers();
@@ -128,6 +135,7 @@ mixin _LifecycleMixin on _BrowserScreenStateBase {
     _showBarsNotifier.dispose();
     _tabStripScrollController.dispose();
     _adBlocker.removeListener(_updateAdBlockSettings);
+    _tabManager.removeListener(_onTabManagerChanged);
     _inactivityWatchdog.dispose();
     WidgetsBinding.instance.removeObserver(this);
 

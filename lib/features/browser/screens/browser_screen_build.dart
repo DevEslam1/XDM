@@ -192,404 +192,90 @@ mixin _BuildMixin on _BrowserScreenStateBase {
                                         onPressed: _handleCloseOrQuit,
                                       ),
                                       const SizedBox(width: 8),
-                                      Expanded(
-                                        child: AnimatedContainer(
-                                          duration:
-                                              const Duration(milliseconds: 200),
-                                          height: 38,
-                                          decoration: BoxDecoration(
-                                            // E3: Incognito Mode Visual Indicator
-                                            color: (activeTab.isIncognito ||
-                                                    settings.incognitoEnabled)
-                                                ? const Color(0xFF1A1A2E)
-                                                : isDark
-                                                    ? (settings.isAmoledMode
-                                                        ? (_isFocused
-                                                            ? const Color(
-                                                                0xFF1E1E2C)
-                                                            : const Color(
-                                                                0xFF12121B))
-                                                        : (_isFocused
-                                                            ? const Color(
-                                                                0xFF141424)
-                                                            : const Color(
-                                                                0xFF0F0F16)))
-                                                    : (_isFocused
-                                                        ? AppTheme.lightNeonBlue
-                                                            .withValues(
-                                                                alpha: 0.08)
-                                                        : const Color(
-                                                            0xFFF1F5F9)),
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                            border: Border.all(
-                                              color: (activeTab.isIncognito ||
-                                                      settings.incognitoEnabled)
-                                                  ? AppTheme.neonViolet
-                                                      .withValues(alpha: 0.3)
-                                                  : _isFocused
-                                                      ? (isDark
-                                                              ? AppTheme
-                                                                  .neonBlue
-                                                              : AppTheme
-                                                                  .lightNeonBlue)
-                                                          .withValues(
-                                                              alpha: 0.5)
-                                                      : (settings.isAmoledMode
-                                                          ? AppTheme.neonBlue
-                                                              .withValues(
-                                                                  alpha: 0.35)
-                                                          : (isDark
-                                                              ? const Color(
-                                                                  0x15FFFFFF)
-                                                              : const Color(
-                                                                  0x0D000000))),
-                                              width: (activeTab.isIncognito ||
-                                                      settings.incognitoEnabled)
-                                                  ? 1.0
-                                                  : (_isFocused
-                                                      ? 1.2
-                                                      : (settings.isAmoledMode
-                                                          ? 1.0
-                                                          : 0.8)),
-                                            ),
-                                            boxShadow: settings.isAmoledMode
-                                                ? [
-                                                    BoxShadow(
-                                                      color: AppTheme.neonBlue
-                                                          .withValues(
-                                                              alpha: _isFocused
-                                                                  ? 0.40
-                                                                  : 0.20),
-                                                      blurRadius:
-                                                          _isFocused ? 10 : 6,
-                                                      spreadRadius: 0,
-                                                    ),
-                                                  ]
-                                                : ((_isFocused &&
-                                                        isDark &&
-                                                        settings.enableGlow)
-                                                    ? [
-                                                        BoxShadow(
-                                                          color: (isDark
-                                                                  ? AppTheme
-                                                                      .neonBlue
-                                                                  : AppTheme
-                                                                      .lightNeonBlue)
-                                                              .withValues(
-                                                                  alpha: 0.25),
-                                                          blurRadius: 8,
-                                                          spreadRadius: 0.5,
-                                                        ),
-                                                      ]
-                                                    : null),
-                                          ),
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 4),
-                                          child: Row(
-                                            children: [
-                                              // E3: Incognito Icon
-                                              if (activeTab.isIncognito ||
-                                                  settings.incognitoEnabled)
-                                                const Tooltip(
-                                                  message:
-                                                      'Incognito mode — cookies isolated, history not saved',
-                                                  child: Padding(
-                                                    padding:
-                                                        EdgeInsets.symmetric(
-                                                            horizontal: 4.0),
-                                                    child: Icon(
-                                                        Icons
-                                                            .visibility_off_rounded,
-                                                        size: 14,
-                                                        color: AppTheme
-                                                            .neonViolet),
-                                                  ),
-                                                ),
 
-                                              // E1 & E2: Security / Loading Indicator
-                                              AnimatedSwitcher(
-                                                duration: AppTheme.motionBase,
-                                                child: activeTab.isLoading
-                                                    ? const SizedBox(
-                                                        key:
-                                                            ValueKey('loading'),
-                                                        width: 14,
-                                                        height: 14,
-                                                        child:
-                                                            CircularProgressIndicator(
-                                                                strokeWidth:
-                                                                    1.5,
-                                                                color: AppTheme
-                                                                    .neonBlue),
-                                                      )
-                                                    : GestureDetector(
-                                                        onTap: () =>
-                                                            _showSiteSettingsSheet(
-                                                                activeTab),
-                                                        child: Tooltip(
-                                                          key: const ValueKey(
-                                                              'security'),
-                                                          message: activeTab.url
-                                                                  .startsWith(
-                                                                      'https')
-                                                              ? 'Secure connection'
-                                                              : 'Insecure connection',
-                                                          child: Padding(
-                                                            padding:
-                                                                const EdgeInsets
-                                                                    .symmetric(
-                                                                    horizontal:
-                                                                        6.0),
-                                                            child: Icon(
-                                                              activeTab.isHome ||
-                                                                      activeTab
-                                                                          .url
-                                                                          .isEmpty
-                                                                  ? Icons
-                                                                      .search_rounded
-                                                                  : activeTab
-                                                                          .url
-                                                                          .startsWith(
-                                                                              'https')
-                                                                      ? Icons
-                                                                          .lock_rounded
-                                                                      : Icons
-                                                                          .lock_open_rounded,
-                                                              size: 14,
-                                                              color: activeTab
-                                                                          .isHome ||
-                                                                      activeTab
-                                                                          .url
-                                                                          .isEmpty
-                                                                  ? (isDark
-                                                                      ? AppTheme
-                                                                          .textMuted
-                                                                      : AppTheme
-                                                                          .lightTextMuted)
-                                                                  : activeTab
-                                                                          .url
-                                                                          .startsWith(
-                                                                              'https')
-                                                                      ? AppTheme
-                                                                          .neonGreen
-                                                                      : AppTheme
-                                                                          .neonAmber,
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      ),
-                                              ),
-
-                                              // E4 & E10: Ad-blocker Indicator — only shown on real web pages
-                                              if (!activeTab.isHome &&
-                                                  activeTab.url.isNotEmpty)
-                                                GestureDetector(
-                                                  onTap: () =>
-                                                      _showSiteSettingsSheet(
-                                                          activeTab),
-                                                  child: Tooltip(
-                                                    message: _adBlocker
-                                                            .isEnabled
-                                                        ? 'Ad-blocker active'
-                                                        : 'Ad-blocker disabled',
-                                                    child: Stack(
-                                                      clipBehavior: Clip.none,
-                                                      children: [
-                                                        Padding(
-                                                          padding:
-                                                              const EdgeInsets
-                                                                  .symmetric(
-                                                                  horizontal:
-                                                                      4.0),
-                                                          child: Icon(
-                                                            _adBlocker.isEnabled
-                                                                ? Icons
-                                                                    .shield_rounded
-                                                                : Icons
-                                                                    .shield_outlined,
-                                                            size: 14,
-                                                            color: _adBlocker
-                                                                    .isEnabled
-                                                                ? AppTheme
-                                                                    .neonGreen
-                                                                : (isDark
-                                                                    ? AppTheme
-                                                                        .textMuted
-                                                                    : AppTheme
-                                                                        .lightTextMuted),
-                                                          ),
-                                                        ),
-                                                        ValueListenableBuilder<
-                                                            int>(
-                                                          valueListenable:
-                                                              _activeBlockedAdsNotifier,
-                                                          builder: (context,
-                                                              count, _) {
-                                                            if (!_adBlocker
-                                                                    .isEnabled ||
-                                                                count <= 0) {
-                                                              return const SizedBox
-                                                                  .shrink();
-                                                            }
-                                                            return Positioned(
-                                                              right: -4,
-                                                              top: -4,
-                                                              child:
-                                                                  AnimatedSwitcher(
-                                                                duration:
-                                                                    const Duration(
-                                                                        milliseconds:
-                                                                            300),
-                                                                transitionBuilder: (Widget
-                                                                        child,
-                                                                    Animation<
-                                                                            double>
-                                                                        animation) {
-                                                                  return ScaleTransition(
-                                                                    scale: Tween<double>(
-                                                                            begin:
-                                                                                0.5,
-                                                                            end:
-                                                                                1.0)
-                                                                        .animate(
-                                                                      CurvedAnimation(
-                                                                        parent:
-                                                                            animation,
-                                                                        curve: Curves
-                                                                            .elasticOut,
-                                                                      ),
-                                                                    ),
-                                                                    child:
-                                                                        child,
-                                                                  );
-                                                                },
-                                                                child:
-                                                                    Container(
-                                                                  key: ValueKey<
-                                                                          int>(
-                                                                      count),
-                                                                  padding:
-                                                                      const EdgeInsets
-                                                                          .all(
-                                                                          2),
-                                                                  decoration:
-                                                                      const BoxDecoration(
-                                                                    color: Colors
-                                                                        .redAccent,
-                                                                    shape: BoxShape
-                                                                        .circle,
-                                                                  ),
-                                                                  constraints:
-                                                                      const BoxConstraints(
-                                                                    minWidth:
-                                                                        14,
-                                                                    minHeight:
-                                                                        14,
-                                                                  ),
-                                                                  alignment:
-                                                                      Alignment
-                                                                          .center,
-                                                                  child: Text(
-                                                                    '$count',
-                                                                    style:
-                                                                        const TextStyle(
-                                                                      color: Colors
-                                                                          .white,
-                                                                      fontSize:
-                                                                          8,
-                                                                      fontWeight:
-                                                                          FontWeight
-                                                                              .bold,
-                                                                    ),
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                            );
-                                                          },
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                ),
-
-                                              // E7: Desktop Mode Indicator
-                                              if (settings.desktopMode)
-                                                const Tooltip(
-                                                  message:
-                                                      'Desktop mode active',
-                                                  child: Padding(
-                                                    padding:
-                                                        EdgeInsets.symmetric(
-                                                            horizontal: 4.0),
-                                                    child: Icon(
-                                                        Icons
-                                                            .desktop_windows_rounded,
-                                                        size: 14,
-                                                        color:
-                                                            AppTheme.neonBlue),
-                                                  ),
-                                                ),
-
-                                              Expanded(
-                                                child: SmartUrlBar(
-                                                  controller: _urlController,
-                                                  focusNode: _focusNode,
-                                                  isDark: isDark,
-                                                  isLoading:
-                                                      activeTab.isLoading,
-                                                  onNavigate: _navigateToUrl,
-                                                  onReload: () {
-                                                    if (!activeTab.isHome) {
-                                                      _safeReloadTab(activeTab);
-                                                    }
-                                                  },
-                                                  onStopLoading: () {
-                                                    activeTab.controller
-                                                        ?.evaluateJavascript(
-                                                            source:
-                                                                'window.stop();');
-                                                    setState(() {
-                                                      activeTab.isLoading =
-                                                          false;
-                                                    });
-                                                  },
-                                                  onShieldPressed: () {
-                                                    if (activeTab.isHome) {
-                                                      return;
-                                                    }
-                                                    final blockedAds =
-                                                        _blockedAdsPerTab[
-                                                                activeTab.id] ??
-                                                            0;
-                                                    final blockedPopups =
-                                                        _blockedPopupsPerTab[
-                                                                activeTab.id] ??
-                                                            0;
-                                                    BrowserShieldSheet.show(
-                                                      context: context,
-                                                      currentUrl: activeTab.url,
-                                                      blockedAdsCount:
-                                                          blockedAds,
-                                                      blockedPopupsCount:
-                                                          blockedPopups,
-                                                      onStartElementPicker: () =>
-                                                          _startElementPicker(
-                                                              activeTab),
-                                                      onReloadTab: () =>
-                                                          _safeReloadTab(
-                                                              activeTab),
-                                                    );
-                                                  },
-                                                  isHttps: activeTab.url
-                                                      .toLowerCase()
-                                                      .startsWith('https://'),
-                                                ),
-                                              ),
-                                            ],
+                                      // Incognito Mode Visual Indicator
+                                      if (activeTab.isIncognito ||
+                                          settings.incognitoEnabled)
+                                        const Tooltip(
+                                          message:
+                                              'Incognito mode — cookies isolated, history not saved',
+                                          child: Padding(
+                                            padding: EdgeInsets.symmetric(
+                                                horizontal: 4.0),
+                                            child: Icon(
+                                                Icons.visibility_off_rounded,
+                                                size: 16,
+                                                color: AppTheme.neonViolet),
                                           ),
                                         ),
+
+                                      // Desktop Mode Indicator
+                                      if (settings.desktopMode)
+                                        const Tooltip(
+                                          message: 'Desktop mode active',
+                                          child: Padding(
+                                            padding: EdgeInsets.symmetric(
+                                                horizontal: 4.0),
+                                            child: Icon(
+                                                Icons.desktop_windows_rounded,
+                                                size: 16,
+                                                color: AppTheme.neonBlue),
+                                          ),
+                                        ),
+
+                                      // Single unified SmartUrlBar capsule
+                                      Expanded(
+                                        child: SmartUrlBar(
+                                          controller: _urlController,
+                                          focusNode: _focusNode,
+                                          isDark: isDark,
+                                          isLoading: activeTab.isLoading,
+                                          progress: activeTab.progress,
+                                          onNavigate: _navigateToUrl,
+                                          onReload: () {
+                                            if (!activeTab.isHome) {
+                                              _safeReloadTab(activeTab);
+                                            }
+                                          },
+                                          onStopLoading: () {
+                                            activeTab.controller
+                                                ?.evaluateJavascript(
+                                                    source: 'window.stop();');
+                                            setState(() {
+                                              activeTab.isLoading = false;
+                                            });
+                                          },
+                                          onShieldPressed: () {
+                                            if (activeTab.isHome) {
+                                              return;
+                                            }
+                                            final blockedAds =
+                                                _blockedAdsPerTab[
+                                                        activeTab.id] ??
+                                                    0;
+                                            final blockedPopups =
+                                                _blockedPopupsPerTab[
+                                                        activeTab.id] ??
+                                                    0;
+                                            BrowserShieldSheet.show(
+                                              context: context,
+                                              currentUrl: activeTab.url,
+                                              blockedAdsCount: blockedAds,
+                                              blockedPopupsCount:
+                                                  blockedPopups,
+                                              onStartElementPicker: () =>
+                                                  _startElementPicker(
+                                                      activeTab),
+                                              onReloadTab: () =>
+                                                  _safeReloadTab(activeTab),
+                                            );
+                                          },
+                                          isHttps: activeTab.url
+                                              .toLowerCase()
+                                              .startsWith('https://'),
+                                        ),
                                       ),
+                                      
                                       const SizedBox(width: 4),
                                       if (!activeTab.isHome &&
                                           (YoutubeService.isYoutubeVideoUrl(

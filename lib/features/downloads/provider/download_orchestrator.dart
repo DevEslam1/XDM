@@ -105,6 +105,7 @@ abstract class DownloadOrchestratorHost {
   void providerStartWidgetTimer();
   void providerStopWidgetTimer();
   void providerNotifyListeners();
+  void updateProgressTask(DownloadTask updated);
   void pushProgressTick(String taskId, double progress, double speed);
   List<Map<String, dynamic>> markTorrentFilesCompleted(
     List<Map<String, dynamic>> files,
@@ -2154,12 +2155,11 @@ class DownloadOrchestrator {
           final totalDownloaded = (audioBytesSoFar + videoBytesSoFar).clamp(0,
               totalSize > 0 ? totalSize : (audioBytesSoFar + videoBytesSoFar));
           final instantSpeed = audioSpeedNow + videoSpeedNow;
-          final speedQueue = _host.speedHistories[task.id];
-          if (speedQueue != null) {
-            speedQueue.add(instantSpeed);
-            if (speedQueue.length > 20) speedQueue.removeFirst();
-          }
-          final combinedSpeed = speedQueue != null && speedQueue.isNotEmpty
+          final speedQueue =
+              _host.speedHistories.putIfAbsent(task.id, () => Queue<double>());
+          speedQueue.add(instantSpeed);
+          if (speedQueue.length > 20) speedQueue.removeFirst();
+          final combinedSpeed = speedQueue.isNotEmpty
               ? speedQueue.reduce((a, b) => a + b) / speedQueue.length
               : instantSpeed;
 
@@ -2256,10 +2256,11 @@ class DownloadOrchestrator {
               : (DownloadEngine.isInBackground ? 5000 : 250);
           if (now - lastUpdate >= throttleMs) {
             _host.lastProgressUpdateTimes[task.id] = now;
-            _host.providerTasks[index] = updated;
+            _host.updateProgressTask(updated);
             // FIX-BG-08: Skip UI notify when backgrounded but still write model
             if (!isBackground) {
               _host.pushProgressTick(task.id, updated.progress, updated.speed);
+              _host.providerNotifyListeners();
 
               final progressPercent = totalSize > 0
                   ? ((totalDownloaded / totalSize) * 100).round().clamp(0, 100)
@@ -2276,7 +2277,7 @@ class DownloadOrchestrator {
                   (e) => debugPrint('[DMX] sendHeartbeat failed: $e')));
             }
           } else {
-            _host.providerTasks[index] = updated;
+            _host.updateProgressTask(updated);
             if (!isBackground) {
               _host.pushProgressTick(task.id, updated.progress, updated.speed);
             }
@@ -2434,6 +2435,7 @@ class DownloadOrchestrator {
                 _host.providerTasks[idx] = _host.providerTasks[idx].copyWith(
                   audioProgress: 1.0,
                 );
+                _host.updateProgressTask(_host.providerTasks[idx]);
               }
               pushCombinedProgress();
               return;
@@ -2458,6 +2460,7 @@ class DownloadOrchestrator {
                   _host.providerTasks[idx] = _host.providerTasks[idx].copyWith(
                     audioProgress: 0.0,
                   );
+                  _host.updateProgressTask(_host.providerTasks[idx]);
                 }
                 // Delete the corrupted audio file so it's re-downloaded cleanly.
                 try {
@@ -2550,6 +2553,7 @@ class DownloadOrchestrator {
                     final updated =
                         _host.providerTasks[idx].copyWith(audioSize: probedLen);
                     _host.providerTasks[idx] = updated;
+                    _host.updateProgressTask(updated);
                     unawaited(_host.providerDatabaseService
                         .saveTask(updated)
                         .catchError((_) {}));
@@ -2626,6 +2630,7 @@ class DownloadOrchestrator {
                         ? (progress.downloadedBytes / size).clamp(0.0, 1.0)
                         : _host.providerTasks[idx].audioProgress,
                   );
+                  _host.updateProgressTask(_host.providerTasks[idx]);
                 }
                 pushCombinedProgress(
                   statusMessageOverride: progress.statusMessage,
@@ -2710,6 +2715,7 @@ class DownloadOrchestrator {
               if (idx != -1) {
                 _host.providerTasks[idx] =
                     _host.providerTasks[idx].copyWith(audioProgress: frac);
+                _host.updateProgressTask(_host.providerTasks[idx]);
               }
             } else {
               final idx =
@@ -2717,6 +2723,7 @@ class DownloadOrchestrator {
               if (idx != -1) {
                 _host.providerTasks[idx] =
                     _host.providerTasks[idx].copyWith(audioProgress: 1.0);
+                _host.updateProgressTask(_host.providerTasks[idx]);
               }
             }
 
@@ -2844,6 +2851,7 @@ class DownloadOrchestrator {
                       torrentId: progress.torrentId ??
                           _host.providerTasks[idx].torrentId,
                     );
+                    _host.updateProgressTask(_host.providerTasks[idx]);
                   }
 
                   final isCellularOrSlow = _host.networkMonitor.isCellular;
@@ -3898,31 +3906,42 @@ class DownloadOrchestrator {
             } catch (e) {
               debugPrint('[DMX] Failed to create torrent save directory: $e');
             }
-            if (task.url.startsWith('magnet:')) {
-              torrentId = TorrentService.addMagnet(task.url, saveDir);
+            final existingTid = _host.providerTorrentIds[task.id];
+            if (existingTid != null && TorrentService.isTorrentAlive(existingTid)) {
+              torrentId = existingTid;
             } else {
-              String filePath = task.url;
-              if (task.url.startsWith('file://')) {
-                filePath = Uri.parse(task.url).toFilePath();
-              } else if (task.url.startsWith('http://') ||
-                  task.url.startsWith('https://')) {
-                // Fetch remote .torrent file to local cache
-                final tempDir = await getTemporaryDirectory();
-                final localTorrentFile =
-                    File('${tempDir.path}/torrent_${task.id}.torrent');
-                if (!await localTorrentFile.exists()) {
-                  final dio = Dio();
-                  final response = await dio.get<List<int>>(
-                    task.url,
-                    options: Options(responseType: ResponseType.bytes),
-                  );
-                  if (response.data != null && response.data!.isNotEmpty) {
-                    await localTorrentFile.writeAsBytes(response.data!);
+              if (!task.url.startsWith('magnet:')) {
+                String? filePath = task.url;
+                if (task.url.startsWith('file://')) {
+                  filePath = Uri.parse(task.url).toFilePath();
+                } else if (task.url.startsWith('http://') ||
+                    task.url.startsWith('https://')) {
+                  final cached = await TorrentResumeStore.getTorrentFile(task.url);
+                  filePath = cached?.path;
+                  if (filePath == null) {
+                    final tempDir = await getTemporaryDirectory();
+                    final localTorrentFile =
+                        File('${tempDir.path}/torrent_${task.id}.torrent');
+                    if (!await localTorrentFile.exists()) {
+                      try {
+                        final dio = Dio();
+                        final response = await dio.get<List<int>>(
+                          task.url,
+                          options: Options(responseType: ResponseType.bytes),
+                        );
+                        if (response.data != null && response.data!.isNotEmpty) {
+                          await localTorrentFile.writeAsBytes(response.data!);
+                          await TorrentResumeStore.saveTorrentFile(task.url, response.data!);
+                        }
+                      } catch (_) {}
+                    }
+                    if (await localTorrentFile.exists()) {
+                      filePath = localTorrentFile.path;
+                    }
                   }
                 }
-                filePath = localTorrentFile.path;
-                if (await localTorrentFile.exists()) {
-                  final bytes = await localTorrentFile.readAsBytes();
+                if (filePath != null && await File(filePath).exists()) {
+                  final bytes = await File(filePath).readAsBytes();
                   final meta =
                       await compute(BencodeDecoder.parseTorrentBytes, bytes);
                   if (meta != null) {
@@ -3951,13 +3970,7 @@ class DownloadOrchestrator {
                   }
                 }
               }
-              if (await File(filePath).exists()) {
-                torrentId = TorrentService.addTorrentFile(
-                  filePath,
-                  saveDir,
-                  sourceKey: task.url,
-                );
-              }
+              // TorrentDownloadHandler manages add-time resume data injection
             }
             if (torrentId != null) {
               if (torrentId < 0) {
@@ -4155,6 +4168,33 @@ class DownloadOrchestrator {
       if (_pauseLandedDuringStart(task, cancelToken)) {
         await _abortStartAfterPolicyPause(task, earlyReturnCompleter);
         return;
+      }
+
+      if (!task.isTorrent && task.fileSize > 0) {
+        final remainingBytes = task.fileSize - realTotalDownloaded;
+        if (remainingBytes > 0) {
+          final hasSpace = await _host.downloadEngine.hasEnoughDiskSpace(
+            task.savePath,
+            remainingBytes,
+          );
+          if (!hasSpace) {
+            _host.cancelTokens.remove(task.id);
+            _host.activeFutures.remove(task.id);
+            await _host.setTaskState(
+              task.copyWith(
+                status: DownloadStatus.failed,
+                errorMessage: 'Not enough storage space on disk.',
+              ),
+            );
+            _host.notifications.showFailed(
+              notificationId: _host.notifications.idFor(task.id),
+              title: task.fileName,
+              error: 'Not enough storage space on disk.',
+            );
+            earlyReturnCompleter.complete();
+            return;
+          }
+        }
       }
 
       task = task.copyWith(

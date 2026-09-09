@@ -102,6 +102,15 @@ class BrowserTab {
       webViewState.findInteractionController;
   void resetFindController() => webViewState.resetFindController();
 
+  void Function(int activeMatchOrdinal, int numberOfMatches, bool isDoneCounting)?
+      get onFindResultReceived => webViewState.onFindResultReceived;
+  set onFindResultReceived(
+    void Function(int activeMatchOrdinal, int numberOfMatches, bool isDoneCounting)?
+        callback,
+  ) {
+    webViewState.onFindResultReceived = callback;
+  }
+
   ValueNotifier<double> get progressNotifier => webViewState.progressNotifier;
   ValueNotifier<bool> get loadingNotifier => webViewState.loadingNotifier;
   ValueNotifier<String> get urlNotifier => webViewState.urlNotifier;

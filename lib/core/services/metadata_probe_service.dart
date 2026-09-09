@@ -17,8 +17,30 @@ import 'package:path_provider/path_provider.dart';
 /// Task 1.2: Specialized Service for metadata probing.
 class MetadataProbeService {
   final DioClientPool _dioPool;
+  bool _disposed = false;
+  final Set<StreamSubscription<dynamic>> _activeSubs = {};
+  final Set<Timer> _activeTimers = {};
 
   MetadataProbeService(this._dioPool);
+
+  bool get isDisposed => _disposed;
+
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    for (final sub in _activeSubs) {
+      try {
+        sub.cancel();
+      } catch (_) {}
+    }
+    _activeSubs.clear();
+    for (final timer in _activeTimers) {
+      try {
+        timer.cancel();
+      } catch (_) {}
+    }
+    _activeTimers.clear();
+  }
 
   Future<DownloadMetadata> resolveMetadata({
     required String url,
@@ -92,20 +114,28 @@ class MetadataProbeService {
           // Cancel the in-flight ranged GET instead of ignore() leak.
           if (!getProbeCancel.isCancelled) getProbeCancel.cancel('head_valid');
           // Drain but don't block on GET error.
-          getFuture.catchError((_) => const DownloadMetadata(fileName: '', category: '', fileSize: 0, supportsResume: false));
+          getFuture.catchError((_) => const DownloadMetadata(
+              fileName: '', category: '', fileSize: 0, supportsResume: false));
           return headResult;
         }
         final getResult = await getFuture;
         if (getResult.isValid) return getResult;
         return headResult;
       } catch (_) {
-        final getResult = await getFuture.catchError((_) => const DownloadMetadata(fileName: '', category: '', fileSize: 0, supportsResume: false));
+        final getResult = await getFuture.catchError((_) =>
+            const DownloadMetadata(
+                fileName: '',
+                category: '',
+                fileSize: 0,
+                supportsResume: false));
         if (getResult.isValid) return getResult;
         rethrow;
       }
     } finally {
       if (!getProbeCancel.isCancelled) {
-        try { getProbeCancel.cancel('cleanup'); } catch (_) {}
+        try {
+          getProbeCancel.cancel('cleanup');
+        } catch (_) {}
       }
       _dioPool.releaseClient(headClient);
       _dioPool.releaseClient(getClient);
@@ -361,15 +391,25 @@ class MetadataProbeService {
       }
 
       final completer = Completer<DownloadMetadata>();
-      StreamSubscription? sub;
+      StreamSubscription<dynamic>? sub;
       Timer? metadataTimer;
       bool cleanedUp = false;
 
       void cleanup() {
         if (cleanedUp) return;
         cleanedUp = true;
-        sub?.cancel();
-        metadataTimer?.cancel();
+        if (sub != null) {
+          try {
+            sub.cancel();
+          } catch (_) {}
+          _activeSubs.remove(sub);
+        }
+        if (metadataTimer != null) {
+          try {
+            metadataTimer.cancel();
+          } catch (_) {}
+          _activeTimers.remove(metadataTimer);
+        }
         if (torrentId >= 0) {
           try {
             TorrentService.pauseTorrent(torrentId);
@@ -383,7 +423,7 @@ class MetadataProbeService {
 
       cancelToken?.whenCancel.then((_) {
         cleanup();
-        if (!completer.isCompleted) {
+        if (!_disposed && !completer.isCompleted) {
           completer.completeError(DioException(
             requestOptions: RequestOptions(path: url),
             type: DioExceptionType.cancel,
@@ -392,9 +432,14 @@ class MetadataProbeService {
         }
       });
 
-      sub = TorrentService.torrentUpdates.listen((torrents) {
+      sub = TorrentService.torrentUpdates.listen((torrents) async {
+        if (cleanedUp || _disposed || completer.isCompleted) return;
         final torrent = torrents[torrentId];
         if (torrent != null && torrent.hasMetadata && !completer.isCompleted) {
+          // Yield execution to avoid blocking the frame
+          await Future<void>.delayed(Duration.zero);
+          if (cleanedUp || _disposed || completer.isCompleted) return;
+
           final files = TorrentService.getFiles(torrentId);
           final resolvedFiles = files
               .map((f) => {
@@ -420,28 +465,33 @@ class MetadataProbeService {
           }
 
           cleanup();
-          // FIX: [Audit] Return torrentId: null since torrent was cleanly removed
+          if (!_disposed && !completer.isCompleted) {
+            completer.complete(DownloadMetadata(
+              fileName: torrent.name,
+              category: categoryFromFileName(torrent.name),
+              fileSize: totalSize,
+              supportsResume: true,
+              torrentFiles: resolvedFiles,
+              torrentId: null,
+            ));
+          }
+        }
+      });
+      _activeSubs.add(sub);
+
+      metadataTimer = Timer(const Duration(seconds: 300), () {
+        if (cleanedUp || _disposed || completer.isCompleted) return;
+        cleanup();
+        if (!_disposed && !completer.isCompleted) {
           completer.complete(DownloadMetadata(
-            fileName: torrent.name,
-            category: categoryFromFileName(torrent.name),
-            fileSize: totalSize,
+            fileName: resolvedName,
+            category: 'Archive',
+            fileSize: 0,
             supportsResume: true,
-            torrentFiles: resolvedFiles,
-            torrentId: null,
           ));
         }
       });
-
-      metadataTimer = Timer(const Duration(seconds: 300), () {
-        if (completer.isCompleted) return;
-        cleanup();
-        completer.complete(DownloadMetadata(
-          fileName: resolvedName,
-          category: 'Archive',
-          fileSize: 0,
-          supportsResume: true,
-        ));
-      });
+      _activeTimers.add(metadataTimer);
 
       return completer.future;
     }

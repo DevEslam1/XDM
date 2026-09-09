@@ -58,8 +58,7 @@ class PositionalFileWriter
     int? maxPendingBytes,
     this.diskWriteBatching = true,
   })  : _bufferSize = bufferSize ?? 256 * 1024,
-        maxPendingBytes = maxPendingBytes ?? defaultMaxPendingBytes,
-        _highWater = List<int>.filled(threadCount < 1 ? 1 : threadCount, 0) {
+        maxPendingBytes = maxPendingBytes ?? defaultMaxPendingBytes {
     ServiceRegistry.registerMemoryPressureListener(this);
   }
 
@@ -99,7 +98,6 @@ class PositionalFileWriter
   int _bufferSize;
   int _pendingBytes = 0;
   final Lock _metaLock = Lock();
-  final List<int> _highWater;
 
   @visibleForTesting
   int get pendingBytes => _pendingBytes;
@@ -283,11 +281,6 @@ class PositionalFileWriter
         // waiting for the buffer to reach [_bufferSize].
         if (!diskWriteBatching || buffer.length >= _bufferSize) {
           await _flushBufferInternal(raf, buffer, bufferKey: key);
-        }
-
-        if (threadIndex >= 0 && threadIndex < _highWater.length) {
-          final end = absolutePosition + data.length;
-          if (end > _highWater[threadIndex]) _highWater[threadIndex] = end;
         }
       });
     } on FileSystemException catch (e) {

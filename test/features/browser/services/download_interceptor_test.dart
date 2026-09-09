@@ -131,5 +131,19 @@ void main() {
           await interceptor.startDirectDownload('https://example.com/test.zip');
       expect(res.status, equals(InterceptDownloadStatus.alreadyCompleted));
     });
+
+    test('startDirectDownload succeeds when resolveActiveTab returns null', () async {
+      final interceptorWithoutTab = DownloadInterceptor(
+        resolveDownloadProvider: () => downloadProvider,
+        resolveActiveTab: () => null,
+      );
+
+      final res = await interceptorWithoutTab.startDirectDownload(
+        'https://example.com/direct_file.zip',
+        suggestedName: 'direct_file.zip',
+      );
+      expect(res.status, equals(InterceptDownloadStatus.queued));
+      interceptorWithoutTab.dispose();
+    });
   });
 }

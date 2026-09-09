@@ -13,6 +13,8 @@ class BrowserTabWebViewState {
   PullToRefreshController? pullToRefreshController;
   FindInteractionController? _findInteractionController;
   bool _findControllerInitFailed = false;
+  void Function(int activeMatchOrdinal, int numberOfMatches, bool isDoneCounting)?
+      onFindResultReceived;
 
   final ValueNotifier<double> progressNotifier;
   final ValueNotifier<bool> loadingNotifier;
@@ -35,6 +37,7 @@ class BrowserTabWebViewState {
     this.controller,
     this.pullToRefreshController,
     FindInteractionController? findController,
+    this.onFindResultReceived,
     double initialProgress = 0.0,
     bool initialLoading = false,
     String initialUrl = BrowserTabIdentity.canonicalBlankUrl,
@@ -58,7 +61,15 @@ class BrowserTabWebViewState {
     if (_isDisposed || _findControllerInitFailed) return null;
     if (_findInteractionController == null) {
       try {
-        _findInteractionController = FindInteractionController();
+        _findInteractionController = FindInteractionController(
+          onFindResultReceived: (controller, activeMatchOrdinal, numberOfMatches, isDoneCounting) {
+            onFindResultReceived?.call(
+              activeMatchOrdinal,
+              numberOfMatches,
+              isDoneCounting,
+            );
+          },
+        );
       } catch (e) {
         _findControllerInitFailed = true;
         _log.fine(

@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:dmx/core/services/logging_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:synchronized/synchronized.dart';
 
 enum ProtocolSupport { http11, http2, http3 }
 
@@ -18,41 +19,55 @@ class _HostCaps {
         'at': at.toIso8601String(),
       };
 
-  factory _HostCaps.fromJson(Map<String, dynamic> json) {
-    return _HostCaps(
-      support: ProtocolSupport.values.firstWhere(
-        (e) => e.name == json['support'],
-        orElse: () => ProtocolSupport.http11,
-      ),
-      at: DateTime.parse(json['at'] as String),
-    );
-  }
+  factory _HostCaps.fromJson(Map<String, dynamic> json) => _HostCaps(
+        support: ProtocolSupport.values.byName(json['support'] as String),
+        at: DateTime.parse(json['at'] as String),
+      );
 }
 
 /// Remembers per-host protocol support so we never re-probe unnecessarily.
 class ProtocolCache {
   static const _key = 'protocol_capabilities';
+  static final Lock _lock = Lock();
   static Map<String, _HostCaps>? _cache;
   static const _ttl = Duration(days: 7);
 
   static Future<void> init() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_key);
-    _cache = raw == null ? {} : _decode(raw);
-    _cache!.removeWhere((_, c) => c.isExpired);
+    await _lock.synchronized(() async {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_key);
+      _cache = raw == null ? {} : _decode(raw);
+      _cache!.removeWhere((_, c) => c.isExpired);
+    });
   }
 
   static ProtocolSupport? get(String url) {
     final host = Uri.tryParse(url)?.host;
     if (host == null) return null;
     final caps = _cache?[host];
-    if (caps == null || caps.isExpired) return null;
+    if (caps == null || caps.isExpired) {
+      if (caps != null && caps.isExpired) {
+        _cache?.remove(host);
+      }
+      return null;
+    }
     return caps.support;
   }
 
-  static void invalidate(String host) {
-    _cache?.remove(host);
-    _persist();
+  static Future<void> invalidate(String host) async {
+    await _lock.synchronized(() async {
+      _cache?.remove(host);
+      await _persist();
+    });
+  }
+
+  static Future<void> recordFailure(String url) async {
+    final host = Uri.tryParse(url)?.host;
+    if (host == null) return;
+    await _lock.synchronized(() async {
+      _cache?.remove(host);
+      await _persist();
+    });
   }
 
   static const int _maxEntries = 500;
@@ -60,21 +75,24 @@ class ProtocolCache {
   static Future<void> record(String url, ProtocolSupport support) async {
     final host = Uri.tryParse(url)?.host;
     if (host == null) return;
-    _cache ??= {};
-    _cache![host] = _HostCaps(support: support, at: DateTime.now());
 
-    // FIX P1-4: Cap cache to 500 entries, evicting expired then oldest
-    if (_cache!.length > _maxEntries) {
-      _cache!.removeWhere((_, c) => c.isExpired);
+    await _lock.synchronized(() async {
+      _cache ??= {};
+      _cache![host] = _HostCaps(support: support, at: DateTime.now());
+
+      // Cap cache to 500 entries, evicting expired then oldest
       if (_cache!.length > _maxEntries) {
-        final sortedKeys = _cache!.keys.toList()
-          ..sort((a, b) => _cache![a]!.at.compareTo(_cache![b]!.at));
-        for (final k in sortedKeys.take(_cache!.length - _maxEntries)) {
-          _cache!.remove(k);
+        _cache!.removeWhere((_, c) => c.isExpired);
+        if (_cache!.length > _maxEntries) {
+          final sortedKeys = _cache!.keys.toList()
+            ..sort((a, b) => _cache![a]!.at.compareTo(_cache![b]!.at));
+          for (final k in sortedKeys.take(_cache!.length - _maxEntries)) {
+            _cache!.remove(k);
+          }
         }
       }
-    }
-    await _persist();
+      await _persist();
+    });
   }
 
   static Map<String, _HostCaps> _decode(String raw) {

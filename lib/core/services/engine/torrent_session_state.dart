@@ -101,6 +101,22 @@ class TorrentSessionState {
     );
   }
 
+  static bool _computeIsDone({
+    required int totalWanted,
+    required int totalWantedDone,
+    required int piecesTotal,
+    required int piecesHave,
+    required double progress,
+  }) {
+    if (totalWanted > 0) {
+      return totalWantedDone >= totalWanted;
+    }
+    if (piecesTotal > 0) {
+      return piecesHave >= piecesTotal;
+    }
+    return progress >= 0.9999;
+  }
+
   /// Pure event reducer producing the next immutable [TorrentSessionState].
   static TorrentSessionState reduce(
     TorrentSessionState state,
@@ -110,19 +126,36 @@ class TorrentSessionState {
 
     switch (event) {
       case MetadataReceivedEvent():
+        final newWanted =
+            event.totalWanted > 0 ? event.totalWanted : state.totalWanted;
+        final isDone = _computeIsDone(
+          totalWanted: newWanted,
+          totalWantedDone: state.totalWantedDone,
+          piecesTotal: state.piecesTotal,
+          piecesHave: state.piecesHave,
+          progress: state.progress,
+        );
         return state.copyWith(
           name: event.name.isNotEmpty ? event.name : state.name,
           hasMetadata: true,
-          totalWanted:
-              event.totalWanted > 0 ? event.totalWanted : state.totalWanted,
+          totalWanted: newWanted,
           files: event.files,
-          stateLabel: state.isPaused ? 'Paused' : 'Downloading',
+          isFinished: isDone,
+          isSeeding: isDone && !state.isPaused,
+          stateLabel: state.errorMessage != null
+              ? 'Error'
+              : (isDone
+                  ? (state.isPaused ? 'Finished' : 'Seeding')
+                  : (state.isPaused ? 'Paused' : 'Downloading')),
         );
 
       case TorrentPausedAlertEvent():
         return state.copyWith(
           isPaused: true,
-          stateLabel: 'Paused',
+          isSeeding: false,
+          stateLabel: state.errorMessage != null
+              ? 'Error'
+              : (state.isFinished ? 'Finished' : 'Paused'),
           downloadRate: 0,
           uploadRate: 0,
         );
@@ -130,20 +163,38 @@ class TorrentSessionState {
       case TorrentResumedAlertEvent():
         return state.copyWith(
           isPaused: false,
-          stateLabel: state.isFinished ? 'Seeding' : 'Downloading',
+          isSeeding: state.isFinished,
+          stateLabel: state.errorMessage != null
+              ? 'Error'
+              : (state.isFinished ? 'Seeding' : 'Downloading'),
         );
 
       case PieceFinishedEvent():
         final newPiecesHave = event.piecesHave;
         final newPiecesTotal =
             event.piecesTotal > 0 ? event.piecesTotal : state.piecesTotal;
-        final newProgress = state.totalWanted > 0
-            ? (event.totalWantedDone / state.totalWanted).clamp(0.0, 1.0)
+        final effectiveTotalWanted = state.totalWanted;
+        final effectiveWantedDone = event.totalWantedDone;
+
+        final newProgress = effectiveTotalWanted > 0
+            ? (effectiveWantedDone / effectiveTotalWanted).clamp(0.0, 1.0)
             : (newPiecesTotal > 0
                 ? (newPiecesHave / newPiecesTotal).clamp(0.0, 1.0)
                 : state.progress.clamp(0.0, 1.0));
-        final isDone = newProgress >= 0.9999 ||
-            (newPiecesTotal > 0 && newPiecesHave >= newPiecesTotal);
+
+        final isDone = _computeIsDone(
+          totalWanted: effectiveTotalWanted,
+          totalWantedDone: effectiveWantedDone,
+          piecesTotal: newPiecesTotal,
+          piecesHave: newPiecesHave,
+          progress: newProgress,
+        );
+
+        final label = state.errorMessage != null
+            ? 'Error'
+            : (isDone
+                ? (state.isPaused ? 'Finished' : 'Seeding')
+                : (state.isPaused ? 'Paused' : 'Downloading'));
 
         return state.copyWith(
           totalWantedDone: event.totalWantedDone,
@@ -154,9 +205,8 @@ class TorrentSessionState {
               : state.pieceBitfield,
           progress: newProgress,
           isFinished: isDone,
-          stateLabel: isDone
-              ? (state.isPaused ? 'Finished' : 'Seeding')
-              : state.stateLabel,
+          isSeeding: isDone && !state.isPaused,
+          stateLabel: label,
         );
 
       case SaveResumeDataCompletedEvent():
@@ -164,7 +214,7 @@ class TorrentSessionState {
 
       case TrackerReplyEvent():
         return state.copyWith(
-          numPeers: event.numPeers > 0 ? event.numPeers : state.numPeers,
+          numPeers: event.numPeers >= 0 ? event.numPeers : state.numPeers,
         );
 
       case TrackerErrorEvent():
@@ -173,11 +223,15 @@ class TorrentSessionState {
       case FastresumeRejectedEvent():
         return state.copyWith(
           errorMessage: 'Fastresume rejected: ${event.reason}',
+          isPaused: true,
+          isSeeding: false,
+          stateLabel: 'Error',
         );
 
       case TorrentErrorAlertEvent():
         return state.copyWith(
           errorMessage: event.error,
+          isSeeding: false,
           stateLabel: 'Error',
         );
 
@@ -186,32 +240,71 @@ class TorrentSessionState {
         final newWantedDone = event.newTotalWantedDone;
         final newProgress =
             newWanted > 0 ? (newWantedDone / newWanted).clamp(0.0, 1.0) : 1.0;
+        final isDone = _computeIsDone(
+          totalWanted: newWanted,
+          totalWantedDone: newWantedDone,
+          piecesTotal: state.piecesTotal,
+          piecesHave: state.piecesHave,
+          progress: newProgress,
+        );
 
         return state.copyWith(
           filePriorities: event.priorities,
           totalWanted: newWanted,
           totalWantedDone: newWantedDone,
           progress: newProgress,
+          isFinished: isDone,
+          isSeeding: isDone && !state.isPaused,
+          stateLabel: state.errorMessage != null
+              ? 'Error'
+              : (isDone
+                  ? (state.isPaused ? 'Finished' : 'Seeding')
+                  : (state.isPaused ? 'Paused' : 'Downloading')),
         );
 
       case StatusTickEvent():
-        // Stats polling provides coarse rates and counts, while truth for wanted/pieces comes from native telemetry
-        final isDone = event.progress >= 0.999;
+        // Allow authoritative 0-values from native engine
         final piecesHave =
-            event.piecesHave > 0 ? event.piecesHave : state.piecesHave;
+            event.piecesHave >= 0 ? event.piecesHave : state.piecesHave;
         final piecesTotal =
-            event.piecesTotal > 0 ? event.piecesTotal : state.piecesTotal;
+            event.piecesTotal >= 0 ? event.piecesTotal : state.piecesTotal;
+        final totalWanted =
+            event.totalWanted >= 0 ? event.totalWanted : state.totalWanted;
+        final totalWantedDone = event.totalWantedDone >= 0
+            ? event.totalWantedDone
+            : state.totalWantedDone;
+
+        final isDone = _computeIsDone(
+          totalWanted: totalWanted,
+          totalWantedDone: totalWantedDone,
+          piecesTotal: piecesTotal,
+          piecesHave: piecesHave,
+          progress: event.progress,
+        );
+
+        final isPaused =
+            event.stateLabel.toLowerCase().contains('paused') || state.isPaused;
+        final isSeeding = isDone && !isPaused;
+        final label = state.errorMessage != null
+            ? 'Error'
+            : (isDone
+                ? (isPaused ? 'Finished' : 'Seeding')
+                : (isPaused
+                    ? 'Paused'
+                    : (event.stateLabel.isNotEmpty
+                        ? event.stateLabel
+                        : 'Downloading')));
 
         return state.copyWith(
           progress: event.progress,
           downloadRate: event.downloadRate,
           uploadRate: event.uploadRate,
           totalDone: event.totalDone,
-          totalWanted: event.totalWanted,
-          totalWantedDone: event.totalWantedDone,
-          numPeers: event.numPeers,
-          numSeeds: event.numSeeds,
-          stateLabel: event.stateLabel,
+          totalWanted: totalWanted,
+          totalWantedDone: totalWantedDone,
+          numPeers: event.numPeers >= 0 ? event.numPeers : state.numPeers,
+          numSeeds: event.numSeeds >= 0 ? event.numSeeds : state.numSeeds,
+          stateLabel: label,
           fileProgress: event.fileProgress.isNotEmpty
               ? event.fileProgress
               : state.fileProgress,
@@ -224,7 +317,8 @@ class TorrentSessionState {
           piecesHave: piecesHave,
           piecesTotal: piecesTotal,
           isFinished: isDone,
-          isPaused: event.stateLabel.toLowerCase().contains('paused'),
+          isPaused: isPaused,
+          isSeeding: isSeeding,
         );
     }
   }

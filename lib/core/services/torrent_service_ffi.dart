@@ -131,6 +131,15 @@ class TorrentService {
 
   static Future<void> forceStopTorrent(int id) async {
     await _torrentLock.synchronized(() async {
+      try {
+        await _saveResumeDataAfterPause(id);
+      } catch (e, st) {
+        _log.warning(
+          'forceStopTorrent: save resume data failed for id=$id',
+          e,
+          st,
+        );
+      }
       // FIX(P2.6.10): Attempt native pause BEFORE cleaning Dart-side state so
       // the native handle is properly stopped. If it fails, we still clean up
       // Dart-side (the caller expects it), but we log the failure so operators
@@ -1057,16 +1066,25 @@ class TorrentService {
     try {
       final source = _torrentSources[id];
       if (source != null) {
-        final resumeBytes = await _native.saveResumeData(id);
-        if (resumeBytes != null && resumeBytes.isNotEmpty) {
-          final uint8 = Uint8List.fromList(resumeBytes);
-          await TorrentResumeStore.saveAndWait(
-            torrentId: id,
-            sourceUrl: source,
-            fetchResumeData: () => uint8,
-            files: torrentFiles,
-          );
-        }
+        Uint8List? uint8;
+        try {
+          final resumeBytes = await _native.saveResumeData(id);
+          if (resumeBytes != null && resumeBytes.isNotEmpty) {
+            uint8 = Uint8List.fromList(resumeBytes);
+          }
+        } catch (_) {}
+
+        final stats = _latestStats[id];
+        await TorrentResumeStore.saveAndWait(
+          torrentId: id,
+          sourceUrl: source,
+          fetchResumeData: () => uint8,
+          files: torrentFiles,
+          pieceBitfield: stats?.pieces,
+          piecesTotal: stats?.piecesTotal,
+          piecesDone: stats?.piecesHave,
+          degradedFallback: uint8 == null || uint8.isEmpty,
+        );
       }
     } catch (e) {
       _log.warning('saveResumeData failed for id $id: $e');

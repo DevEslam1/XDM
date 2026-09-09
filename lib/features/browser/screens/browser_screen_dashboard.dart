@@ -25,15 +25,7 @@ mixin _DashboardMixin on _BrowserScreenStateBase {
             onSearchTap: () {
               _focusNode.requestFocus();
             },
-            onBookmarksTap: () async {
-              final cleared = await Navigator.push<bool>(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const BookmarkManagerScreen(),
-                ),
-              );
-              if (cleared == true && mounted) setState(() {});
-            },
+            onBookmarksTap: _openBookmarks,
             onHistoryTap: () {
               _openHistory();
             },
@@ -198,15 +190,7 @@ mixin _DashboardMixin on _BrowserScreenStateBase {
             isDark: isDark,
             isRtl: isRtl,
             settings: settings,
-            onOpenBookmarks: () async {
-              final cleared = await Navigator.push<bool>(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const BookmarkManagerScreen(),
-                ),
-              );
-              if (cleared == true && mounted) setState(() {});
-            },
+            onOpenBookmarks: _openBookmarks,
             onOpenHistory: _openHistory,
             onOpenScripts: () {
               Navigator.push(

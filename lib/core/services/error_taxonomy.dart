@@ -141,11 +141,15 @@ class ErrorTaxonomy {
 
     if (error is PositionalFileWriterException) {
       final msg = error.message.toLowerCase();
+      // FIX(false-storage): only genuine space-exhaustion markers count.
+      // Bare 'space'/'disk' substrings matched file names/paths ("SpaceX",
+      // "disk image") and misreported unrelated IO failures as no-storage.
       final isSpace = msg.contains('enospc') ||
-          msg.contains('space') ||
-          msg.contains('disk');
+          msg.contains('no space left') ||
+          msg.contains('not enough space') ||
+          msg.contains('disk full');
       return ErrorClassification(
-        family: ErrorFamily.disk,
+        family: isSpace ? ErrorFamily.disk : ErrorFamily.unknown,
         message: isSpace
             ? 'Not enough storage space'
             : 'Disk write error. Check storage permissions and free space.',
@@ -405,8 +409,10 @@ class ErrorTaxonomy {
 
     if (error is FileSystemException) {
       final isFull = _isDiskFull(error);
+      // FIX(false-storage): only a real disk-full condition is a storage
+      // error; permission/IO failures must not surface as "no storage".
       return ErrorClassification(
-        family: ErrorFamily.disk,
+        family: isFull ? ErrorFamily.disk : ErrorFamily.unknown,
         message: isFull ? 'Storage full' : 'File system error',
         severe: true,
         recoveryAction: RecoveryAction.showSettings,
@@ -448,10 +454,16 @@ class ErrorTaxonomy {
       );
     }
 
-    if (lowerRep.contains('disk') ||
-        lowerRep.contains('storage') ||
-        lowerRep.contains('no space') ||
-        lowerRep.contains('space insufficient')) {
+    // FIX(false-storage): bare 'disk'/'storage' matched Android paths
+    // ('/storage/emulated/0/...') inside unrelated errors (e.g. permission
+    // denied) and misreported them as "Storage full".
+    if (lowerRep.contains('no space') ||
+        lowerRep.contains('not enough space') ||
+        lowerRep.contains('space insufficient') ||
+        lowerRep.contains('insufficient storage') ||
+        lowerRep.contains('storage full') ||
+        lowerRep.contains('disk full') ||
+        lowerRep.contains('enospc')) {
       return const ErrorClassification(
         family: ErrorFamily.disk,
         message: 'Storage full',

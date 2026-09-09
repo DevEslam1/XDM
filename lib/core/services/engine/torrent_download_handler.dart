@@ -1002,48 +1002,58 @@ class TorrentDownloadHandler {
             id = _torrentService.addTorrentFile(filePath, saveDir,
                 sourceKey: url, resumeData: addTimeResume);
           } else if (url.startsWith('http://') || url.startsWith('https://')) {
-            final tempTorrentPath = p.join(
-              Directory.systemTemp.path,
-              'temp_${taskId}_${DateTime.now().microsecondsSinceEpoch}.torrent',
-            );
-            final tempTorrentFile = File(tempTorrentPath);
-            final torrentDio = clientBuilder(url);
-            try {
-              // FIX(C2-a): Pass cancelToken and options into HTTP download
-              await torrentDio.download(
-                url,
-                tempTorrentPath,
-                cancelToken: cancelToken,
-                options: Options(receiveTimeout: const Duration(seconds: 30)),
-              );
-              // FIX(C2-b): Validate payload is bencoded torrent before handing to libtorrent
-              if (!await tempTorrentFile.exists()) {
-                throw TorrentSourceException(
-                  'Downloaded torrent file does not exist',
-                  url: url,
-                );
-              }
-              final bytes = await tempTorrentFile.readAsBytes();
-              if (bytes.length < 10 ||
-                  bytes.length > 10 * 1024 * 1024 ||
-                  bytes[0] != _bencodeDictPrefix) {
-                throw TorrentSourceException(
-                  'Downloaded payload is not a valid bencoded .torrent file (size: ${bytes.length} bytes)',
-                  url: url,
-                );
-              }
-              filePath = tempTorrentPath;
-              // FIX(C4): Use _torrentService.addTorrentFile
+            final cachedFile = await TorrentResumeStore.getTorrentFile(url);
+            if (cachedFile != null && await cachedFile.exists()) {
+              filePath = cachedFile.path;
               id = _torrentService.addTorrentFile(filePath, saveDir,
                   sourceKey: url, resumeData: addTimeResume);
-            } finally {
-              clientReleaser(torrentDio);
+            } else {
+              final tempTorrentPath = p.join(
+                Directory.systemTemp.path,
+                'temp_${taskId}_${DateTime.now().microsecondsSinceEpoch}.torrent',
+              );
+              final tempTorrentFile = File(tempTorrentPath);
+              final torrentDio = clientBuilder(url);
               try {
-                if (await tempTorrentFile.exists()) {
-                  await tempTorrentFile.delete();
+                // FIX(C2-a): Pass cancelToken and options into HTTP download
+                await torrentDio.download(
+                  url,
+                  tempTorrentPath,
+                  cancelToken: cancelToken,
+                  options: Options(receiveTimeout: const Duration(seconds: 30)),
+                );
+                // FIX(C2-b): Validate payload is bencoded torrent before handing to libtorrent
+                if (!await tempTorrentFile.exists()) {
+                  throw TorrentSourceException(
+                    'Downloaded torrent file does not exist',
+                    url: url,
+                  );
                 }
-              } catch (e, st) {
-                _log.warning('Temp torrent file deletion failed: $e', e, st);
+                final bytes = await tempTorrentFile.readAsBytes();
+                if (bytes.length < 10 ||
+                    bytes.length > 10 * 1024 * 1024 ||
+                    bytes[0] != _bencodeDictPrefix) {
+                  throw TorrentSourceException(
+                    'Downloaded payload is not a valid bencoded .torrent file (size: ${bytes.length} bytes)',
+                    url: url,
+                  );
+                }
+                // Persist downloaded .torrent bytes into TorrentResumeStore so resume/restart can access it
+                final persisted =
+                    await TorrentResumeStore.saveTorrentFile(url, bytes);
+                filePath = persisted.path;
+                // FIX(C4): Use _torrentService.addTorrentFile
+                id = _torrentService.addTorrentFile(filePath, saveDir,
+                    sourceKey: url, resumeData: addTimeResume);
+              } finally {
+                clientReleaser(torrentDio);
+                try {
+                  if (await tempTorrentFile.exists()) {
+                    await tempTorrentFile.delete();
+                  }
+                } catch (e, st) {
+                  _log.warning('Temp torrent file deletion failed: $e', e, st);
+                }
               }
             }
           } else if (File(url).existsSync()) {
@@ -1882,9 +1892,15 @@ class TorrentDownloadHandler {
       if (event.category.toLowerCase().contains('error')) {
         final msg = event.message.toLowerCase();
         FailureCategory category = FailureCategory.torrentError;
-        if (msg.contains('disk') ||
-            msg.contains('write') ||
-            msg.contains('no space')) {
+        // FIX(false-storage): bare 'disk'/'write' matched unrelated alerts
+        // (e.g. "failed to write handshake") and misreported them as
+        // disk-full. Only genuine disk-full indicators qualify now.
+        if (msg.contains('no space') ||
+            msg.contains('not enough space') ||
+            msg.contains('disk full') ||
+            msg.contains('disk write error') ||
+            msg.contains('enospc') ||
+            msg.contains('disk quota')) {
           category = FailureCategory.diskFull;
         } else if (msg.contains('tracker')) {
           category = FailureCategory.torrentError;

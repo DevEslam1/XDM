@@ -2202,7 +2202,7 @@ class _BandwidthPanelState extends State<_BandwidthPanel> with HapticHelper {
                         const SizedBox(height: 4),
                         Text(
                           task.seedingLimited
-                              ? '${task.seedingLimitKbps} kbps'
+                              ? '${task.seedingLimitKbps} KB/s'
                               : (isRtl ? 'غير محدود' : 'UNLIMITED'),
                           style: AppTheme.dataStyle(
                             isDark: isDark,

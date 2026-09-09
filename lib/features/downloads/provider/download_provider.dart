@@ -4,8 +4,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:path/path.dart' as p;
 import 'package:synchronized/synchronized.dart';
 import 'package:uuid/uuid.dart';
@@ -543,6 +543,9 @@ class DownloadProvider extends ChangeNotifier
       if (autoResume) {
         _autoResumeIncomplete();
       }
+      if (_settingsProvider.globalTorrentSeeding) {
+        _autoResumeSeeding();
+      }
       _startTorrentPollingTimer();
     } finally {
       _isLoadingTasks = false;
@@ -572,6 +575,19 @@ class DownloadProvider extends ChangeNotifier
         } else if (_settingsProvider.autoStart) {
           resumeTask(task.id);
         }
+      }
+    }
+  }
+
+  void _autoResumeSeeding() {
+    for (final task in _tasks) {
+      if (task.isTorrent &&
+          task.status == DownloadStatus.completed &&
+          task.seedingEnabled &&
+          !task.isCancelled &&
+          !task.pausedByUser &&
+          task.pauseReason != PauseReason.user) {
+        unawaited(startSeedingTorrent(task));
       }
     }
   }
@@ -718,6 +734,7 @@ class DownloadProvider extends ChangeNotifier
           final q = _speedHistories.putIfAbsent(task.id, () => Queue<double>());
           q.add(task.speed);
           if (q.length > 60) q.removeFirst();
+          tasksModified = true;
         }
 
         // 2. Poll torrent status and file progress
@@ -1656,6 +1673,30 @@ class DownloadProvider extends ChangeNotifier
   @override
   void providerStopWidgetTimer() {
     _stopTorrentPollingTimer();
+  }
+
+  @override
+  void updateProgressTask(DownloadTask updated) {
+    final idx = _tasks.indexWhere((t) => t.id == updated.id);
+    if (idx != -1) {
+      _tasks[idx] = updated;
+    }
+    _taskIndex[updated.id] = updated;
+    filteredTasksDirty = true;
+  }
+
+  @override
+  void safeNotify() {
+    if (_disposed) return;
+    if (DownloadEngine.isInBackground && PowerMonitor.screenOff) return;
+    if (WidgetsBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_disposed) notifyListeners();
+      });
+    } else {
+      notifyListeners();
+    }
   }
 
   @override

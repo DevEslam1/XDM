@@ -196,6 +196,7 @@ class _BrowserTabViewState extends State<_BrowserTabView> {
                           incognito: tab.isIncognito,
                           supportMultipleWindows: true,
                           javaScriptCanOpenWindowsAutomatically: true,
+                          isFindInteractionEnabled: true,
                         ),
                         onReceivedServerTrustAuthRequest:
                             (controller, challenge) async {

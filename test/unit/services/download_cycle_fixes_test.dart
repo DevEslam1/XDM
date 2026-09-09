@@ -355,6 +355,10 @@ class _MergeRetryTestHost implements DownloadOrchestratorHost {
   @override
   void providerNotifyListeners() {}
   @override
+  void updateProgressTask(DownloadTask updated) {
+    taskInstance = updated;
+  }
+  @override
   void pushProgressTick(String taskId, double progress, double speed) {}
   @override
   List<Map<String, dynamic>> markTorrentFilesCompleted(
