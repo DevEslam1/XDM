@@ -261,13 +261,17 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
         final showSideNav = shouldShowSideNavigation(context);
 
         return Selector<DownloadProvider,
-            ({int activeTabIndex, bool isNavbarVisible})>(
+            ({int activeTabIndex, bool isNavbarVisible, bool isSelectionMode})>(
           selector: (_, p) => (
             activeTabIndex: p.activeTabIndex,
             isNavbarVisible: p.isNavbarVisible,
+            isSelectionMode: p.isSelectionMode,
           ),
           builder: (context, navState, _) {
             final currentIndex = navState.activeTabIndex;
+            final isBarShowing = navState.isNavbarVisible &&
+                currentIndex != 1 &&
+                !navState.isSelectionMode;
 
             final bodyWithShortcuts = CallbackShortcuts(
               bindings: {
@@ -348,7 +352,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
                         bottom: 0,
                         child: RepaintBoundary(
                           child: IgnorePointer(
-                            ignoring: false,
+                            ignoring: !isBarShowing,
                             child: screenType == ScreenType.phone
                                 ? _PhoneBottomNavBar(
                                     settingsTuple: settingsTuple,
@@ -463,7 +467,8 @@ class _PhoneBottomNavBar extends StatelessWidget {
     bool classicUi,
     bool vibration
   }) settingsTuple;
-  final ({int activeTabIndex, bool isNavbarVisible}) navState;
+  final ({int activeTabIndex, bool isNavbarVisible, bool isSelectionMode})
+      navState;
   final bool isDark;
   final bool isRtl;
 
@@ -482,11 +487,12 @@ class _PhoneBottomNavBar extends StatelessWidget {
             ? AppTheme.amoledBackground
             : AppTheme.surface)
         : AppTheme.lightSurface;
+    final isShowing = navState.isNavbarVisible &&
+        currentIndex != 1 &&
+        !navState.isSelectionMode;
 
     return AnimatedSlide(
-      offset: (navState.isNavbarVisible && currentIndex != 1)
-          ? Offset.zero
-          : const Offset(0, 1.8),
+      offset: isShowing ? Offset.zero : const Offset(0, 1.8),
       duration: AppTheme.motionBase,
       curve: AppTheme.motionCurve,
       child: RepaintBoundary(
@@ -594,7 +600,8 @@ class _TabletFloatingNavBar extends StatelessWidget {
     bool classicUi,
     bool vibration
   }) settingsTuple;
-  final ({int activeTabIndex, bool isNavbarVisible}) navState;
+  final ({int activeTabIndex, bool isNavbarVisible, bool isSelectionMode})
+      navState;
   final bool isDark;
   final bool isRtl;
 
@@ -613,11 +620,12 @@ class _TabletFloatingNavBar extends StatelessWidget {
             ? AppTheme.amoledBackground
             : AppTheme.surface)
         : AppTheme.lightSurface;
+    final isShowing = navState.isNavbarVisible &&
+        currentIndex != 1 &&
+        !navState.isSelectionMode;
 
     return AnimatedSlide(
-      offset: (navState.isNavbarVisible && currentIndex != 1)
-          ? Offset.zero
-          : const Offset(0, 1.8),
+      offset: isShowing ? Offset.zero : const Offset(0, 1.8),
       duration: AppTheme.motionSlow,
       curve: AppTheme.motionCurve,
       child: RepaintBoundary(
@@ -1073,7 +1081,8 @@ class _NavItem extends StatelessWidget {
                               )
                             : null,
                       ),
-                      child: Icon(displayIcon, color: color, size: 22),
+                      child: Icon(displayIcon,
+                          color: color, size: isTablet(context) ? 24 : 22),
                     ),
                     // PERF: Badge is scoped to its own Selector so only the
                     // badge rebuilds on download-count changes, not the whole
@@ -1110,7 +1119,7 @@ class _NavItem extends StatelessWidget {
                                 '$count',
                                 style: TextStyle(
                                   color: isDark ? Colors.black : Colors.white,
-                                  fontSize: 9,
+                                  fontSize: isTablet(context) ? 10 : 9,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -1128,7 +1137,7 @@ class _NavItem extends StatelessWidget {
                     maxLines: 1,
                     style: Theme.of(context).textTheme.labelMedium?.copyWith(
                           color: color,
-                          fontSize: 10.0,
+                          fontSize: isTablet(context) ? 11.5 : 10.0,
                           fontWeight:
                               isSelected ? FontWeight.bold : FontWeight.w500,
                           letterSpacing: 0.3,

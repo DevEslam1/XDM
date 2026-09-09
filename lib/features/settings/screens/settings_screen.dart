@@ -988,7 +988,12 @@ class _SettingsScreenState extends State<SettingsScreen>
 
     return ListView.builder(
       physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.all(16.0),
+      padding: EdgeInsets.only(
+        left: 16.0,
+        right: 16.0,
+        top: 16.0,
+        bottom: isTablet(context) ? 108.0 : 88.0,
+      ),
       itemCount: results.length,
       itemBuilder: (ctx, i) {
         final entry = results[i];

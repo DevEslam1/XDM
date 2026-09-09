@@ -307,6 +307,8 @@ mixin _TabsMixin on _BrowserScreenStateBase {
     _mediaScanFailed.remove(tabId);
     _loadingTimeoutTimers[tabId]?.cancel();
     _loadingTimeoutTimers.remove(tabId);
+    _stallCheckTimers[tabId]?.cancel();
+    _stallCheckTimers.remove(tabId);
     final adNotifier = _blockedAdsNotifiers.remove(tabId);
     _blockedAdsPerTab.remove(tabId);
     _blockedPopupsPerTab.remove(tabId);

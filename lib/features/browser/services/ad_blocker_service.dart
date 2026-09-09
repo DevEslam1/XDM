@@ -9,6 +9,7 @@ import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'adblock_filter_updater.dart';
+import 'browser_detector.dart';
 import 'custom_adblock_store.dart';
 
 /// Centralised ad-blocking engine for the XDM browser.
@@ -130,6 +131,53 @@ class AdBlockerService {
       final parent = parts.sublist(i).join('.');
       if (allowList.contains(parent)) return true;
     }
+    return false;
+  }
+
+  /// Returns true if [url] points to a downloadable file, magnet link,
+  /// or legitimate download endpoint. Such URLs should never be blocked by
+  /// ad-block rules.
+  static bool isLikelyDownloadUrl(String url) {
+    if (url.isEmpty) return false;
+    final lower = url.toLowerCase();
+    if (lower.startsWith('magnet:')) return true;
+    if (BrowserDetector.isAutoDownloadable(url)) return true;
+
+    final (_, path) = extractHostAndPath(url);
+    final lowerPath = path.toLowerCase();
+
+    const downloadExtensions = [
+      '.apk', '.zip', '.rar', '.7z', '.tar', '.gz', '.bz2', '.xz',
+      '.exe', '.msi', '.dmg', '.pkg', '.deb', '.rpm', '.iso',
+      '.torrent', '.pdf', '.doc', '.docx', '.xls', '.xlsx',
+      '.mp3', '.m4a', '.flac', '.wav', '.ogg',
+      '.mp4', '.mkv', '.avi', '.mov', '.webm',
+    ];
+    for (final ext in downloadExtensions) {
+      if (lowerPath.endsWith(ext) ||
+          lower.contains('$ext?') ||
+          lower.contains('$ext&') ||
+          lower.contains('$ext#') ||
+          lower.contains('file=$ext') ||
+          (lower.contains('filename=') && lower.contains(ext))) {
+        return true;
+      }
+    }
+
+    if (lowerPath.contains('/download') ||
+        lowerPath.contains('/downloads') ||
+        lowerPath.contains('/dl/') ||
+        lowerPath.contains('/getfile') ||
+        lowerPath.contains('/files/') ||
+        lower.contains('download_file') ||
+        lower.contains('?download') ||
+        lower.contains('&download') ||
+        lower.contains('action=download') ||
+        lower.contains('dl=1') ||
+        lower.contains('dl=true')) {
+      return true;
+    }
+
     return false;
   }
 
@@ -262,15 +310,47 @@ class AdBlockerService {
   window.__xdmDynamicAdBlock = true;
   
   const adSelectors = [
-    '.adsbygoogle', '[id^="ad-"]', '[class*="ad-slot"]',
-    '[class*="sponsored"]', '[data-ad]', 'ins.adsbygoogle',
+    '.adsbygoogle', '[class*="ad-slot"]',
+    '[class*="sponsored"]', 'ins.adsbygoogle',
     '[id*="taboola"]', '[id*="outbrain"]', 'iframe[src*="doubleclick"]'
   ];
+
+  function isDownloadElement(el) {
+    if (!el || el.nodeType !== 1) return false;
+    try {
+      var sel = 'a[download], a[href*="download" i], a[href*="/dl/" i], a[href*="/file/" i], ' +
+                'a[href*="/files/" i], a[href*="getfile" i], a[href*="torrent" i], a[href^="magnet:" i], ' +
+                '[class*="download" i], [id*="download" i], [class*="btn-download" i], ' +
+                '[class*="download-btn" i], [class*="download-button" i], [class*="dl-btn" i], ' +
+                '[class*="dl-button" i], [class*="btn-dl" i], [id*="dl-btn" i], [id*="btn-download" i], ' +
+                '[id*="download-btn" i], [data-download], [data-dl]';
+      if (el.matches && el.matches(sel)) return true;
+      var text = (el.innerText || el.textContent || '').trim().toLowerCase();
+      if (text === 'download' || text === 'direct download' || text === 'download now' ||
+          text === 'تحميل' || text === 'تنزيل' || text === 'télécharger' || text === 'descargar') {
+        return true;
+      }
+      if (el.querySelector && el.querySelector(sel)) return true;
+      var fileSel = 'a[href*=".apk" i], a[href*=".zip" i], a[href*=".rar" i], a[href*=".exe" i], ' +
+                    'a[href*=".7z" i], a[href*=".tar" i], a[href*=".pdf" i], a[href*=".torrent" i]';
+      if (el.matches && el.matches(fileSel)) return true;
+      if (el.querySelector && el.querySelector(fileSel)) return true;
+    } catch(e) {}
+    return false;
+  }
   
   function removeAds(root) {
+    if (!root) return;
     adSelectors.forEach(sel => {
       try {
         root.querySelectorAll(sel).forEach(el => {
+          if (isDownloadElement(el)) return;
+          // Bait elements like adsbygoogle should not be removed from DOM
+          // to prevent triggering site anti-adblock detection that hides download buttons
+          if (el.classList.contains('adsbygoogle') || el.tagName.toLowerCase() === 'ins') {
+            el.style.setProperty('display', 'none', 'important');
+            return;
+          }
           el.remove();
         });
       } catch(e) {}
@@ -504,6 +584,38 @@ class AdBlockerService {
     'zedo.com',
   };
 
+  /// Returns the registrable base domain (e.g., example.com for sub.m.example.com).
+  static String getRegistrableDomain(String host) {
+    if (host.isEmpty) return '';
+    final lower = host.toLowerCase();
+    final parts = lower.split('.');
+    if (parts.length <= 2) return lower;
+
+    const twoPartTlds = {
+      'co.uk', 'com.au', 'co.nz', 'co.za', 'com.br', 'co.jp', 'com.tw',
+      'com.mx', 'com.tr', 'co.in', 'net.au', 'org.uk', 'gov.uk', 'ac.uk',
+    };
+    final lastTwo = '${parts[parts.length - 2]}.${parts.last}';
+    if (twoPartTlds.contains(lastTwo) && parts.length >= 3) {
+      return '${parts[parts.length - 3]}.$lastTwo';
+    }
+
+    return '${parts[parts.length - 2]}.${parts.last}';
+  }
+
+  /// Returns true if two hosts share the same registrable domain / site.
+  static bool isSameSite(String hostA, String hostB) {
+    if (hostA.isEmpty || hostB.isEmpty) return false;
+    final a = hostA.toLowerCase();
+    final b = hostB.toLowerCase();
+    if (a == b) return true;
+    if (a.endsWith('.$b') || b.endsWith('.$a')) return true;
+
+    final regA = getRegistrableDomain(a);
+    final regB = getRegistrableDomain(b);
+    return regA.isNotEmpty && regA == regB;
+  }
+
   /// Returns true if [url] should be blocked by the ad blocker.
   bool shouldBlockUrl(String url) {
     if (!_enabled || url.isEmpty) return false;
@@ -523,16 +635,18 @@ class AdBlockerService {
         return false;
       }
 
-      // FIX(P7): Match URL path patterns (wildcard regexes + trie) using the
-      // filter updater, then perform a single Set.contains lookup over the
-      // merged blocked-domain set (50k+ domains, O(1) per lookup) plus a
-      // parent-domain walk (O(depth), typically < 5) instead of three separate
-      // source-specific lookups.
-      if (AdBlockFilterUpdater().matchesUrlPath(path)) {
+      // Never block legitimate download URLs or downloadable files
+      if (isLikelyDownloadUrl(url)) {
+        return false;
+      }
+
+      // 1. Dedicated ad networks are always blocked (O(1))
+      if (_adHostnames.contains(host)) {
         _recordBlocked(host);
         return true;
       }
 
+      // 2. Merged blocked domains (50k+ domains) - O(1) set lookup + parent domain walk
       if (_mergedBlockedDomains.contains(host)) {
         _recordBlocked(host);
         return true;
@@ -544,6 +658,12 @@ class AdBlockerService {
           _recordBlocked(host);
           return true;
         }
+      }
+
+      // 3. Path patterns evaluated LAST, only after domain checks passed
+      if (AdBlockFilterUpdater().matchesUrlPath(path)) {
+        _recordBlocked(host);
+        return true;
       }
     } catch (e, st) {
       LoggingService.logger('AdBlockerService')
@@ -709,8 +829,53 @@ $selectorBlock {
   display: none !important;
 }
 $customCss
+$downloadProtectionCss
 ''';
   }
+
+  /// High-priority CSS protection rules to ensure legitimate download buttons
+  /// and links are NEVER hidden by generic ad-blocking rules or cosmetic filters.
+  static const String downloadProtectionCss = '''
+:is(
+  a[download],
+  a[href*="download" i],
+  a[href*="/dl/" i],
+  a[href*="/file/" i],
+  a[href*="/files/" i],
+  a[href*="getfile" i],
+  a[href*="torrent" i],
+  a[href^="magnet:" i],
+  a[href*=".apk" i],
+  a[href*=".zip" i],
+  a[href*=".rar" i],
+  a[href*=".exe" i],
+  a[href*=".7z" i],
+  a[href*=".tar" i],
+  a[href*=".gz" i],
+  a[href*=".iso" i],
+  a[href*=".dmg" i],
+  a[href*=".pdf" i],
+  button[class*="download" i],
+  button[id*="download" i],
+  [class*="btn-download" i],
+  [class*="download-btn" i],
+  [class*="download-button" i],
+  [class*="download-link" i],
+  [class*="dl-btn" i],
+  [class*="dl-button" i],
+  [class*="btn-dl" i],
+  [id*="dl-btn" i],
+  [id*="btn-download" i],
+  [id*="download-btn" i],
+  [data-download],
+  [data-dl]
+) {
+  display: revert !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+''';
 
   // ─────────────────────────────────────────────────────────────────────
   // FIX #3: earlyJs — no longer globally overrides window.open or
@@ -1363,6 +1528,10 @@ $customCss
   static const String youtubeEarlyJs = '''
 (function() {
   if (window.__xdmYtEarly) return;
+  var loc = window.location ? (window.location.hostname || '') : '';
+  if (loc.indexOf('youtube.com') === -1 && loc.indexOf('youtu.be') === -1) {
+    return;
+  }
   window.__xdmYtEarly = true;
 
   // Stealth bait elements to fool client-side adblock detection
@@ -1461,16 +1630,26 @@ $customCss
         if (lower.contains('download') ||
             lower.contains('apk') ||
             lower.contains('file-input') ||
-            lower.contains('upload')) {
+            lower.contains('upload') ||
+            lower.contains('getfile') ||
+            lower.contains('get-file') ||
+            lower.contains('get-link') ||
+            lower.contains('direct-link') ||
+            lower.contains('dl-') ||
+            lower.contains('dl_') ||
+            lower.contains('btn-dl') ||
+            lower.contains('torrent') ||
+            lower.contains('magnet') ||
+            lower.contains('media-download')) {
           return false;
         }
         return true;
       }).take(500); // Fix #12: Increased from 200 to 500.
 
-      if (safeSelectors.isEmpty) return base;
+      if (safeSelectors.isEmpty) return '$base\n$downloadProtectionCss\n';
       final cappedSelectors = safeSelectors.join(',\n');
       // Fix #13: Use display:none (consistent with _buildCssRules).
-      return '$base\n$cappedSelectors {\n  display: none !important;\n}\n';
+      return '$base\n$cappedSelectors {\n  display: none !important;\n}\n$downloadProtectionCss\n';
     } catch (e, st) {
       LoggingService.logger('AdBlockerService')
           .warning('Operation failed with fallback', e, st);

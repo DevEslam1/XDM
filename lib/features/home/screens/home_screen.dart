@@ -1047,20 +1047,27 @@ class _HomeScreenState extends State<HomeScreen>
     final screenType = getScreenType(context);
     final isNavbarVisible =
         context.select<DownloadProvider, bool>((p) => p.isNavbarVisible);
+    final showSideNav = shouldShowSideNavigation(context);
     final safeAreaBottom = MediaQuery.paddingOf(context).bottom;
     final double bottomPadding;
-    switch (screenType) {
-      case ScreenType.phone:
-        bottomPadding =
-            isNavbarVisible ? (88.0 + safeAreaBottom) : (16.0 + safeAreaBottom);
-        break;
-      case ScreenType.tablet:
-        bottomPadding =
-            isNavbarVisible ? (96.0 + safeAreaBottom) : (16.0 + safeAreaBottom);
-        break;
-      case ScreenType.desktop:
-        bottomPadding = 16.0 + safeAreaBottom;
-        break;
+    if (showSideNav) {
+      bottomPadding = 16.0 + safeAreaBottom;
+    } else {
+      switch (screenType) {
+        case ScreenType.phone:
+          bottomPadding = isNavbarVisible
+              ? (88.0 + safeAreaBottom)
+              : (16.0 + safeAreaBottom);
+          break;
+        case ScreenType.tablet:
+          bottomPadding = isNavbarVisible
+              ? (108.0 + safeAreaBottom)
+              : (16.0 + safeAreaBottom);
+          break;
+        case ScreenType.desktop:
+          bottomPadding = 16.0 + safeAreaBottom;
+          break;
+      }
     }
     return AnimatedPadding(
       padding: EdgeInsets.only(bottom: bottomPadding),
@@ -1683,7 +1690,7 @@ class _DownloadTaskList extends StatelessWidget {
                 padding: EdgeInsets.only(
                   left: screenPadding(context).left,
                   right: screenPadding(context).left,
-                  bottom: 84.0,
+                  bottom: isTablet(context) ? 108.0 : 88.0,
                 ),
                 physics: const AlwaysScrollableScrollPhysics(
                   parent: BouncingScrollPhysics(),
@@ -1778,8 +1785,9 @@ class _DownloadTaskList extends StatelessWidget {
                     : (renderItems[i].task?.id ?? '')): i,
             };
 
-            final isMultiColumnView =
-                MediaQuery.sizeOf(context).width >= 600 || isLandscape(context);
+            final isMultiColumnView = isMultiColumnLayout(context);
+            final bottomPadding = isTablet(context) ? 108.0 : 88.0;
+
             if (isMultiColumnView) {
               contentWidget = KeyedSubtree(
                 key: const ValueKey('grid'),
@@ -1790,14 +1798,14 @@ class _DownloadTaskList extends StatelessWidget {
                     left: screenPadding(context).left,
                     right: screenPadding(context).left,
                     top: 4,
-                    bottom: 84.0,
+                    bottom: bottomPadding,
                   ),
                   physics: const AlwaysScrollableScrollPhysics(
                     parent: BouncingScrollPhysics(),
                   ),
                   gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: 540,
-                    mainAxisExtent: 155,
+                    maxCrossAxisExtent: 480,
+                    mainAxisExtent: 195,
                     crossAxisSpacing: 14,
                     mainAxisSpacing: 12,
                   ),
@@ -1864,7 +1872,7 @@ class _DownloadTaskList extends StatelessWidget {
                   padding: EdgeInsets.only(
                     left: screenPadding(context).left,
                     right: screenPadding(context).left,
-                    bottom: 84.0,
+                    bottom: bottomPadding,
                   ),
                   physics: const AlwaysScrollableScrollPhysics(
                     parent: BouncingScrollPhysics(),
@@ -1909,7 +1917,7 @@ class _DownloadTaskList extends StatelessWidget {
                           return DownloadCard(
                             key: ValueKey(effectiveTask.id),
                             task: effectiveTask,
-                            compact: true,
+                            compact: false,
                             showDragHandle: false,
                             index: index,
                           );

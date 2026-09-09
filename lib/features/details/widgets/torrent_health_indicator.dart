@@ -85,11 +85,16 @@ class TorrentHealthIndicator extends StatelessWidget {
                 color: level.color, fontSize: 10, fontWeight: FontWeight.w800),
           ),
           const SizedBox(width: 8),
-          Text(
-            level.label,
-            style: TextStyle(
+          Flexible(
+            child: Text(
+              level.label,
+              style: TextStyle(
                 color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-                fontSize: 9),
+                fontSize: 9,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),

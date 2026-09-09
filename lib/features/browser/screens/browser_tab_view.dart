@@ -442,41 +442,72 @@ class _BrowserTabViewState extends State<_BrowserTabView> {
 
                           final requestHost = request.url.host.toLowerCase();
 
-                          // Instant fast-path: Never block YouTube, Google, gstatic, or core media infrastructure
+                          // Instant fast-path: Never block core web infrastructure, CDNs, fonts, or media
                           const whitelistedDomains = [
+                            'google.com',
+                            'googleapis.com',
+                            'gstatic.com',
+                            'googlevideo.com',
+                            'ggpht.com',
                             'youtube.com',
                             'youtu.be',
                             'ytimg.com',
-                            'googlesyndication.com',
-                            'googlevideo.com',
-                            'ggpht.com',
-                            'googleapis.com',
-                            'google.com',
-                            'gstatic.com',
+                            'cloudflare.com',
+                            'cdnjs.cloudflare.com',
+                            'challenges.cloudflare.com',
+                            'static.cloudflareinsights.com',
+                            'cloudflarestream.com',
+                            'jsdelivr.net',
+                            'jsdelivr.com',
+                            'unpkg.com',
+                            'skypack.dev',
+                            'esm.sh',
+                            'jspm.io',
+                            'bootstrapcdn.com',
+                            'maxcdn.bootstrapcdn.com',
+                            'stackpath.bootstrapcdn.com',
+                            'jquery.com',
+                            'code.jquery.com',
+                            'fontawesome.com',
+                            'use.fontawesome.com',
+                            'recaptcha.net',
+                            'hcaptcha.com',
+                            'githubassets.com',
+                            'github.com',
+                            'wordpress.org',
+                            'wp.com',
+                            's.w.org',
+                            'gravatar.com',
+                            'vjs.zencdn.net',
+                            'vimeo.com',
+                            'player.vimeo.com',
+                            'cdn.embedly.com',
+                            'twemoji.maxcdn.com',
+                            'akamaihd.net',
+                            'fastly.net',
+                            'cloudfront.net',
                           ];
-                          bool isWhitelisted = false;
                           for (final d in whitelistedDomains) {
                             if (requestHost == d ||
                                 requestHost.endsWith('.$d')) {
-                              isWhitelisted = true;
-                              break;
+                              return null;
                             }
                           }
-                          if (isWhitelisted) {
-                            return null;
-                          }
 
-                          // Never block same-origin requests (requests to the current site's own domain or subdomains)
+                          // Never block same-origin or same-site requests (e.g. static.example.com when browsing m.example.com)
                           final pageHost = tab.host;
                           if (pageHost.isNotEmpty &&
-                              (requestHost == pageHost ||
-                                  requestHost.endsWith('.$pageHost') ||
-                                  (requestHost.contains('.') &&
-                                      pageHost.endsWith('.$requestHost')))) {
+                              AdBlockerService.isSameSite(requestHost, pageHost)) {
                             return null;
                           }
 
                           final url = request.url.toString();
+                          // Never block downloadable files or media
+                          if (AdBlockerService.isLikelyDownloadUrl(url) ||
+                              BrowserDetector.isAutoDownloadable(url)) {
+                            return null;
+                          }
+
                           if (widget.state._adBlocker.shouldBlock(url)) {
                             widget.state._adBlocker.recordBlocked(url);
                             final count =
@@ -484,7 +515,7 @@ class _BrowserTabViewState extends State<_BrowserTabView> {
                                     1;
                             widget.state._blockedAdsPerTab[tab.id] = count;
 
-                            // Fix: Update the active tab's notifier so the UI badge updates in real-time
+                            // Update the active tab's notifier so the UI badge updates in real-time
                             if (widget.state._currentTabIndex >= 0 &&
                                 widget.state._currentTabIndex <
                                     widget.state._tabs.length &&
@@ -504,11 +535,37 @@ class _BrowserTabViewState extends State<_BrowserTabView> {
                               }
                             }
 
+                            // Return non-hanging response:
+                            // Returning 204 or text/plain on scripts/styles hangs Blink's loader.
+                            // Returning valid empty JS/CSS or 403 allows the HTML parser to proceed smoothly.
+                            final lowerUrl = url.toLowerCase();
+                            if (lowerUrl.contains('.js') ||
+                                lowerUrl.contains('javascript')) {
+                              return WebResourceResponse(
+                                contentType: 'application/javascript',
+                                contentEncoding: 'utf-8',
+                                statusCode: 200,
+                                reasonPhrase: 'OK',
+                                data: Uint8List.fromList(
+                                    '/* blocked */'.codeUnits),
+                              );
+                            }
+                            if (lowerUrl.contains('.css') ||
+                                lowerUrl.contains('stylesheet')) {
+                              return WebResourceResponse(
+                                contentType: 'text/css',
+                                contentEncoding: 'utf-8',
+                                statusCode: 200,
+                                reasonPhrase: 'OK',
+                                data: Uint8List.fromList(
+                                    '/* blocked */'.codeUnits),
+                              );
+                            }
                             return WebResourceResponse(
                               contentType: 'text/plain',
                               contentEncoding: 'utf-8',
-                              statusCode: 204,
-                              reasonPhrase: 'Blocked',
+                              statusCode: 403,
+                              reasonPhrase: 'Blocked by AdBlocker',
                               data: Uint8List(0),
                             );
                           }
@@ -544,7 +601,10 @@ class _BrowserTabViewState extends State<_BrowserTabView> {
                           // 0. Ad-blocker: cancel navigation-level ad redirects
                           // Only block sub-frame navigations (ads redirect in iframes/popups)
                           // Never block main-frame navigations so user can still browse
+                          // Never block legitimate downloads or download endpoints
                           if (navigationAction.isForMainFrame != true &&
+                              !AdBlockerService.isLikelyDownloadUrl(url) &&
+                              !BrowserDetector.isAutoDownloadable(url) &&
                               widget.state._adBlocker.shouldBlock(url)) {
                             widget.state._adBlocker.recordBlocked(url);
                             return NavigationActionPolicy.CANCEL;

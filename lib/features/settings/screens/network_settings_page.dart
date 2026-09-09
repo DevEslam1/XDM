@@ -7,6 +7,7 @@ import '../../../core/services/dio_client_pool.dart';
 import '../../../core/services/xdm_backend_client.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
+import '../../../core/utils/responsive.dart';
 import '../../../features/browser/services/ad_blocker_service.dart';
 import '../../../features/browser/services/adblock_filter_updater.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
@@ -132,11 +133,11 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
 
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.only(
+      padding: EdgeInsets.only(
         left: 12.0,
         right: 12.0,
         top: 16.0,
-        bottom: 84.0,
+        bottom: isTablet(context) ? 108.0 : 88.0,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

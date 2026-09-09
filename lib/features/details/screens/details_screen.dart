@@ -296,19 +296,22 @@ class _DetailsScreenState extends State<DetailsScreen>
 
             final statusColor = DmxStatusColors.of(task.status, isDark);
 
-            final isTwoColumn = isLandscape(context) || isTablet(context);
+            final isTwoColumn = shouldShowTwoPaneDetails(context);
 
             return Directionality(
               textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
               child: SafeArea(
-                child: SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16.0,
-                    vertical: 12,
-                  ),
-                  child: isTwoColumn
-                      ? Row(
+                child: Center(
+                  child: SizedBox(
+                    width: contentMaxWidth(context),
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16.0,
+                        vertical: 12,
+                      ),
+                      child: isTwoColumn
+                          ? Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Expanded(
@@ -509,6 +512,8 @@ class _DetailsScreenState extends State<DetailsScreen>
                             const SizedBox(height: 24),
                           ],
                         ),
+                    ),
+                  ),
                 ),
               ),
             );
@@ -582,35 +587,35 @@ class _TelemetryHero extends StatelessWidget {
             ),
           ),
 
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Row(
-              children: [
-                // Progress ring
-
-                RepaintBoundary(
-                  key: const ValueKey('details_pulse_ring'),
-                  child: SizedBox(
-                    width: responsiveValue(context, 110),
-                    height: responsiveValue(context, 110),
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        AnimatedBuilder(
-                          animation: pulse,
-                          builder: (context, _) {
-                            return CustomPaint(
-                              size: Size(responsiveValue(context, 110),
-                                  responsiveValue(context, 110)),
-                              painter: _RingPainter(
-                                progress: task.progress,
-                                color: statusColor,
-                                glow: pulse.value,
-                                isDark: isDark,
-                              ),
-                            );
-                          },
-                        ),
+          Builder(builder: (context) {
+            final ringDim = responsiveValue(context, 105).clamp(92.0, 115.0);
+            return Padding(
+              padding: const EdgeInsets.all(20),
+              child: Row(
+                children: [
+                  // Progress ring
+                  RepaintBoundary(
+                    key: const ValueKey('details_pulse_ring'),
+                    child: SizedBox(
+                      width: ringDim,
+                      height: ringDim,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          AnimatedBuilder(
+                            animation: pulse,
+                            builder: (context, _) {
+                              return CustomPaint(
+                                size: Size(ringDim, ringDim),
+                                painter: _RingPainter(
+                                  progress: task.progress,
+                                  color: statusColor,
+                                  glow: pulse.value,
+                                  isDark: isDark,
+                                ),
+                              );
+                            },
+                          ),
                         Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -729,16 +734,19 @@ class _TelemetryHero extends StatelessWidget {
                       const SizedBox(height: 6),
 
                       // Big speed readout
-                      Text(
-                        speedText,
-                        style: AppTheme.dataStyle(
-                          isDark: isDark,
-                          size: 22,
-                          weight: FontWeight.w800,
-                          color: statusColor,
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: AlignmentDirectional.centerStart,
+                        child: Text(
+                          speedText,
+                          style: AppTheme.dataStyle(
+                            isDark: isDark,
+                            size: 22,
+                            weight: FontWeight.w800,
+                            color: statusColor,
+                          ),
+                          maxLines: 1,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 4),
 
@@ -784,7 +792,8 @@ class _TelemetryHero extends StatelessWidget {
                 ),
               ],
             ),
-          ),
+          );
+        }),
         ],
       ),
     );
@@ -2386,10 +2395,15 @@ class _TorrentStatsPanelState extends State<_TorrentStatsPanel> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  isRtl ? 'حالة اتصال التورنت' : 'TORRENT CONNECTION STATUS',
-                  style: AppTheme.microLabel(isDark: isDark, size: 10),
+                Expanded(
+                  child: Text(
+                    isRtl ? 'حالة اتصال التورنت' : 'TORRENT CONNECTION STATUS',
+                    style: AppTheme.microLabel(isDark: isDark, size: 10),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
+                const SizedBox(width: 8),
                 TorrentHealthIndicator(
                   seeds: seeds,
                   peers: peers,

@@ -82,10 +82,33 @@ bool shouldShowSideNavigation(BuildContext context) {
   return type == ScreenType.desktop || isLandscape(context);
 }
 
+/// Determines whether task cards should be displayed in a multi-column grid
+/// vs a single unified list.
+/// Only activates for wide screens (desktop, large landscape, or tablets >= 850px)
+/// so portrait tablets maintain a clean, uncrowded single-column list.
+bool isMultiColumnLayout(BuildContext context) {
+  final size = MediaQuery.sizeOf(context);
+  final isLand = size.width > size.height;
+  if (size.width >= 850) return true;
+  if (isLand && size.width >= 640) return true;
+  return false;
+}
+
+/// Determines whether the download details view should split into a two-pane layout.
+/// Portrait tablets (width < 900) should use a single centered column so telemetry,
+/// speed, and stats never truncate or wrap awkwardly.
+bool shouldShowTwoPaneDetails(BuildContext context) {
+  final size = MediaQuery.sizeOf(context);
+  final isLand = size.width > size.height;
+  if (size.width >= 900) return true;
+  if (isLand && size.width >= 680) return true;
+  return false;
+}
+
 int responsiveGridColumns(BuildContext context) {
   final w = MediaQuery.sizeOf(context).width;
   if (w >= 1100) return 3;
-  if (w >= 600 || isLandscape(context)) return 2;
+  if (isMultiColumnLayout(context)) return 2;
   return 1;
 }
 

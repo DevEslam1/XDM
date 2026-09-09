@@ -220,7 +220,12 @@ class AdBlockFilterUpdater {
   }
 
   RegExp _compileWildcardPattern(String pattern) {
-    final regexStr = '^${RegExp.escape(pattern).replaceAll(r'\*', '.*')}\$';
+    // Avoid compiling dangerous over-broad patterns
+    final clean = pattern.trim();
+    if (clean == '/*' || clean == '*' || clean == '/*.*' || clean == '.*' || clean.length < 5) {
+      return RegExp(r'^$');
+    }
+    final regexStr = '^${RegExp.escape(clean).replaceAll(r'\*', '.*')}\$';
     return RegExp(regexStr, caseSensitive: false);
   }
 
@@ -732,7 +737,24 @@ class AdBlockFilterUpdater {
   /// separately from domain checks so callers can merge domain lookups into a
   /// single set instead of re-walking the same domains here.
   bool matchesUrlPath(String path) {
-    if (path.isEmpty) return false;
+    if (path.isEmpty || path.length < 5) return false;
+    final lowerPath = path.toLowerCase();
+    // Safety guard: Never match download paths, files, or standard web asset directories as ad paths
+    if (lowerPath.contains('/download') ||
+        lowerPath.contains('/downloads') ||
+        lowerPath.contains('/dl/') ||
+        lowerPath.contains('/getfile') ||
+        lowerPath.contains('/files/') ||
+        lowerPath.contains('/assets/') ||
+        lowerPath.contains('/static/') ||
+        lowerPath.contains('/dist/') ||
+        lowerPath.contains('/vendor/') ||
+        lowerPath.contains('/chunks/') ||
+        lowerPath.contains('/node_modules/') ||
+        lowerPath.contains('/wp-content/') ||
+        lowerPath.contains('/wp-includes/')) {
+      return false;
+    }
     for (final regex in _compiledWildcardPatterns.values) {
       if (regex.hasMatch(path)) {
         return true;

@@ -83,13 +83,23 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
     final userAgent = isDesktop
         ? FingerprintManager.desktopUserAgent
         : _resolveUserAgent(isIncognito: tab.isIncognito, settings: settings);
+    final pinchZoom = isDesktop || settings.pinchToZoom;
     try {
       final currentSettings = await tab.controller?.getSettings();
       if (currentSettings != null) {
+        // Fast-path: Avoid disruptive mid-load setSettings() calls if settings are unchanged!
+        if (currentSettings.userAgent == userAgent &&
+            currentSettings.supportZoom == pinchZoom &&
+            currentSettings.incognito == tab.isIncognito &&
+            currentSettings.useShouldInterceptRequest == true) {
+          return;
+        }
         currentSettings.useShouldOverrideUrlLoading = true;
         currentSettings.useOnDownloadStart = true;
+        currentSettings.useHybridComposition = true;
+        currentSettings.useShouldInterceptRequest = true;
         currentSettings.userAgent = userAgent;
-        currentSettings.supportZoom = isDesktop || settings.pinchToZoom;
+        currentSettings.supportZoom = pinchZoom;
         currentSettings.incognito = tab.isIncognito;
         currentSettings.contentBlockers =
             isAdBlock ? _adBlocker.contentBlockers : <ContentBlocker>[];
@@ -104,8 +114,10 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
           settings: InAppWebViewSettings(
             useShouldOverrideUrlLoading: true,
             useOnDownloadStart: true,
+            useHybridComposition: true,
+            useShouldInterceptRequest: true,
             userAgent: userAgent,
-            supportZoom: isDesktop || settings.pinchToZoom,
+            supportZoom: pinchZoom,
             incognito: tab.isIncognito,
             contentBlockers: isAdBlock ? _adBlocker.contentBlockers : [],
             javaScriptEnabled: true,
@@ -255,6 +267,29 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
       },
     );
 
+    // Watchdog: If Chromium reaches >= 50% progress but stalls waiting for
+    // non-critical lingering subresources, check if the DOM is already ready.
+    _stallCheckTimers[tab.id]?.cancel();
+    _stallCheckTimers[tab.id] = Timer(
+      const Duration(seconds: 5),
+      () async {
+        if (!mounted || !tab.isLoading || tab.progress < 0.45) return;
+        try {
+          final state = await tab.controller?.evaluateJavascript(
+            source: 'document.readyState',
+          );
+          if (state == 'interactive' || state == 'complete') {
+            if (mounted && tab.isLoading) {
+              setState(() {
+                tab.isLoading = false;
+                tab.progress = 1.0;
+              });
+            }
+          }
+        } catch (_) {}
+      },
+    );
+
     if (url.contains('accounts.google.com') ||
         url.contains('google.com/ServiceLogin') ||
         url.contains('google.com/accounts')) {
@@ -326,6 +361,7 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
       if (mounted) _updateNavState();
     });
     _loadingTimeoutTimers[tab.id]?.cancel();
+    _stallCheckTimers[tab.id]?.cancel();
     _navigatingBackForwardTabIds[tab.id] = false;
     final settings = _settings;
     unawaited(_injectAllScripts(tab, url));
@@ -521,6 +557,8 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
       // Cancel pending loading timeout to prevent setState on a suspended tab.
       _loadingTimeoutTimers[tab.id]?.cancel();
       _loadingTimeoutTimers.remove(tab.id);
+      _stallCheckTimers[tab.id]?.cancel();
+      _stallCheckTimers.remove(tab.id);
       // Cancel pending media scan debounce.
       _mediaScanDebouncePerTab[tab.id]?.cancel();
       _mediaScanDebouncePerTab.remove(tab.id);

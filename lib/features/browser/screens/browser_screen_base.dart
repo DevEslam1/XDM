@@ -45,6 +45,14 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
       t.cancel();
     }
     _downloadUrlTimers.clear();
+    for (final t in _loadingTimeoutTimers.values) {
+      t.cancel();
+    }
+    _loadingTimeoutTimers.clear();
+    for (final t in _stallCheckTimers.values) {
+      t.cancel();
+    }
+    _stallCheckTimers.clear();
     _sharedHttpClient?.close(force: true);
     _sharedHttpClient = null;
   }
@@ -406,6 +414,7 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
   final List<String> _lruTabIds = [];
 
   final Map<String, Timer> _loadingTimeoutTimers = {};
+  final Map<String, Timer> _stallCheckTimers = {};
 
   Timer? _siteSettingsReloadTimer;
 

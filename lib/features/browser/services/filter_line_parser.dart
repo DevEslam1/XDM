@@ -239,6 +239,41 @@ class FilterLineParser {
 
       // URL path patterns: /ads/banner
       if (line.startsWith('/') && !line.startsWith('//')) {
+        // Skip ABP filter modifiers like /$popup, /$third-party, /$image
+        if (line.startsWith(r'/$') || line.contains(r'$')) {
+          continue;
+        }
+        // Skip regex lines like /regex/
+        if (line.endsWith('/') && line.length > 2) {
+          continue;
+        }
+        // Require meaningful pattern length (>= 6) to avoid false positive substring matches
+        if (line.length < 6) {
+          continue;
+        }
+        // Never treat paths targeting downloads, files, or standard web assets as ad paths
+        final lower = line.toLowerCase();
+        if (lower.contains('download') ||
+            lower.contains('upload') ||
+            lower.contains('getfile') ||
+            lower.contains('asset') ||
+            lower.contains('static') ||
+            lower.contains('vendor') ||
+            lower.contains('plugin') ||
+            lower.contains('widget') ||
+            lower.contains('module') ||
+            lower.contains('media') ||
+            lower.contains('script') ||
+            lower.contains('style') ||
+            lower.contains('component') ||
+            lower.contains('theme') ||
+            lower.contains('chunk') ||
+            lower.contains('admin') ||
+            lower.contains('adapt') ||
+            lower.contains('build') ||
+            lower.contains('dist')) {
+          continue;
+        }
         result.urlPatterns.add(line);
         if (!line.contains('*')) {
           result.exactPathPatterns.add(line);

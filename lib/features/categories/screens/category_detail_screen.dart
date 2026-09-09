@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/app_theme.dart';
 import '../../../core/utils/localization.dart';
+import '../../../core/utils/responsive.dart';
 import '../../../shared/design/dmx_design.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/widgets/geometric_grid_background.dart';
@@ -166,8 +167,7 @@ class CategoryDetailScreen extends StatelessWidget {
                         )
                       : Builder(
                           builder: (context) {
-                            final isWide =
-                                MediaQuery.sizeOf(context).width >= 600;
+                            final isWide = isMultiColumnLayout(context);
                             if (isWide) {
                               return GridView.builder(
                                 padding: const EdgeInsets.symmetric(
@@ -177,8 +177,8 @@ class CategoryDetailScreen extends StatelessWidget {
                                 physics: const BouncingScrollPhysics(),
                                 gridDelegate:
                                     const SliverGridDelegateWithMaxCrossAxisExtent(
-                                  maxCrossAxisExtent: 540,
-                                  mainAxisExtent: 175,
+                                  maxCrossAxisExtent: 480,
+                                  mainAxisExtent: 190,
                                   crossAxisSpacing: 14,
                                   mainAxisSpacing: 12,
                                 ),
@@ -207,7 +207,7 @@ class CategoryDetailScreen extends StatelessWidget {
                                 return DownloadCard(
                                   key: ValueKey(task.id),
                                   task: task,
-                                  compact: true,
+                                  compact: false,
                                 );
                               },
                             );

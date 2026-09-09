@@ -556,7 +556,9 @@ $customJs
     final scripts = <String>[];
 
     // Dynamic ad blocker MutationObserver
-    scripts.add(AdBlockerService.dynamicAdBlockJs);
+    if (adBlocker.isEnabled) {
+      scripts.add(AdBlockerService.dynamicAdBlockJs);
+    }
 
     // Scroll unblock (all pages)
     scripts.add(AdBlockerService.scrollUnblockJs);

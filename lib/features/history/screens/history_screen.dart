@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/app_theme.dart';
 import '../../../core/utils/localization.dart';
+import '../../../core/utils/responsive.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/widgets/geometric_grid_background.dart';
 import '../../downloads/models/download_task.dart';
@@ -309,9 +310,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                   )
                                 : Builder(
                                     builder: (context) {
-                                      final isWide =
-                                          MediaQuery.sizeOf(context).width >=
-                                              600;
+                                      final isWide = isMultiColumnLayout(context);
                                       if (isWide) {
                                         return GridView.builder(
                                           padding: const EdgeInsets.symmetric(
@@ -320,8 +319,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                               const BouncingScrollPhysics(),
                                           gridDelegate:
                                               const SliverGridDelegateWithMaxCrossAxisExtent(
-                                            maxCrossAxisExtent: 540,
-                                            mainAxisExtent: 175,
+                                            maxCrossAxisExtent: 480,
+                                            mainAxisExtent: 190,
                                             crossAxisSpacing: 14,
                                             mainAxisSpacing: 12,
                                           ),
@@ -344,7 +343,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                         itemBuilder: (context, index) {
                                           return DownloadCard(
                                             task: historyTasks[index],
-                                            compact: true,
+                                            compact: false,
                                           );
                                         },
                                       );

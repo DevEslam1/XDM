@@ -114,20 +114,28 @@ class TorrentStatsDashboard extends StatelessWidget {
   Widget _buildStat(String label, String value) {
     return Column(
       children: [
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-            color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            value,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+            ),
+            maxLines: 1,
           ),
         ),
         const SizedBox(height: 2),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 10,
-            color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+            ),
+            maxLines: 1,
           ),
         ),
       ],

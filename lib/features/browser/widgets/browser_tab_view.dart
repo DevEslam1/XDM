@@ -14,6 +14,7 @@ import '../../../core/utils/url_utils.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../models/browser_tab.dart';
+import '../services/ad_blocker_service.dart';
 import '../services/browser_controller.dart';
 import '../services/download_interceptor.dart';
 import '../services/long_press_parser.dart';
@@ -322,11 +323,32 @@ class _BrowserTabViewState extends State<BrowserTabView>
                 }
               }
             } else {
-              // General whitelist for core CDN/fonts
+              // General whitelist for core CDN/fonts/libraries
               const generalWhitelisted = [
                 'gstatic.com',
                 'googleapis.com',
-                'cloudflare.com'
+                'cloudflare.com',
+                'cdnjs.cloudflare.com',
+                'challenges.cloudflare.com',
+                'static.cloudflareinsights.com',
+                'jsdelivr.net',
+                'jsdelivr.com',
+                'unpkg.com',
+                'bootstrapcdn.com',
+                'jquery.com',
+                'fontawesome.com',
+                'recaptcha.net',
+                'hcaptcha.com',
+                'githubassets.com',
+                'wp.com',
+                'wordpress.org',
+                'gravatar.com',
+                'vjs.zencdn.net',
+                'vimeo.com',
+                'player.vimeo.com',
+                'akamaihd.net',
+                'fastly.net',
+                'cloudfront.net',
               ];
               for (final d in generalWhitelisted) {
                 if (requestHost == d || requestHost.endsWith('.$d')) {
@@ -335,10 +357,9 @@ class _BrowserTabViewState extends State<BrowserTabView>
               }
             }
 
-            // Never block same-origin requests
+            // Never block same-origin or same-site requests
             if (pageHost.isNotEmpty &&
-                (requestHost == pageHost ||
-                    requestHost.endsWith('.$pageHost'))) {
+                AdBlockerService.isSameSite(requestHost, pageHost)) {
               return null;
             }
 
@@ -346,11 +367,29 @@ class _BrowserTabViewState extends State<BrowserTabView>
             if (widget.controller.adBlocker.shouldBlock(url)) {
               widget.controller.recordBlockedAd(tab.id, url);
 
-              // FIX-B30: Return standard 404 response
+              final lowerUrl = url.toLowerCase();
+              if (lowerUrl.contains('.js') || lowerUrl.contains('javascript')) {
+                return WebResourceResponse(
+                  contentType: 'application/javascript',
+                  contentEncoding: 'utf-8',
+                  statusCode: 200,
+                  reasonPhrase: 'OK',
+                  data: Uint8List.fromList('/* blocked */'.codeUnits),
+                );
+              }
+              if (lowerUrl.contains('.css') || lowerUrl.contains('stylesheet')) {
+                return WebResourceResponse(
+                  contentType: 'text/css',
+                  contentEncoding: 'utf-8',
+                  statusCode: 200,
+                  reasonPhrase: 'OK',
+                  data: Uint8List.fromList('/* blocked */'.codeUnits),
+                );
+              }
               return WebResourceResponse(
                 contentType: 'text/plain',
                 contentEncoding: 'utf-8',
-                statusCode: 404,
+                statusCode: 403,
                 reasonPhrase: 'Blocked by AdBlocker',
                 data: Uint8List(0),
               );

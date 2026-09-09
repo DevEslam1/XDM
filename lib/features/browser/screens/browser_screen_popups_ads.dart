@@ -136,6 +136,7 @@ mixin _PopupsAdsMixin on _BrowserScreenStateBase {
 
     // 2. Direct downloadable file check (APKs, ZIPs, Videos, etc.)
     if (BrowserDetector.isAutoDownloadable(url) ||
+        AdBlockerService.isLikelyDownloadUrl(url) ||
         _interceptor.shouldIntercept(tabUrl: parentTab.url, requestUrl: url)) {
       _log.info('[Browser] Intercepted downloadable file from popup: $url');
       _showInterceptionSheet(context, url);
@@ -241,7 +242,22 @@ mixin _PopupsAdsMixin on _BrowserScreenStateBase {
           lowerFinal.contains('pixeldrain') ||
           lowerFinal.contains('gofile') ||
           lowerFinal.contains('workupload') ||
-          lowerFinal.contains('1fichier');
+          lowerFinal.contains('1fichier') ||
+          lowerFinal.contains('github.com') ||
+          lowerFinal.contains('drive.google.com') ||
+          lowerFinal.contains('dropbox.com') ||
+          lowerFinal.contains('sourceforge.net') ||
+          lowerFinal.contains('apkpure.com') ||
+          lowerFinal.contains('apkmirror.com') ||
+          lowerFinal.contains('softpedia.com') ||
+          lowerFinal.contains('archive.org') ||
+          lowerFinal.contains('uploadhaven') ||
+          lowerFinal.contains('turbobit') ||
+          lowerFinal.contains('rapidgator') ||
+          lowerFinal.contains('nitroflare') ||
+          lowerFinal.contains('krakenfiles') ||
+          lowerFinal.contains('send.cm') ||
+          AdBlockerService.isLikelyDownloadUrl(finalUrl);
 
       if (isKnownFileHost && mounted) {
         _log.info(

@@ -381,15 +381,22 @@ class PageIntentClassifier {
       final classification = classify(targetUrl);
       if (classification.intent == PageIntent.adPage) {
         final lowerTarget = targetUrl.toLowerCase();
-        final isAdBlocked = AdBlockerService.instance.shouldBlockUrl(targetUrl);
         final isFileHost = lowerTarget.contains('dlhaven') ||
             lowerTarget.contains('mediafire') ||
             lowerTarget.contains('pixeldrain') ||
             lowerTarget.contains('gofile') ||
-            lowerTarget.contains('mega.nz');
+            lowerTarget.contains('mega.nz') ||
+            lowerTarget.contains('github.com') ||
+            lowerTarget.contains('sourceforge.net') ||
+            lowerTarget.contains('apkpure.com') ||
+            lowerTarget.contains('apkmirror.com') ||
+            lowerTarget.contains('drive.google.com') ||
+            lowerTarget.contains('dropbox.com') ||
+            lowerTarget.contains('archive.org');
 
-        if (!isAdBlocked &&
-            (isFileHost || BrowserDetector.isAutoDownloadable(targetUrl))) {
+        if (isFileHost ||
+            BrowserDetector.isAutoDownloadable(targetUrl) ||
+            AdBlockerService.isLikelyDownloadUrl(targetUrl)) {
           return PageClassification(
             intent: PageIntent.normalBrowsing,
             action: PageAction.openSameTab,
@@ -626,6 +633,10 @@ class PageIntentClassifier {
   }
 
   PageClassification? _classifyAdPage(String url) {
+    if (BrowserDetector.isAutoDownloadable(url) ||
+        AdBlockerService.isLikelyDownloadUrl(url)) {
+      return null;
+    }
     final uri = Uri.tryParse(url.startsWith('http') ? url : 'https://$url');
     if (uri == null) return null;
 

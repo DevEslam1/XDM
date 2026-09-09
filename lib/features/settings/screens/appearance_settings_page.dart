@@ -5,6 +5,7 @@ import '../../../core/app_theme.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
+import '../../../core/utils/responsive.dart';
 import '../provider/settings_provider.dart';
 import '../widgets/settings_section_header.dart';
 import '../widgets/settings_tiles.dart';
@@ -42,11 +43,11 @@ class AppearanceSettingsPage extends StatelessWidget with HapticHelper {
 
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.only(
+      padding: EdgeInsets.only(
         left: 12.0,
         right: 12.0,
         top: 16.0,
-        bottom: 84.0,
+        bottom: isTablet(context) ? 108.0 : 88.0,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
