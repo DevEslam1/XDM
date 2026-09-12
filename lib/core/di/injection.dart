@@ -213,7 +213,7 @@ Future<void> configureDependencies() async {
     );
 
     getIt.registerLazySingleton<SiteIntelligenceService>(
-      () => SiteIntelligenceService(),
+      () => SiteIntelligenceService.instance,
       dispose: (service) => service.dispose(),
     );
 

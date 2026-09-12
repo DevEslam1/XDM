@@ -399,7 +399,7 @@ class _SettingsScreenState extends State<SettingsScreen>
       _SettingSearchEntry(
         categoryTitle:
             isRtl ? 'الإشعارات والتنبيهات' : 'Notifications & Alerts',
-        categoryIndex: 3,
+        categoryIndex: 0,
         settingTitle: 'Global Notifications',
         subtitle: 'Show download progress bars in system tray',
         keywords: const [
@@ -423,7 +423,7 @@ class _SettingsScreenState extends State<SettingsScreen>
       // Category 4: Torrent
       _SettingSearchEntry(
         categoryTitle: isRtl ? 'التورنت (Torrent)' : 'Torrent',
-        categoryIndex: 4,
+        categoryIndex: 3,
         settingTitle: 'Enable DHT',
         subtitle: 'Peer discovery via decentralized DHT network',
         keywords: const [
@@ -530,7 +530,7 @@ class _SettingsScreenState extends State<SettingsScreen>
       // Category 6: Advanced
       _SettingSearchEntry(
         categoryTitle: isRtl ? 'متقدم وتطوير' : 'Advanced',
-        categoryIndex: 6,
+        categoryIndex: 4,
         settingTitle: 'Enable Developer Mode',
         subtitle: 'Unlocks advanced debugging, SSL bypass, internal logs',
         keywords: const [

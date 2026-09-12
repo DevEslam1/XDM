@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/app_theme.dart';
+import '../../../core/di/injection.dart';
 import '../../../core/domain/subscription/subscription_plan.dart';
 import '../../../core/services/subscription/purchase_service.dart';
 import '../../../core/services/subscription/subscription_service.dart';
@@ -19,8 +20,8 @@ class SubscriptionScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
       create: (_) => SubscriptionProvider(
-        subscriptionService: context.read<SubscriptionService>(),
-        purchaseService: context.read<PurchaseService>(),
+        subscriptionService: inject<SubscriptionService>(),
+        purchaseService: inject<PurchaseService>(),
       ),
       child: const _SubscriptionView(),
     );

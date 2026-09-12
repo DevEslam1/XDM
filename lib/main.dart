@@ -34,6 +34,7 @@ import 'core/services/service_registry.dart';
 import 'core/services/single_instance_service.dart';
 import 'core/services/site_intelligence/site_intelligence_service.dart';
 import 'core/services/torrent_resume_store.dart';
+import 'core/services/torrent_seeding_manager.dart';
 import 'core/services/torrent_service.dart';
 import 'core/services/widget_deep_link.dart';
 import 'core/services/xdm_backend_client.dart';
@@ -45,6 +46,7 @@ import 'features/downloads/provider/torrent_provider.dart';
 import 'features/onboarding/screens/onboarding_screen.dart';
 import 'features/onboarding/screens/permission_request_screen.dart';
 import 'features/settings/provider/settings_provider.dart';
+import 'features/subscription/screens/subscription_screen.dart';
 import 'shared/accessibility/xdm_text_scaler.dart';
 import 'shared/animation/ambient_animation_coordinator.dart';
 import 'shared/animation/composite_ambient_animation_controller.dart';
@@ -314,6 +316,10 @@ Future<void> main(List<String> args) async {
                 );
                 if (TorrentService.isAvailable.value) {
                   _mainLog.info('Torrent service initialized successfully');
+                  // Start the periodic seeding-policy enforcement loop (ratio /
+                  // time / seed-only-on-Wi-Fi / charging). It was previously
+                  // never started, so those policies were dormant.
+                  TorrentSeedingManager.instance.startSeedingCheck();
                 } else {
                   _mainLog.warning(
                     'Torrent service initialization returned without an available native session',
@@ -543,6 +549,13 @@ class DmxApp extends StatelessWidget {
             onGenerateRoute: (settings) {
               final rawName = settings.name ?? '';
               if (rawName.isEmpty || rawName == '/') return null;
+
+              if (rawName == '/subscription') {
+                return MaterialPageRoute<void>(
+                  settings: settings,
+                  builder: (_) => const SubscriptionScreen(),
+                );
+              }
 
               String? extractedUrl;
               if (rawName.startsWith('/?xt=') ||

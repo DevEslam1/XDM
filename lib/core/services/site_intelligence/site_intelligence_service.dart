@@ -216,6 +216,14 @@ class SiteIntelligenceService
     ServiceRegistry.registerMemoryPressureListener(this);
   }
 
+  /// Process-wide shared instance. Prefer this over `SiteIntelligenceService()`
+  /// for one-off calls: every constructor self-registers with [ServiceRegistry]
+  /// and registers a memory-pressure listener, so per-call construction leaked
+  /// duplicate entries and re-read SharedPreferences on every analysis.
+  static SiteIntelligenceService? _shared;
+  static SiteIntelligenceService get instance =>
+      _shared ??= SiteIntelligenceService();
+
   static const _reliabilityKey = 'site_reliability_data';
   final BoundedLruCache<String, UrlAnalysisResult> _fastPathCache =
       BoundedLruCache<String, UrlAnalysisResult>(

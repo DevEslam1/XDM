@@ -133,10 +133,10 @@ bool isValidTransmissionUrl(String value) {
 }
 
 UrlAnalysisResult analyzeUrl(String url) =>
-    SiteIntelligenceService().analyzeUrl(url);
+    SiteIntelligenceService.instance.analyzeUrl(url);
 
 MagnetAnalysis analyzeMagnet(String url) =>
-    SiteIntelligenceService().analyzeMagnet(url);
+    SiteIntelligenceService.instance.analyzeMagnet(url);
 
 Map<String, String> parseMagnetUrl(String magnetUrl) {
   final Map<String, String> result = {};

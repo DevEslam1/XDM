@@ -1379,6 +1379,7 @@ class SettingsProvider extends ChangeNotifier
   Future<void> setBatteryOptimizationPrompted(bool value) async {
     batteryOptimizationPrompted = value;
     await _prefs.setBool(_batteryOptimizationPromptedKey, value);
+    notifyListeners();
   }
 
   Future<void> setMaxTotalConnections(int value) async {
@@ -1591,11 +1592,11 @@ class SettingsProvider extends ChangeNotifier
     downloadStalledTimeoutMinutes = 5;
     adaptiveThreads = false;
     autoVerifyChecksum = false;
-    powerAwareIsolatePool = false;
-    thermalThreadLimiting = false;
+    powerAwareIsolatePool = true;
+    thermalThreadLimiting = true;
     jankAutoBatterySaver = false;
     diskWriteBatching = true;
-    powerBandwidthThrottling = false;
+    powerBandwidthThrottling = true;
     // Torrent advanced
     enableNatPmp = true;
     enableLpd = true;

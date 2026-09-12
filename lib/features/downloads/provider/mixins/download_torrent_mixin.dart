@@ -420,7 +420,10 @@ mixin DownloadTorrentMixin {
         TorrentService.setUploadLimit(0); // Unlimited
       }
     } else {
-      TorrentService.setUploadLimit(0); // Effectively 0
+      // BUGFIX: 0 means UNLIMITED in libtorrent, not "off". When no seeding is
+      // enabled, cap uploads to ~1 KiB/s so a lingering/seed-disabled handle
+      // cannot be treated as an unlimited seeder.
+      TorrentService.setUploadLimit(1024);
     }
   }
 

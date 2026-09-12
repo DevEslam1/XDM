@@ -283,7 +283,11 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
       icon: Icons.check_circle_outline,
       isDarkMode: isDark,
     );
-    Navigator.of(context).pop();
+    Navigator.of(context).pop(PlaylistDownloadResult(
+      selectedVideos: selectedVideos,
+      qualityPreset: _qualityPreset,
+      playlistTitle: playlistTitle,
+    ));
   }
 
   @override

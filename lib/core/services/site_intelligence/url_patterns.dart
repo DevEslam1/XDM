@@ -82,8 +82,10 @@ class UrlPatterns {
   };
 
   // Magnet link patterns
-  static final magnetHashRegex =
-      RegExp(r'xt=urn:btih:([a-fA-F0-9]{40}|[a-zA-Z2-7]{32})');
+  // Supports BitTorrent v1 (btih: 40-hex or 32-base32) and v2 (btmh:
+  // multihash, optionally 1220-prefixed 64-hex).
+  static final magnetHashRegex = RegExp(
+      r'xt=urn:(?:btih:|btmh:)?(?:1220)?([a-fA-F0-9]{64}|[a-fA-F0-9]{40}|[a-zA-Z2-7]{32})');
   static final magnetNameRegex = RegExp(r'dn=([^&]+)');
   static final magnetTrackerRegex = RegExp(r'tr=([^&]+)');
 

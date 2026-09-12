@@ -218,7 +218,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
       _analysisDebounceTimer = Timer(const Duration(milliseconds: 300), () {
         if (mounted) {
           setState(() {
-            _urlAnalysis = SiteIntelligenceService().analyzeUrl(url);
+            _urlAnalysis = SiteIntelligenceService.instance.analyzeUrl(url);
           });
         }
       });
@@ -989,6 +989,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         if (!mounted) return;
         if (chosenStream == null) {
           // User explicitly dismissed quality selection — abort bulk batch
+          if (mounted) setState(() => _isSubmitting = false);
           return;
         }
         final streamType = chosenStream['type'] as String? ?? 'muxed';

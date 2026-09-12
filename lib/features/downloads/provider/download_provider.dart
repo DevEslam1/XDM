@@ -978,7 +978,10 @@ class DownloadProvider extends ChangeNotifier
         safeNotify();
       });
 
-  // FIX-1.1: Lock all mutations in DownloadProvider
+  // FIX-1.1: Lock all mutations in DownloadProvider.
+  // FIX(seeding): mirror the DownloadTorrentMixin implementation (torrent
+  // resume/pause lifecycle, upload-limit recompute, widget timer) while keeping
+  // the lock and _taskIndex bookkeeping the old override relied on.
   @override
   Future<void> updateTaskSeeding(
     String taskId, {
@@ -1004,7 +1007,44 @@ class DownloadProvider extends ChangeNotifier
         _taskIndex[taskId] = updatedTask;
         filteredTasksDirty = true;
         await _databaseService.saveTask(updatedTask);
+
+        if (oldTask.isTorrent) {
+          final torrentId =
+              TorrentIdResolver.resolve(oldTask, providerMap: _torrentIds);
+          if (newEnabled) {
+            if (torrentId != null) {
+              TorrentService.resumeTorrent(torrentId);
+            } else {
+              unawaited(startSeedingTorrent(updatedTask));
+            }
+          } else {
+            // Only pause the torrent session once the download has finished;
+            // never remove the handle so seeding can be resumed later.
+            if (torrentId != null &&
+                oldTask.status == DownloadStatus.completed) {
+              await TorrentService.pauseTorrent(torrentId);
+            }
+            final updatedIdx = _tasks.indexWhere((t) => t.id == taskId);
+            if (updatedIdx != -1) {
+              final t = _tasks[updatedIdx];
+              if (t.status == DownloadStatus.completed &&
+                  t.fileSize > 0 &&
+                  t.downloadedBytes < t.fileSize) {
+                final snapped = t.copyWith(
+                  downloadedBytes: t.fileSize,
+                  chunks: List<double>.filled(t.threadCount, 1.0),
+                );
+                _tasks[updatedIdx] = snapped;
+                _taskIndex[taskId] = snapped;
+                await _databaseService.saveTask(snapped);
+              }
+            }
+          }
+        }
+
+        updateActualTorrentUploadLimit();
         safeNotify();
+        providerStartWidgetTimer();
       });
 
   Future<void> _deleteFileSafely(String? path) async {

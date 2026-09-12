@@ -291,14 +291,6 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
                     () {
                   context.read<DownloadProvider>().setActiveTabIndex(2);
                 },
-                const SingleActivator(LogicalKeyboardKey.digit4, control: true):
-                    () {
-                  context.read<DownloadProvider>().setActiveTabIndex(3);
-                },
-                const SingleActivator(LogicalKeyboardKey.digit5, control: true):
-                    () {
-                  context.read<DownloadProvider>().setActiveTabIndex(4);
-                },
               },
               child: Directionality(
                 textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,

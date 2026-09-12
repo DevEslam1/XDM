@@ -131,7 +131,7 @@ class BrowserHistoryManager {
         'url': clean,
         'title': titleToRecord,
         'visitedAt': now.millisecondsSinceEpoch,
-      }).then((id) {
+      }, immediate: true).then((id) {
         if (!isActive()) return;
         if (id > 0) {
           _recentVisits[clean] = (id: id, visitedAt: now);
