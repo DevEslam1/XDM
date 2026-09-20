@@ -236,8 +236,9 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
       isDarkMode: isDark,
       actionLabel: L10n.of(context, 'download_action'),
       onAction: () {
-        final provider = context.read<DownloadProvider>();
-        provider.openUrlInBrowser(url);
+        // Open the Add Download dialog instead of the browser so the user
+        // can start the download directly from the clipboard prompt.
+        AddDownloadDialog.show(context, prefilledUrl: url);
       },
     );
   }

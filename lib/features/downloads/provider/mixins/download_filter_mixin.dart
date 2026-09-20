@@ -293,14 +293,16 @@ mixin DownloadFilterMixin {
   }
 
   void setMixinActiveTabIndex(int index, {void Function()? onBrowserTab}) {
+    // FIX: clamp to the three navigation tabs (Downloads/Browser/Settings).
+    final clamped = index.clamp(0, 2);
     _isNavbarVisible = true;
-    if (_activeTabIndex == index) {
+    if (_activeTabIndex == clamped) {
       safeNotify();
       return;
     }
-    _activeTabIndex = index;
+    _activeTabIndex = clamped;
     safeNotify();
-    if (index == 1) {
+    if (clamped == 1) {
       onBrowserTab?.call();
     }
   }

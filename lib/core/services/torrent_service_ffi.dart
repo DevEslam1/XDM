@@ -93,41 +93,34 @@ class TorrentService {
     _periodicResumeTimer = null;
   }
 
-  // Capability flags, derived from what the loaded binary actually exports
-  // rather than asserted. These were hardcoded `true`, which made the app
-  // request work the native side could not perform: `resumeDataSupported`
-  // sent every graceful pause into a 5s wait for a save_resume_data alert that
-  // no export could ever post, three times over, and then force-stopped the
-  // torrent — dropping all peers and re-handshaking from scratch. The absent
-  // exports are bound as nullable so the calls themselves are safe; these
-  // getters exist so callers can skip them instead of timing out to find out.
-  static bool get fileProgressSupported => false;
-  static bool get filePrioritiesSupported => false;
-  static bool get resumeDataSupported => false;
-  static bool get forceRecheckSupported => true;
-  static bool get trackersSupported => false;
-  static bool get reannounceSupported => false;
-  // No FFI-bound symbol backs either of these; they are not gated on the ABI.
-  static bool get createTorrentSupported => false;
-  static bool get ipFilterSupported => false;
-  static bool get sequentialDownloadSupported => false;
-  static bool get superSeedingSupported => false;
-  static bool get pieceDeadlineSupported => false;
-  // The 1.9.2 bridge maps addWebSeed/setProxy/setSslCertificate to logged
-  // no-ops, so the "Advanced Controls" sheet would accept input and report
-  // success while doing nothing. Gated false so callers hide those controls.
-  static bool get webSeedsSupported => false;
-  static bool get proxySupported => false;
-  static bool get sslSupported => false;
-  // libtorrent_flutter 1.9.2's BtConfig exposes no knob for peer exchange,
-  // local peer/service discovery, standalone NAT-PMP (it is folded into the
-  // UPnP toggle), anonymous mode, or a per-torrent connection cap. Gated false
-  // so the settings UI hides these instead of showing functionless toggles.
-  static bool get peerExchangeSupported => false;
-  static bool get localPeerDiscoverySupported => false;
-  static bool get natPmpSupported => false;
-  static bool get anonymousModeSupported => false;
-  static bool get perTorrentConnectionLimitSupported => false;
+  // Capability flags, derived from what the loaded native bridge actually
+  // exports instead of asserted. The 1.9.2 matrix and its rationale live on
+  // [TorrentNativeCapabilities.v192]; a bridge that overrides
+  // [ITorrentNative.capabilities] auto-enables features here without editing
+  // these getters.
+  static bool get fileProgressSupported => _native.capabilities.fileProgress;
+  static bool get filePrioritiesSupported =>
+      _native.capabilities.filePriorities;
+  static bool get resumeDataSupported => _native.capabilities.resumeData;
+  static bool get forceRecheckSupported => _native.capabilities.forceRecheck;
+  static bool get trackersSupported => _native.capabilities.trackers;
+  static bool get reannounceSupported => _native.capabilities.reannounce;
+  static bool get createTorrentSupported => _native.capabilities.createTorrent;
+  static bool get ipFilterSupported => _native.capabilities.ipFilter;
+  static bool get sequentialDownloadSupported =>
+      _native.capabilities.sequentialDownload;
+  static bool get superSeedingSupported => _native.capabilities.superSeeding;
+  static bool get pieceDeadlineSupported => _native.capabilities.pieceDeadline;
+  static bool get webSeedsSupported => _native.capabilities.webSeeds;
+  static bool get proxySupported => _native.capabilities.proxy;
+  static bool get sslSupported => _native.capabilities.ssl;
+  static bool get peerExchangeSupported => _native.capabilities.peerExchange;
+  static bool get localPeerDiscoverySupported =>
+      _native.capabilities.localPeerDiscovery;
+  static bool get natPmpSupported => _native.capabilities.natPmp;
+  static bool get anonymousModeSupported => _native.capabilities.anonymousMode;
+  static bool get perTorrentConnectionLimitSupported =>
+      _native.capabilities.perTorrentConnectionLimit;
 
   static Future<void> forceStopTorrent(int id) async {
     await _torrentLock.synchronized(() async {

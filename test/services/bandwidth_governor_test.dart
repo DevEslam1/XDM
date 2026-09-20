@@ -39,12 +39,12 @@ void main() {
       expect(governor.perConsumerBytesPerSecond, equals(5000));
     });
 
-    test('setBurstFactor clamps between 1.0 and 4.0', () {
+    test('setBurstFactor clamps between 1.0 and 1.5', () {
       final governor = BandwidthGovernor(1000, 0.5);
       expect(governor.burstFactor, equals(1.0));
 
       governor.setBurstFactor(10.0);
-      expect(governor.burstFactor, equals(4.0));
+      expect(governor.burstFactor, equals(1.5));
     });
 
     test('task-specific limits can be set and removed', () {

@@ -1048,34 +1048,6 @@ mixin _MediaDownloadsMixin on _BrowserScreenStateBase {
     }
 
     final detectedSources = _detectedMediaSources[activeTab.id] ?? [];
-    final isPlaylist = _detectedPlaylistUrls.containsKey(activeTab.id);
-    final playlistCount = _detectedPlaylistUrls[activeTab.id] ?? 0;
-
-    if (isPlaylist) {
-      return _SignalFab(
-        heroTag: 'download_fab_${activeTab.id}',
-        color: Colors.red,
-        icon: Icons.playlist_play_rounded,
-        label: 'Playlist${playlistCount > 0 ? ' ($playlistCount)' : ''}',
-        pulse: true,
-        isDark: isDark,
-        onPressed: () async {
-          triggerHaptic(settings);
-          final result =
-              await YoutubePlaylistSheet.show(context, activeTab.url);
-          if (result != null && context.mounted) {
-            ThemedSnackbar.show(
-              context,
-              message:
-                  '${result.selectedVideos.length} videos enqueued from "${result.playlistTitle}"',
-              color: AppTheme.neonGreen,
-              icon: Icons.playlist_add_check,
-              isDarkMode: isDark,
-            );
-          }
-        },
-      );
-    }
 
     if (YoutubeService.isExtractableMediaUrl(activeTab.url) &&
         detectedSources.isNotEmpty) {
@@ -1108,25 +1080,6 @@ mixin _MediaDownloadsMixin on _BrowserScreenStateBase {
               );
             }
           }
-        },
-      );
-    }
-
-    if (YoutubeService.isYoutubeVideoUrl(activeTab.url) &&
-        _ytDetectionFailed.containsKey(activeTab.url)) {
-      return _SignalFab(
-        heroTag: 'download_fab_${activeTab.id}',
-        color: Colors.red.withValues(alpha: 0.6),
-        icon: Icons.refresh_rounded,
-        label: 'YouTube (retry)',
-        pulse: false,
-        isDark: isDark,
-        onPressed: () async {
-          triggerHaptic(settings);
-          setState(() {
-            _ytDetectionFailed.remove(activeTab.url);
-          });
-          _scanPageMedia(activeTab);
         },
       );
     }

@@ -7,13 +7,15 @@ void main() {
 
   group('SubscriptionService', () {
     late SubscriptionService service;
+    var serviceDisposed = false;
 
     setUp(() {
       service = SubscriptionService();
+      serviceDisposed = false;
     });
 
     tearDown(() {
-      service.dispose();
+      if (!serviceDisposed) service.dispose();
     });
 
     test('initializes with free tier by default', () {
@@ -88,6 +90,20 @@ void main() {
     test('dispose cancels timer', () {
       // Should not throw
       service.dispose();
+      serviceDisposed = true;
+    });
+
+    test('init unlocks premium tier while purchases are disabled', () async {
+      if (kPurchasesEnabled) return; // billing enabled — covered elsewhere
+      await service.init();
+      expect(service.isUnlocked, isTrue);
+      expect(service.isPremium, isTrue);
+      expect(service.isFree, isFalse);
+      expect(service.hasEntitlement('torrent_support'), isTrue);
+      expect(service.hasEntitlement('unlimited_downloads'), isTrue);
+      expect(service.maxConcurrentDownloads, 0);
+      expect(service.hasReachedDownloadLimit(9999), isFalse);
+      expect(service.effectiveThreadCount(32), 32);
     });
   });
 }

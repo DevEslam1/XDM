@@ -115,12 +115,44 @@ class L10n {
         'ar';
   }
 
+  /// Current language code without a BuildContext, for static helpers that
+  /// cannot use `L10n.of(context)`. Falls back to English outside the tree.
+  static String get currentLang {
+    try {
+      return SettingsProvider.instance.languageCode;
+    } catch (_) {
+      return 'en';
+    }
+  }
+
+  static String _langOf(BuildContext context) {
+    try {
+      return Provider.of<SettingsProvider>(context, listen: false).languageCode;
+    } catch (_) {
+      return 'en';
+    }
+  }
+
   // FIX(H-20): Normalize empty category to "Auto" so it displays correctly
   // across LTR/RTL and appears in analytics/aggregation.
   static String translateCategory(BuildContext context, String cat) {
     final effectiveCat = cat.isEmpty ? 'Auto' : cat;
-    if (!isRtl(context)) return effectiveCat;
-    switch (effectiveCat) {
+    switch (_langOf(context)) {
+      case 'ar':
+        return _categoryAr(effectiveCat);
+      case 'de':
+        return _categoryDe(effectiveCat);
+      case 'es':
+        return _categoryEs(effectiveCat);
+      case 'fr':
+        return _categoryFr(effectiveCat);
+      default:
+        return effectiveCat;
+    }
+  }
+
+  static String _categoryAr(String cat) {
+    switch (cat) {
       case 'Video':
         return 'فيديو';
       case 'Audio':
@@ -131,10 +163,75 @@ class L10n {
         return 'أرشيف';
       case 'APK':
         return 'تطبيق';
+      case 'App':
+        return 'تطبيق';
       case 'Auto':
         return 'تلقائي';
       default:
         return 'أخرى';
+    }
+  }
+
+  static String _categoryDe(String cat) {
+    switch (cat) {
+      case 'Video':
+        return 'Video';
+      case 'Audio':
+        return 'Audio';
+      case 'Document':
+        return 'Dokument';
+      case 'Archive':
+        return 'Archiv';
+      case 'APK':
+        return 'APK';
+      case 'App':
+        return 'App';
+      case 'Auto':
+        return 'Auto';
+      default:
+        return 'Sonstige';
+    }
+  }
+
+  static String _categoryEs(String cat) {
+    switch (cat) {
+      case 'Video':
+        return 'Vídeo';
+      case 'Audio':
+        return 'Audio';
+      case 'Document':
+        return 'Documento';
+      case 'Archive':
+        return 'Archivo';
+      case 'APK':
+        return 'APK';
+      case 'App':
+        return 'Aplicación';
+      case 'Auto':
+        return 'Auto';
+      default:
+        return 'Otros';
+    }
+  }
+
+  static String _categoryFr(String cat) {
+    switch (cat) {
+      case 'Video':
+        return 'Vidéo';
+      case 'Audio':
+        return 'Audio';
+      case 'Document':
+        return 'Document';
+      case 'Archive':
+        return 'Archive';
+      case 'APK':
+        return 'APK';
+      case 'App':
+        return 'Application';
+      case 'Auto':
+        return 'Auto';
+      default:
+        return 'Autres';
     }
   }
 
@@ -143,23 +240,78 @@ class L10n {
     DownloadStatus status,
     String rawEta,
   ) {
+    final lang = _langOf(context);
     if (status == DownloadStatus.downloading) {
-      if (!isRtl(context)) {
-        return '$rawEta left';
+      switch (lang) {
+        case 'ar':
+          return '${rawEta.replaceAllMapped(RegExp(r"(\d+)\s*h\b"), (m) => "${m[1]} ساعة").replaceAllMapped(RegExp(r"(\d+)\s*m\b"), (m) => "${m[1]} دقيقة").replaceAllMapped(RegExp(r"(\d+)\s*s\b"), (m) => "${m[1]} ثانية").trim()} متبقي';
+        case 'de':
+          return '$rawEta übrig';
+        case 'es':
+          return 'quedan $rawEta';
+        case 'fr':
+          return 'il reste $rawEta';
+        default:
+          return '$rawEta left';
       }
-      return '${rawEta.replaceAllMapped(RegExp(r"(\d+)\s*h\b"), (m) => "${m[1]} ساعة").replaceAllMapped(RegExp(r"(\d+)\s*m\b"), (m) => "${m[1]} دقيقة").replaceAllMapped(RegExp(r"(\d+)\s*s\b"), (m) => "${m[1]} ثانية").trim()} متبقي';
     }
-    if (!isRtl(context)) return rawEta;
-    switch (status) {
-      case DownloadStatus.completed:
-        if (rawEta == 'Seeding') return 'مشاركة الملف (Seeding)';
-        return 'مكتمل';
-      case DownloadStatus.queued:
-        return 'قيد الانتظار';
-      case DownloadStatus.paused:
-        return 'متوقف مؤقتاً';
-      case DownloadStatus.failed:
-        return 'فشل التنزيل';
+    switch (lang) {
+      case 'ar':
+        switch (status) {
+          case DownloadStatus.completed:
+            if (rawEta == 'Seeding') return 'مشاركة الملف (Seeding)';
+            return 'مكتمل';
+          case DownloadStatus.queued:
+            return 'قيد الانتظار';
+          case DownloadStatus.paused:
+            return 'متوقف مؤقتاً';
+          case DownloadStatus.failed:
+            return 'فشل التنزيل';
+          default:
+            return rawEta;
+        }
+      case 'de':
+        switch (status) {
+          case DownloadStatus.completed:
+            if (rawEta == 'Seeding') return 'Am Seeden (Seeding)';
+            return 'Abgeschlossen';
+          case DownloadStatus.queued:
+            return 'In Warteschlange';
+          case DownloadStatus.paused:
+            return 'Pausiert';
+          case DownloadStatus.failed:
+            return 'Fehlgeschlagen';
+          default:
+            return rawEta;
+        }
+      case 'es':
+        switch (status) {
+          case DownloadStatus.completed:
+            if (rawEta == 'Seeding') return 'Compartiendo (Seeding)';
+            return 'Completado';
+          case DownloadStatus.queued:
+            return 'En cola';
+          case DownloadStatus.paused:
+            return 'Pausado';
+          case DownloadStatus.failed:
+            return 'Fallido';
+          default:
+            return rawEta;
+        }
+      case 'fr':
+        switch (status) {
+          case DownloadStatus.completed:
+            if (rawEta == 'Seeding') return 'Partage en cours (Seeding)';
+            return 'Terminé';
+          case DownloadStatus.queued:
+            return 'En attente';
+          case DownloadStatus.paused:
+            return 'En pause';
+          case DownloadStatus.failed:
+            return 'Échec';
+          default:
+            return rawEta;
+        }
       default:
         return rawEta;
     }
@@ -169,23 +321,52 @@ class L10n {
     BuildContext context,
     DownloadStatus status,
   ) {
-    if (!isRtl(context)) {
-      return switch (status) {
-        DownloadStatus.downloading => 'Downloading',
-        DownloadStatus.completed => 'Completed',
-        DownloadStatus.paused => 'Paused',
-        DownloadStatus.queued => 'Queued',
-        DownloadStatus.failed => 'Failed',
-        DownloadStatus.merging => 'Merging',
-      };
+    switch (_langOf(context)) {
+      case 'ar':
+        return switch (status) {
+          DownloadStatus.downloading => 'جاري التحميل',
+          DownloadStatus.completed => 'مكتمل',
+          DownloadStatus.paused => 'موقوف مؤقتاً',
+          DownloadStatus.queued => 'في الانتظار',
+          DownloadStatus.failed => 'فشل الاتصال',
+          DownloadStatus.merging => 'جاري الدمج',
+        };
+      case 'de':
+        return switch (status) {
+          DownloadStatus.downloading => 'Wird geladen',
+          DownloadStatus.completed => 'Abgeschlossen',
+          DownloadStatus.paused => 'Pausiert',
+          DownloadStatus.queued => 'In Warteschlange',
+          DownloadStatus.failed => 'Fehlgeschlagen',
+          DownloadStatus.merging => 'Wird zusammengeführt',
+        };
+      case 'es':
+        return switch (status) {
+          DownloadStatus.downloading => 'Descargando',
+          DownloadStatus.completed => 'Completado',
+          DownloadStatus.paused => 'Pausado',
+          DownloadStatus.queued => 'En cola',
+          DownloadStatus.failed => 'Fallido',
+          DownloadStatus.merging => 'Combinando',
+        };
+      case 'fr':
+        return switch (status) {
+          DownloadStatus.downloading => 'Téléchargement',
+          DownloadStatus.completed => 'Terminé',
+          DownloadStatus.paused => 'En pause',
+          DownloadStatus.queued => 'En attente',
+          DownloadStatus.failed => 'Échec',
+          DownloadStatus.merging => 'Fusion',
+        };
+      default:
+        return switch (status) {
+          DownloadStatus.downloading => 'Downloading',
+          DownloadStatus.completed => 'Completed',
+          DownloadStatus.paused => 'Paused',
+          DownloadStatus.queued => 'Queued',
+          DownloadStatus.failed => 'Failed',
+          DownloadStatus.merging => 'Merging',
+        };
     }
-    return switch (status) {
-      DownloadStatus.downloading => 'جاري التحميل',
-      DownloadStatus.completed => 'مكتمل',
-      DownloadStatus.paused => 'موقوف مؤقتاً',
-      DownloadStatus.queued => 'في الانتظار',
-      DownloadStatus.failed => 'فشل الاتصال',
-      DownloadStatus.merging => 'جاري الدمج',
-    };
   }
 }

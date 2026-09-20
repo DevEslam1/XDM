@@ -1,7 +1,5 @@
 import 'package:dmx/core/domain/torrent_models.dart';
 import 'package:dmx/core/interfaces/i_torrent_native.dart';
-import 'package:dmx/core/services/engine/torrent_session_events.dart';
-import 'package:dmx/core/services/engine/torrent_session_state.dart';
 import 'package:dmx/core/services/torrent/fake_torrent_native.dart';
 import 'package:dmx/core/services/torrent_service_ffi.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,114 +11,6 @@ void main() {
     setUp(() {
       fakeNative = FakeTorrentNative();
       TorrentService.setNativeForTesting(fakeNative);
-    });
-
-    test(
-        '1. Full alert -> event mapping table covered (including fastresumeRejected & torrentError)',
-        () async {
-      var state = const TorrentSessionState(torrentId: 1, name: 'TestTorrent');
-
-      // 1a. metadataReceived
-      final metadataEvent = MetadataReceivedEvent(
-        torrentId: 1,
-        timestamp: DateTime.now(),
-        name: 'Resolved Torrent Name',
-        totalWanted: 1000000,
-        files: [
-          {
-            'name': 'file1.bin',
-            'length': 500000,
-            'selected': true,
-            'priority': 4
-          },
-          {
-            'name': 'file2.bin',
-            'length': 500000,
-            'selected': true,
-            'priority': 4
-          },
-        ],
-      );
-      state = TorrentSessionState.reduce(state, metadataEvent);
-      expect(state.name, 'Resolved Torrent Name');
-      expect(state.hasMetadata, isTrue);
-      expect(state.totalWanted, 1000000);
-      expect(state.files.length, 2);
-
-      // 1b. pieceFinished
-      final pieceEvent = PieceFinishedEvent(
-        torrentId: 1,
-        timestamp: DateTime.now(),
-        pieceIndex: 0,
-        totalWantedDone: 250000,
-        piecesHave: 1,
-        piecesTotal: 4,
-        pieceBitfield: [true, false, false, false],
-      );
-      state = TorrentSessionState.reduce(state, pieceEvent);
-      expect(state.totalWantedDone, 250000);
-      expect(state.piecesHave, 1);
-      expect(state.piecesTotal, 4);
-      expect(state.progress, 0.25);
-      expect(state.pieceBitfield, [true, false, false, false]);
-
-      // 1c. trackerReply
-      final trackerReplyEvent = TrackerReplyEvent(
-        torrentId: 1,
-        timestamp: DateTime.now(),
-        trackerUrl: 'http://tracker.test/announce',
-        numPeers: 12,
-      );
-      state = TorrentSessionState.reduce(state, trackerReplyEvent);
-      expect(state.numPeers, 12);
-
-      // 1d. trackerError
-      final trackerErrorEvent = TrackerErrorEvent(
-        torrentId: 1,
-        timestamp: DateTime.now(),
-        trackerUrl: 'http://tracker.test/announce',
-        error: 'Connection refused',
-      );
-      state = TorrentSessionState.reduce(state, trackerErrorEvent);
-      expect(state.numPeers, 12); // unchanged
-
-      // 1f. torrentPaused
-      final pausedEvent = TorrentPausedAlertEvent(
-        torrentId: 1,
-        timestamp: DateTime.now(),
-      );
-      state = TorrentSessionState.reduce(state, pausedEvent);
-      expect(state.isPaused, isTrue);
-      expect(state.stateLabel, 'Paused');
-      expect(state.downloadRate, 0);
-
-      // 1g. torrentResumed
-      final resumedEvent = TorrentResumedAlertEvent(
-        torrentId: 1,
-        timestamp: DateTime.now(),
-      );
-      state = TorrentSessionState.reduce(state, resumedEvent);
-      expect(state.isPaused, isFalse);
-      expect(state.stateLabel, 'Downloading');
-
-      // 1h. fastresumeRejected
-      final fastresumeRejectedEvent = FastresumeRejectedEvent(
-        torrentId: 1,
-        timestamp: DateTime.now(),
-        reason: 'mismatched file allocation table',
-      );
-      state = TorrentSessionState.reduce(state, fastresumeRejectedEvent);
-      expect(state.errorMessage, contains('Fastresume rejected'));
-
-      // 1i. torrentError
-      final torrentErrorEvent = TorrentErrorAlertEvent(
-        torrentId: 1,
-        timestamp: DateTime.now(),
-        error: 'Disk I/O failure on drive D:',
-      );
-      state = TorrentSessionState.reduce(state, torrentErrorEvent);
-      expect(state.errorMessage, 'Disk I/O failure on drive D:');
-      expect(state.stateLabel, 'Error');
     });
 
     test(

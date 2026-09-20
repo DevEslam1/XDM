@@ -98,7 +98,6 @@ class ScheduleManager {
   final void Function() _notifyListeners;
   // ignore: unused_field
   final void Function() _pumpQueue;
-  // ignore: unused_field
   final void Function(String taskName, DateTime scheduledAt)?
       _onScheduledTaskStarted;
   final Future<void> Function(String taskId)? _onScheduleFired;
@@ -261,8 +260,15 @@ class ScheduleManager {
             }
           }
         }
-        if (task.wasScheduledAt != null) {
-          _onScheduledTaskStarted?.call(task.fileName, task.wasScheduledAt!);
+        // The in-app promotion consumed the schedule — drop the OS alarm.
+        unawaited(cancelAlarm(task.id));
+        // SCHED-FIX-5: notify on the schedule that just fired. The pre- and
+        // post-promotion in-memory copies both keep `scheduledAt` here, so
+        // this fires for first-time schedules too (wasScheduledAt is only
+        // written by the DB promotion itself).
+        final scheduledFor = task.scheduledAt ?? task.wasScheduledAt;
+        if (scheduledFor != null) {
+          _onScheduledTaskStarted?.call(task.fileName, scheduledFor);
         }
       }
     }

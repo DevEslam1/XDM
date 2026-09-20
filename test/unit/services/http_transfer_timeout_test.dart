@@ -10,19 +10,20 @@ void main() {
       const tenGB = 10 * 1024 * 1024 * 1024;
       const hundredGB = 100 * 1024 * 1024 * 1024;
 
-      // 1 MB -> bounded by min (30 min)
+      // Documented baseline (FIX 13): 50 KB/s, clamped to [30 min, 24 h].
+      // 1 MB -> ~21s, raised to the 30-minute floor
       final timeout1MB = HttpTransferJob.computeHardTimeoutForSize(oneMB);
       expect(timeout1MB, const Duration(minutes: 30));
 
-      // 100 MB -> 1000s (~16.6m), bounded by min (30 min)
+      // 100 MB -> 2048s (~34 min), above the floor so unclamped
       final timeout100MB = HttpTransferJob.computeHardTimeoutForSize(hundredMB);
-      expect(timeout100MB, const Duration(minutes: 30));
+      expect(timeout100MB, const Duration(seconds: 2048));
 
-      // 1 GB -> 10,485s (~2h 54m 45s)
+      // 1 GB -> 1 GB / 50 KB/s = 20971s (~5h 49m)
       final timeout1GB = HttpTransferJob.computeHardTimeoutForSize(oneGB);
-      expect(timeout1GB.inSeconds, 10485);
+      expect(timeout1GB.inSeconds, 20971);
 
-      // 10 GB -> 100,000s (>24h), capped at 24h
+      // 10 GB -> ~58h, capped at 24h
       final timeout10GB = HttpTransferJob.computeHardTimeoutForSize(tenGB);
       expect(timeout10GB, const Duration(hours: 24));
 

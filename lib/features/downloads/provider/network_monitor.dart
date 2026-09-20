@@ -337,10 +337,15 @@ class NetworkMonitor implements IConnectivity {
   }
 
   Future<void> _resumeWaitingForWifi({bool skipPump = false}) async {
+    // Resume ONLY tasks this monitor (or the orchestrator's start gate)
+    // actually paused under the wifi-only policy — a matching status/error
+    // text alone also swept up tasks paused for unrelated reasons that
+    // merely carried the same message. Restart-time resume of tasks
+    // persisted as waiting-for-wifi is handled by the provider's
+    // _autoResumeIncomplete at load.
     final waiting = _tasks().where(
       (task) =>
-          (_tasksPausedDueToWifiOnly.contains(task.id) ||
-              task.errorMessage == DownloadStatusMessages.waitingWifi) &&
+          _tasksPausedDueToWifiOnly.contains(task.id) &&
           task.status == DownloadStatus.paused,
     );
     for (final task in waiting.toList()) {

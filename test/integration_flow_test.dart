@@ -36,6 +36,10 @@ class FakeDownloadEngine extends DownloadEngine {
   final knownFileSizes = <String, int>{};
 
   @override
+  Future<bool> hasEnoughDiskSpace(String saveDir, int requiredBytes) async =>
+      true;
+
+  @override
   Future<DownloadMetadata> resolveMetadata({
     required String url,
     String? requestedFileName,
@@ -178,6 +182,14 @@ Future<(DatabaseService, SettingsProvider)> _setupServices() async {
   return (database, settings);
 }
 
+/// Unique per-test download directory. The engine's FIX(04) resume-merge early
+/// path treats `temp video + temp audio files present at start` as "both
+/// streams complete" — leftovers from an earlier run in a shared directory
+/// would make every run take the merge-only path instead of the download
+/// path this test verifies.
+String _uniqueSaveDir() =>
+    'build/test_downloads_${DateTime.now().microsecondsSinceEpoch}';
+
 void main() {
   setUpAll(() {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -258,7 +270,7 @@ void main() {
       url: 'https://example.com/test_flow.zip',
       size: 100,
       category: 'Archive',
-      savePath: 'build/test_downloads',
+      savePath: _uniqueSaveDir(),
     );
 
     expect(provider.tasks.length, 1);
@@ -303,7 +315,7 @@ void main() {
       url: 'https://example.com/video',
       size: 100,
       category: 'Video',
-      savePath: 'build/test_downloads',
+      savePath: _uniqueSaveDir(),
       mergedAudioUrl: 'https://example.com/audio',
       audioSize: 50,
     );

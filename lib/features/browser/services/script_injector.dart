@@ -550,6 +550,8 @@ $customJs
     required AdBlockerService adBlocker,
     required String customJs,
     required String customCss,
+    String siteCustomJs = '',
+    String siteCustomCss = '',
   }) async {
     final controller = tab.controller;
     if (controller == null) return;
@@ -628,6 +630,32 @@ $customJs
     document.head.appendChild(style);
   }
   style.textContent = $jsonCss;
+})();
+''');
+    }
+
+    // Per-site custom JS/CSS (site_settings_store), appended after globals.
+    if (siteCustomJs.isNotEmpty) {
+      scripts.add('''
+if (!window._xdmSiteJsInjected) {
+  window._xdmSiteJsInjected = true;
+  (function() {
+$siteCustomJs
+  })();
+}
+''');
+    }
+    if (siteCustomCss.isNotEmpty) {
+      final jsonSiteCss = jsonEncode(siteCustomCss);
+      scripts.add('''
+(function() {
+  var style = document.getElementById('xdm-site-css');
+  if (!style) {
+    style = document.createElement('style');
+    style.id = 'xdm-site-css';
+    document.head.appendChild(style);
+  }
+  style.textContent = $jsonSiteCss;
 })();
 ''');
     }

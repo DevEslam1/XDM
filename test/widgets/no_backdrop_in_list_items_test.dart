@@ -5,8 +5,6 @@ import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/features/downloads/provider/download_provider.dart';
 import 'package:dmx/features/downloads/widgets/download_card.dart';
 import 'package:dmx/features/downloads/widgets/filter_chips_bar.dart';
-import 'package:dmx/features/downloads/widgets/speed_graph_widget.dart';
-import 'package:dmx/features/downloads/widgets/status_chip.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
 import 'package:dmx/shared/widgets/dmx_backdrop_filter.dart';
 import 'package:flutter/material.dart';
@@ -85,8 +83,6 @@ void main() {
                 children: [
                   DownloadCard(task: sampleTask),
                   const FilterChipsBar(),
-                  const SpeedGraphWidget(speedHistory: [1000, 2000, 1500]),
-                  StatusChip(task: sampleTask),
                 ],
               ),
             ),

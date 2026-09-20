@@ -293,6 +293,156 @@ class NativeBtConfig {
   });
 }
 
+/// Capability flags for the loaded native BitTorrent bridge.
+///
+/// These describe what the bridge can actually do, rather than what the
+/// application wishes it could do, so a newer bridge can auto-enable features
+/// without editing hardcoded getters. [TorrentNativeCapabilities.v192] pins the
+/// exact capabilities of the bundled `libtorrent_flutter` 1.9.2 bridge;
+/// [TorrentNativeCapabilities.all] is the optimistic set used by tests and
+/// future bridges.
+class TorrentNativeCapabilities {
+  /// ABI-2-only `lt_get_file_progress` export; absent on 1.9.2.
+  final bool fileProgress;
+
+  /// Native file-priority read-back is absent on 1.9.2; priorities are cached
+  /// Dart-side instead.
+  final bool filePriorities;
+
+  /// Resume-data save/load exports (`lt_save_resume_data` et al.) are ABI-2
+  /// only and absent from 1.9.2.
+  final bool resumeData;
+
+  /// Force-recheck has a working export on 1.9.2.
+  final bool forceRecheck;
+
+  /// Tracker management (`lt_get_trackers`, add/remove) is ABI-2 only.
+  final bool trackers;
+
+  /// Reannounce depends on tracker management and is unavailable without it.
+  final bool reannounce;
+
+  /// No FFI-bound symbol backs torrent creation on 1.9.2.
+  final bool createTorrent;
+
+  /// IP-filter loading has no bound export on 1.9.2.
+  final bool ipFilter;
+
+  /// The sequential-download setter is a logged no-op on 1.9.2.
+  final bool sequentialDownload;
+
+  /// The super-seeding setter is a logged no-op on 1.9.2.
+  final bool superSeeding;
+
+  /// The piece-deadline setter is a logged no-op on 1.9.2.
+  final bool pieceDeadline;
+
+  /// addWebSeed/removeWebSeed/getWebSeeds are logged no-ops on 1.9.2.
+  final bool webSeeds;
+
+  /// `setProxy` is a logged no-op on 1.9.2.
+  final bool proxy;
+
+  /// `setSslCertificate` is a logged no-op on 1.9.2.
+  final bool ssl;
+
+  /// 1.9.2's BtConfig exposes no peer-exchange knob.
+  final bool peerExchange;
+
+  /// 1.9.2's BtConfig exposes no local peer/service discovery knob.
+  final bool localPeerDiscovery;
+
+  /// Standalone NAT-PMP is folded into the UPnP toggle on 1.9.2.
+  final bool natPmp;
+
+  /// 1.9.2's BtConfig exposes no anonymous-mode knob.
+  final bool anonymousMode;
+
+  /// 1.9.2's BtConfig exposes no per-torrent connection cap.
+  final bool perTorrentConnectionLimit;
+
+  const TorrentNativeCapabilities({
+    this.fileProgress = false,
+    this.filePriorities = false,
+    this.resumeData = false,
+    this.forceRecheck = true,
+    this.trackers = false,
+    this.reannounce = false,
+    this.createTorrent = false,
+    this.ipFilter = false,
+    this.sequentialDownload = false,
+    this.superSeeding = false,
+    this.pieceDeadline = false,
+    this.webSeeds = false,
+    this.proxy = false,
+    this.ssl = false,
+    this.peerExchange = false,
+    this.localPeerDiscovery = false,
+    this.natPmp = false,
+    this.anonymousMode = false,
+    this.perTorrentConnectionLimit = false,
+  });
+
+  /// Capabilities of the pinned `libtorrent_flutter` 1.9.2 bridge.
+  ///
+  /// Only force-recheck is available. Several flags were previously hardcoded
+  /// `true`, which made the app request work the native side could not perform:
+  /// `resumeData` sent every graceful pause into a 5s wait for a
+  /// save_resume_data alert that no export could ever post, three times over,
+  /// and then force-stopped the torrent — dropping all peers and re-handshaking
+  /// from scratch. The absent exports are bound as nullable so the calls
+  /// themselves are safe; the flags exist so callers can skip them instead of
+  /// timing out to find out.
+  const factory TorrentNativeCapabilities.v192() =
+      TorrentNativeCapabilities._v192;
+
+  /// Every capability advertised as supported.
+  const factory TorrentNativeCapabilities.all() =
+      TorrentNativeCapabilities._all;
+
+  const TorrentNativeCapabilities._v192()
+      : fileProgress = false,
+        filePriorities = false,
+        resumeData = false,
+        forceRecheck = true,
+        trackers = false,
+        reannounce = false,
+        createTorrent = false,
+        ipFilter = false,
+        sequentialDownload = false,
+        superSeeding = false,
+        pieceDeadline = false,
+        webSeeds = false,
+        proxy = false,
+        ssl = false,
+        peerExchange = false,
+        localPeerDiscovery = false,
+        natPmp = false,
+        anonymousMode = false,
+        perTorrentConnectionLimit = false;
+
+  const TorrentNativeCapabilities._all()
+      : fileProgress = true,
+        filePriorities = true,
+        resumeData = true,
+        forceRecheck = true,
+        trackers = true,
+        reannounce = true,
+        createTorrent = true,
+        ipFilter = true,
+        sequentialDownload = true,
+        superSeeding = true,
+        pieceDeadline = true,
+        webSeeds = true,
+        proxy = true,
+        ssl = true,
+        peerExchange = true,
+        localPeerDiscovery = true,
+        natPmp = true,
+        anonymousMode = true,
+        perTorrentConnectionLimit = true;
+}
+
 /// Abstract contract for typed native BitTorrent engine interactions.
 abstract class ITorrentNative {
   bool get isInitialized;
@@ -308,6 +458,16 @@ abstract class ITorrentNative {
 
   /// Whether the loaded native bridge matches the ABI these bindings expect.
   bool get isBridgeCompatible => true;
+
+  /// Capabilities the loaded bridge can actually perform.
+  ///
+  /// Defaults to the pinned `libtorrent_flutter` 1.9.2 matrix; implementations
+  /// backed by a newer bridge override this to advertise the extra features.
+  TorrentNativeCapabilities get capabilities =>
+      const TorrentNativeCapabilities.v192();
+
+  /// Whether [recheckTorrent] is supported by the loaded bridge.
+  bool get forceRecheckSupported => capabilities.forceRecheck;
 
   Stream<NativeAlertEvent> get alertStream;
   Stream<Map<int, NativeTorrentStatus>> get statusStream;

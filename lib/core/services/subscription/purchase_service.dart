@@ -37,6 +37,12 @@ class PurchaseResult {
         plan = null;
 }
 
+/// Signature for the delegate that initiates the platform purchase flow.
+///
+/// Returns `true` when the platform purchase dialog was successfully
+/// initiated, `false` when platform billing is unavailable.
+typedef PlatformPurchaseInitiator = Future<bool> Function(SubscriptionPlan plan);
+
 /// Manages the in-app purchase flow.
 ///
 /// Handles initiating purchases, listening to purchase updates,
@@ -48,11 +54,16 @@ class PurchaseService extends ChangeNotifier {
   PurchaseService({
     required SubscriptionService subscriptionService,
     SubClubApiClient? apiClient,
+    PlatformPurchaseInitiator? platformPurchaseInitiator,
   })  : _subscriptionService = subscriptionService,
-        _apiClient = apiClient ?? SubClubApiClient();
+        _apiClient = apiClient ?? SubClubApiClient() {
+    _platformPurchaseInitiator =
+        platformPurchaseInitiator ?? _initiatePlatformPurchase;
+  }
 
   final SubscriptionService _subscriptionService;
   final SubClubApiClient _apiClient;
+  late final PlatformPurchaseInitiator _platformPurchaseInitiator;
   final _log = LoggingService.logger('PurchaseService');
 
   StreamSubscription<List<Map<String, dynamic>>>? _purchaseSubscription;
@@ -60,6 +71,7 @@ class PurchaseService extends ChangeNotifier {
 
   bool _isInitialized = false;
   bool _isPurchasing = false;
+  bool _isDisposed = false;
 
   bool get isPurchasing => _isPurchasing;
 
@@ -82,6 +94,9 @@ class PurchaseService extends ChangeNotifier {
   /// Returns a [PurchaseResult] that completes when the purchase
   /// succeeds, fails, or is cancelled by the user.
   Future<PurchaseResult> purchase(SubscriptionPlan plan) async {
+    if (_isDisposed) {
+      return const PurchaseResult.failure('Purchase service was disposed');
+    }
     if (_isPurchasing) {
       return const PurchaseResult.failure('A purchase is already in progress');
     }
@@ -89,15 +104,17 @@ class PurchaseService extends ChangeNotifier {
     _isPurchasing = true;
     notifyListeners();
 
-    final completer = Completer<PurchaseResult>();
-    _pendingPurchases[plan.productId] = completer;
-
     try {
       _log.info('Initiating purchase for ${plan.id} (${plan.productId})');
 
-      // In production: trigger platform-specific purchase flow
-      // For now, simulate the flow
-      await _initiatePlatformPurchase(plan);
+      final initiated = await _platformPurchaseInitiator(plan);
+      if (!initiated) {
+        return const PurchaseResult.failure(
+            'In-app purchases are not available on this platform yet');
+      }
+
+      final completer = Completer<PurchaseResult>();
+      _pendingPurchases[plan.productId] = completer;
 
       // Wait for the purchase to complete or timeout
       final result = await completer.future.timeout(
@@ -120,7 +137,7 @@ class PurchaseService extends ChangeNotifier {
     } finally {
       _pendingPurchases.remove(plan.productId);
       _isPurchasing = false;
-      notifyListeners();
+      if (!_isDisposed) notifyListeners();
     }
   }
 
@@ -166,6 +183,7 @@ class PurchaseService extends ChangeNotifier {
 
   @override
   void dispose() {
+    _isDisposed = true;
     _purchaseSubscription?.cancel();
     // Complete any pending purchases as cancelled
     for (final completer in _pendingPurchases.values) {
@@ -180,22 +198,17 @@ class PurchaseService extends ChangeNotifier {
 
   // ── Private ──
 
-  Future<void> _initiatePlatformPurchase(SubscriptionPlan plan) async {
-    // Platform-specific purchase implementation:
-    //
-    // iOS: StoreKit 2 via MethodChannel or RevenueCat
-    // Android: Google Play Billing via MethodChannel or RevenueCat
-    //
-    // The platform side would:
-    // 1. Query the store for the product
-    // 2. Present the purchase dialog
-    // 3. Return the receipt on success
-    // 4. Call _completePurchase() with the result
-    //
-    // For now, this is a placeholder that will be connected to
-    // the native side during integration.
-
-    _log.info('Platform purchase initiated for ${plan.productId}');
+  /// Initiates the platform purchase flow. Returns false when platform
+  /// billing is not wired (placeholder), so [purchase] can fail fast.
+  ///
+  /// NOTE: paid subscriptions are currently disabled app-wide
+  /// ([kPurchasesEnabled] == false) and every install is unlocked at the
+  /// highest tier, so this placeholder is the intended production behavior.
+  /// Re-enable by wiring a store-backed initiator and flipping the flag.
+  Future<bool> _initiatePlatformPurchase(SubscriptionPlan plan) async {
+    _log.warning(
+        'Purchases are disabled — failing fast for ${plan.productId}');
+    return false;
   }
 
   /// Called by the platform purchase listener when a purchase completes.

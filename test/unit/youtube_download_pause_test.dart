@@ -8,8 +8,8 @@ void main() {
         id: 'yt_test_1',
         fileName: 'Test Video.mp4',
         url: 'https://googlevideo.com/videoplayback?id=123',
-        fileSize: 100000000, // 100 MB total
-        downloadedBytes: 30000000, // 30 MB
+        fileSize: 80000000, // 80 MB video stream
+        downloadedBytes: 30000000, // 30 MB video downloaded
         category: 'Video',
         status: DownloadStatus.downloading,
         savePath: '/downloads',
@@ -37,7 +37,7 @@ void main() {
         id: 'yt_test_2',
         fileName: 'Test Video.mp4',
         url: 'https://googlevideo.com/videoplayback?id=123',
-        fileSize: 100000000,
+        fileSize: 80000000, // 80 MB video stream
         downloadedBytes: 45000000, // 45 MB downloaded
         category: 'Video',
         status: DownloadStatus.downloading,
@@ -64,7 +64,7 @@ void main() {
       expect(pausedTask.status, DownloadStatus.paused);
       expect(pausedTask.downloadedBytes, 45000000);
       expect(pausedTask.audioProgress, 1.0);
-      expect(pausedTask.fileSize, 100000000);
+      expect(pausedTask.fileSize, 80000000);
       expect(pausedTask.progressPercentString, '65.0%');
     });
   });

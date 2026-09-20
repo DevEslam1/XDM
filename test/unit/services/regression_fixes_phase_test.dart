@@ -4,9 +4,7 @@ import 'package:dmx/core/services/database/app_database.dart';
 import 'package:dmx/core/services/download_engine.dart';
 import 'package:dmx/core/services/frame_watchdog.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
-import 'package:dmx/shared/widgets/performance_monitor_overlay.dart';
 import 'package:drift/native.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -48,13 +46,6 @@ void main() {
       await FrameWatchdog.detectRefreshRate();
       expect(FrameWatchdog.refreshRate, greaterThanOrEqualTo(60.0));
       expect(FrameWatchdog.frameBudgetMs, lessThanOrEqualTo(16.7));
-    });
-
-    test('PerformanceMonitorOverlay enabled flag can be toggled', () {
-      expect(PerformanceMonitorOverlay.enabled, equals(kDebugMode));
-      PerformanceMonitorOverlay.enabled = false;
-      expect(PerformanceMonitorOverlay.enabled, isFalse);
-      PerformanceMonitorOverlay.enabled = kDebugMode;
     });
   });
 

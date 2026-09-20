@@ -474,19 +474,44 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
         }
         break;
       case 'incognito':
-        await settings.setIncognitoEnabled(!settings.incognitoEnabled);
-        if (mounted) {
-          ThemedSnackbar.show(
-            context,
-            message: settings.incognitoEnabled
-                ? L10n.of(context, 'browser_incognito_on')
-                : L10n.of(context, 'browser_incognito_off'),
-            color: settings.isDarkMode
-                ? AppTheme.neonBlue
-                : AppTheme.lightNeonBlue,
-            icon: Icons.security,
-            isDarkMode: settings.isDarkMode,
-          );
+        if (settings.incognitoEnabled) {
+          // Exit incognito mode globally.
+          await settings.setIncognitoEnabled(false);
+          if (mounted) {
+            ThemedSnackbar.show(
+              context,
+              message: L10n.of(context, 'browser_incognito_off'),
+              color: settings.isDarkMode
+                  ? AppTheme.neonBlue
+                  : AppTheme.lightNeonBlue,
+              icon: Icons.security,
+              isDarkMode: settings.isDarkMode,
+            );
+          }
+        } else {
+          // Open a new incognito tab (same path as the tab switcher button).
+          if (_tabs.length >= settings.maxTabs) {
+            if (mounted) {
+              ThemedSnackbar.show(
+                context,
+                message: L10n.of(context, 'tab_limit_reached'),
+                color: settings.isDarkMode
+                    ? AppTheme.neonAmber
+                    : AppTheme.lightNeonAmber,
+                icon: Icons.warning_amber_rounded,
+                isDarkMode: settings.isDarkMode,
+              );
+            }
+            break;
+          }
+          setState(() {
+            // Same create+add+switch path TabManager provides the tab
+            // switcher (exposed on the base class as _openInNewTab).
+            _openInNewTab('about:blank',
+                isIncognito: true, switchToTab: true);
+            _showBarsNotifier.value = true;
+            _updateLruOrder();
+          });
         }
         break;
       case 'injector':

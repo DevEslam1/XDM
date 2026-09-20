@@ -11,10 +11,10 @@ void main() {
       expect(gov1.burstFactor, 1.0); // clamped to 1.0
 
       final gov2 = BandwidthGovernor(1000, 5.0);
-      expect(gov2.burstFactor, 4.0); // clamped to 4.0
+      expect(gov2.burstFactor, 1.5); // clamped to 1.5 (S-01 burst clamp)
 
       final gov3 = BandwidthGovernor(1000, 2.5);
-      expect(gov3.burstFactor, 2.5);
+      expect(gov3.burstFactor, 1.5); // clamped to 1.5 (S-01 burst clamp)
     });
 
     test('setBurstFactor clamping', () {
@@ -23,7 +23,7 @@ void main() {
       expect(gov.burstFactor, 1.0);
 
       gov.setBurstFactor(10.0);
-      expect(gov.burstFactor, 4.0);
+      expect(gov.burstFactor, 1.5); // S-01 burst clamp
     });
 
     test('isUnlimited behavior', () {
@@ -94,7 +94,8 @@ void main() {
       expect(normalWait, greaterThan(0));
 
       gov.setTaskLimit('task1', 0);
-      expect(await gov.acquire(2000, taskId: 'task1'), greaterThan(0));
+      // Task limit 0 means unlimited (FIX P1-1): bypasses the global share entirely.
+      expect(await gov.acquire(2000, taskId: 'task1'), equals(0));
 
       gov.setTaskLimit('task2', 5000);
       final taskWait = await gov.acquire(2000, taskId: 'task2');

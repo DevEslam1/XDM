@@ -9,6 +9,14 @@ import '../../domain/subscription/subscription_tier.dart';
 import '../logging_service.dart';
 import 'sub_club_api_client.dart';
 
+/// Global switch for paid subscriptions.
+///
+/// Temporarily disabled: every install is unlocked at the highest tier
+/// ([SubscriptionTier.premium]) and the upgrade/paywall flow is never shown.
+/// The store-billing integration can be re-enabled later by flipping this to
+/// `true` and completing the native/plugin wiring.
+const bool kPurchasesEnabled = false;
+
 /// Core subscription service managing subscription state, caching,
 /// and feature gating across the app.
 ///
@@ -19,7 +27,13 @@ class SubscriptionService extends ChangeNotifier {
   SubscriptionService({
     SubClubApiClient? apiClient,
     this.validationInterval = const Duration(minutes: 30),
-  }) : _apiClient = apiClient ?? SubClubApiClient();
+    bool unlocked = false,
+  }) : _apiClient = apiClient ?? SubClubApiClient() {
+    // Production opts in via DI so the premium tier is active from the very
+    // first frame, before the async init() runs. Tests construct the service
+    // with the default (free) unless they explicitly opt in.
+    if (unlocked) _applyUnlockedTier();
+  }
 
   final SubClubApiClient _apiClient;
   final Duration validationInterval;
@@ -35,7 +49,13 @@ class SubscriptionService extends ChangeNotifier {
   String? _planId;
   bool _isValidating = false;
   String? _lastError;
+  bool _isDisposed = false;
+  bool _unlocked = false;
   Timer? _validationTimer;
+
+  /// Whether the app is running with purchases disabled and the highest tier
+  /// forcibly unlocked.
+  bool get isUnlocked => _unlocked;
 
   // ── Public getters ──
   SubscriptionStatus get status => _status;
@@ -87,7 +107,15 @@ class SubscriptionService extends ChangeNotifier {
   // ── Lifecycle ──
 
   /// Initializes the service and starts periodic validation.
+  ///
+  /// When [kPurchasesEnabled] is false the service immediately unlocks the
+  /// premium tier and skips all network validation.
   Future<void> init({String? receipt}) async {
+    if (!kPurchasesEnabled) {
+      _applyUnlockedTier();
+      _log.info('Purchases disabled — unlocked at premium tier');
+      return;
+    }
     if (receipt != null) {
       _receipt = receipt;
     }
@@ -98,6 +126,7 @@ class SubscriptionService extends ChangeNotifier {
 
   /// Validates the current receipt against the Sub Club server.
   Future<void> validate() async {
+    if (_unlocked) return;
     if (_isValidating) return;
     if (_receipt == null) {
       _log.fine('No receipt to validate — defaulting to free tier');
@@ -107,7 +136,7 @@ class SubscriptionService extends ChangeNotifier {
 
     _isValidating = true;
     _lastError = null;
-    notifyListeners();
+    _notifySafely();
 
     try {
       final response = await _apiClient.validateReceipt(_receipt!);
@@ -127,12 +156,13 @@ class SubscriptionService extends ChangeNotifier {
       // On failure, keep cached status — don't downgrade
     } finally {
       _isValidating = false;
-      notifyListeners();
+      _notifySafely();
     }
   }
 
   /// Restores purchases on a new device.
   Future<bool> restorePurchases({required String accountToken}) async {
+    if (_unlocked) return true;
     try {
       final platform =
           defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android';
@@ -149,7 +179,7 @@ class SubscriptionService extends ChangeNotifier {
       _lastValidated = DateTime.now();
 
       await _cacheStatus();
-      notifyListeners();
+      _notifySafely();
       return _status.isPremium;
     } catch (e, st) {
       _log.warning('Restore purchases failed', e, st);
@@ -159,6 +189,7 @@ class SubscriptionService extends ChangeNotifier {
 
   /// Updates the receipt after a successful purchase.
   void setReceipt(String receipt) {
+    if (_unlocked || !kPurchasesEnabled) return;
     _receipt = receipt;
     validate();
   }
@@ -166,6 +197,7 @@ class SubscriptionService extends ChangeNotifier {
   /// Disposes resources.
   @override
   void dispose() {
+    _isDisposed = true;
     _validationTimer?.cancel();
     _apiClient.dispose();
     super.dispose();
@@ -173,11 +205,30 @@ class SubscriptionService extends ChangeNotifier {
 
   // ── Private ──
 
+  /// Notifies listeners unless the service has already been disposed.
+  ///
+  /// In-flight validations triggered by [setReceipt] can complete after
+  /// [dispose]; notifying a disposed [ChangeNotifier] throws in debug mode.
+  void _notifySafely() {
+    if (!_isDisposed) notifyListeners();
+  }
+
   void _setFreeTier() {
     _status = SubscriptionStatus.free;
     _tier = SubscriptionTier.free;
     _lastValidated = DateTime.now();
-    notifyListeners();
+    _notifySafely();
+  }
+
+  /// Forces the highest tier and disables all further validation.
+  void _applyUnlockedTier() {
+    _unlocked = true;
+    _status = SubscriptionStatus.active;
+    _tier = SubscriptionTier.premium;
+    _expiresAt = null;
+    _planId = SubscriptionTier.premium.id;
+    _lastValidated = DateTime.now();
+    _notifySafely();
   }
 
   void _startPeriodicValidation() {

@@ -1,14 +1,21 @@
+import 'package:dmx/features/settings/provider/settings_provider.dart';
 import 'package:dmx/shared/widgets/error_recovery_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  // L10n.of(context, ...) resolves the current language through the
+  // SettingsProvider, so the widget tree must provide one (as in production).
   Widget wrapWithMaterial(Widget child) {
-    return MaterialApp(
-      home: Scaffold(
-        body: SingleChildScrollView(child: child),
+    return ChangeNotifierProvider<SettingsProvider>.value(
+      value: SettingsProvider.instance,
+      child: MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(child: child),
+        ),
       ),
     );
   }
@@ -40,11 +47,11 @@ void main() {
       await tester.pumpWidget(wrapWithMaterial(widget));
       await tester.pumpAndSettle();
 
-      expect(find.text('Show Error Details'), findsOneWidget);
-      await tester.tap(find.text('Show Error Details'));
+      expect(find.text('Show error details'), findsOneWidget);
+      await tester.tap(find.text('Show error details'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Hide Error Details'), findsOneWidget);
+      expect(find.text('Hide error details'), findsOneWidget);
       expect(find.textContaining('Detailed stack failure info'), findsWidgets);
     });
 

@@ -1,9 +1,16 @@
 import 'package:flutter/material.dart';
 
+import '../../core/utils/localization.dart';
+
 /// Centralized accessibility helpers for XDM.
 /// All interactive widgets SHOULD use these wrappers.
 class XdmSemantics {
   XdmSemantics._();
+
+  // FIX: These static helpers have no BuildContext, so strings are localized
+  // via L10n.currentLang (settings language) instead of hardcoded English.
+  static String _t(String key, [Map<String, dynamic>? args]) =>
+      L10n.translate(L10n.currentLang, key, args: args);
 
   /// Wraps a tappable element with proper semantics.
   static Widget button({
@@ -46,7 +53,7 @@ class XdmSemantics {
     required String status,
   }) {
     return Semantics(
-      label: 'Status: $status',
+      label: _t('semantics_status', {'status': status}),
       container: true,
       child: child,
     );
@@ -59,7 +66,8 @@ class XdmSemantics {
     String? hint,
     bool isRequired = false,
   }) {
-    final effectiveLabel = isRequired ? '$label (Required)' : label;
+    final effectiveLabel =
+        isRequired ? '$label ${_t('semantics_required')}' : label;
     return Semantics(
       textField: true,
       label: effectiveLabel,
@@ -78,7 +86,7 @@ class XdmSemantics {
     return Semantics(
       toggled: value,
       label: label,
-      hint: hint ?? (value ? 'On' : 'Off'),
+      hint: hint ?? _t(value ? 'semantics_on' : 'semantics_off'),
       child: child,
     );
   }

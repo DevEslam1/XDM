@@ -253,6 +253,14 @@ class HttpTransferJob {
   double _lastSpeed = 0.0;
   int _watchdogCheckpointBytes = 0;
 
+  /// FIX(journal-init): tracks whether this job wrote the journal `init`
+  /// record, so crash recovery knows the real threadCount/totalSize even
+  /// after compaction (recovery previously fell back to chunk-list length /
+  /// knownFileSize).
+  bool _journalInitWritten = false;
+  int _journalChunkWritesSinceCheckpoint = 0;
+  static const int _journalCheckpointEveryChunks = 8;
+
   /// FIX(C-2): Per-chunk progress already durable at job start (loaded from
   /// previous session's durable save / journal replay). Bytes written this
   /// session only count toward persisted state once the writer confirms the
@@ -1603,6 +1611,30 @@ class HttpTransferJob {
             final journal = DownloadJournal('${cmd.tempFilePath}.journal');
             await journal.open();
             try {
+              // FIX(journal-init): write the init record the first time the
+              // journal is opened for this file, so recovery after compaction
+              // has accurate threadCount/totalSize (writeInit is a no-op when
+              // the journal already has content). Also emit a periodic
+              // checkpoint so recovery metadata stays accurate.
+              final st = _state!;
+              if (!_journalInitWritten) {
+                await journal.writeInit(st.threadCount, st.totalSize);
+                _journalInitWritten = true;
+              } else if (st.chunks.length > 1) {
+                _journalChunkWritesSinceCheckpoint++;
+                if (_journalChunkWritesSinceCheckpoint >=
+                    _journalCheckpointEveryChunks) {
+                  _journalChunkWritesSinceCheckpoint = 0;
+                  await journal.writeCheckpoint(
+                    st.chunks.map((c) => c.downloaded).toList(),
+                    st.totalSize,
+                    hashes: {
+                      for (var i = 0; i < st.chunks.length; i++)
+                        if (st.chunks[i].hash != null) i: st.chunks[i].hash!,
+                    },
+                  );
+                }
+              }
               await journal.recordChunkProgress(
                 chunkIndex,
                 chunk.downloaded,

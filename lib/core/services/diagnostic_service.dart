@@ -247,9 +247,9 @@ class DiagnosticService implements DiagnosticRepository {
   @override
   Map<String, dynamic> telemetryMetricsSnapshot() {
     if (!_snapshotDirty && _cachedSnapshot != null) {
-      return Map.unmodifiable(_cachedSnapshot!);
+      return _cachedSnapshot!;
     }
-    _cachedSnapshot = {
+    _cachedSnapshot = Map.unmodifiable({
       'isolateMessageBytes': _isolateBytesTransferred,
       'isolateMessageCount': _isolateMessageCount,
       'p95ProgressLatencyMs': p95ProgressLatencyMs,
@@ -262,8 +262,8 @@ class DiagnosticService implements DiagnosticRepository {
       'journalReconciled': _journalReconciledCount,
       'resumeDataMissing': _resumeDataMissingCount,
       'watchdogSkipPaused': _watchdogSkipPausedCount,
-    };
+    });
     _snapshotDirty = false;
-    return Map.unmodifiable(_cachedSnapshot!);
+    return _cachedSnapshot!;
   }
 }

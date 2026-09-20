@@ -18,6 +18,7 @@ import 'core/services/app_lifecycle_coordinator.dart';
 import 'core/services/background_service.dart';
 import 'core/services/crash_reporting_service.dart';
 import 'core/services/database_service.dart';
+import 'core/services/desktop_tray_service.dart';
 import 'core/services/device_tier.dart';
 import 'core/services/diagnostic_service.dart';
 import 'core/services/dio_client_pool.dart' show DioNetworkPolicy;
@@ -33,6 +34,8 @@ import 'core/services/remote_api_service.dart';
 import 'core/services/service_registry.dart';
 import 'core/services/single_instance_service.dart';
 import 'core/services/site_intelligence/site_intelligence_service.dart';
+import 'core/services/subscription/purchase_service.dart';
+import 'core/services/subscription/subscription_service.dart';
 import 'core/services/torrent_resume_store.dart';
 import 'core/services/torrent_seeding_manager.dart';
 import 'core/services/torrent_service.dart';
@@ -217,6 +220,30 @@ Future<void> main(List<String> args) async {
             : const CompositeAmbientAnimationController(),
       );
 
+      // Desktop tray (Windows/macOS/Linux only) — must run before runApp so
+      // windowManager is ready. Callbacks resolve the DownloadProvider lazily
+      // via DI; the singleton is registered further below, so the callbacks
+      // tolerate it not being registered yet.
+      if (!kIsWeb &&
+          (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
+        await DesktopTrayService.instance.init(
+          onPauseAll: () {
+            try {
+              unawaited(getIt<DownloadProvider>().pauseAllTasks());
+            } catch (e, st) {
+              _mainLog.warning('Tray pause-all failed', e, st);
+            }
+          },
+          onResumeAll: () {
+            try {
+              unawaited(getIt<DownloadProvider>().resumeAllTasks());
+            } catch (e, st) {
+              _mainLog.warning('Tray resume-all failed', e, st);
+            }
+          },
+        );
+      }
+ 
       // ── PHASE 4: Build providers (no blocking I/O) and show UI immediately ──
       final databaseService = DatabaseService();
       final notificationService = NotificationService();
@@ -394,8 +421,20 @@ Future<void> _initNonCriticalServices(
     inject<SiteIntelligenceService>().init().catchError((e, st) {
       _mainLog.warning('SiteIntelligenceService init failed', e, st);
     }),
+    // Subscription services are lazy GetIt singletons — init loads the cached
+    // receipt and starts periodic validation.
+    () async {
+      try {
+        await inject<SubscriptionService>().init();
+        await inject<PurchaseService>().init();
+      } catch (e, st) {
+        _mainLog.warning('Subscription services init failed', e, st);
+      }
+    }(),
   ]);
 
+  // Loopback control API must only run in developer mode.
+  RemoteApiService.enabled = SettingsProvider.instance.developerMode;
   unawaited(
     RemoteApiService.start(
       getTasks: () async =>

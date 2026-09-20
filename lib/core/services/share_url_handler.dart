@@ -8,6 +8,7 @@ import '../../features/downloads/provider/download_provider.dart';
 import '../../features/settings/provider/settings_provider.dart';
 import '../../shared/widgets/themed_snackbar.dart';
 import '../app_theme.dart';
+import '../di/injection.dart';
 import '../domain/utils/url_specifications.dart';
 import '../utils/localization.dart';
 import '../utils/url_utils.dart';
@@ -175,6 +176,42 @@ class ShareUrlHandler {
     _onResumeAll = callback;
   }
 
+  /// Resolve the provider via GetIt as a fallback when no callback was wired.
+  static DownloadProvider? _resolveProviderFallback() {
+    try {
+      if (getIt.isRegistered<DownloadProvider>()) {
+        return getIt<DownloadProvider>();
+      }
+    } catch (e) {
+      _log.warning('[ShareUrlHandler] GetIt provider lookup failed: $e');
+    }
+    return null;
+  }
+
+  static Future<void> _pauseAll() async {
+    if (_onPauseAll != null) {
+      _onPauseAll!();
+      return;
+    }
+    try {
+      await _resolveProviderFallback()?.pauseAllTasks();
+    } catch (e) {
+      _log.warning('[ShareUrlHandler] pause-all failed: $e');
+    }
+  }
+
+  static Future<void> _resumeAll() async {
+    if (_onResumeAll != null) {
+      _onResumeAll!();
+      return;
+    }
+    try {
+      await _resolveProviderFallback()?.resumeAllTasks();
+    } catch (e) {
+      _log.warning('[ShareUrlHandler] resume-all failed: $e');
+    }
+  }
+
   /// Handle incoming deep links from App Intents / Shortcuts / Share Extension.
   static Future<void> handleDeepLink(
     Uri uri, {
@@ -192,11 +229,11 @@ class ShareUrlHandler {
         break;
 
       case 'pause-all':
-        _onPauseAll?.call();
+        await _pauseAll();
         break;
 
       case 'resume-all':
-        _onResumeAll?.call();
+        await _resumeAll();
         break;
 
       default:

@@ -625,7 +625,10 @@ void main() {
       );
 
       // Wait for the async task to complete and fail
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      for (int i = 0; i < 100; i++) {
+        if (provider.tasks.first.status == DownloadStatus.failed) break;
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
 
       expect(provider.tasks.first.status, DownloadStatus.failed);
       expect(
@@ -1345,6 +1348,13 @@ void main() {
 class FakeDownloadEngine403 extends DownloadEngine {
   final Response response;
   FakeDownloadEngine403(this.response);
+
+  // Pool isolate spawn + the Windows PowerShell disk-space probe can exceed
+  // 100 ms before the engine's download() is even reached; keep the test
+  // deterministic regardless.
+  @override
+  Future<bool> hasEnoughDiskSpace(String saveDir, int requiredBytes) async =>
+      true;
 
   @override
   Future<DownloadMetadata> resolveMetadata({

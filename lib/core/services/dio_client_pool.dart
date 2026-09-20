@@ -336,6 +336,11 @@ class DioClientPool implements DisposableService, MemoryPressureListener {
       return;
     }
     _activeClients.remove(client);
+    // FIX: the client is now fully released (idle-cached or closed below), so
+    // it must no longer count as reserved. Previously only _closeClient
+    // removed it, so idle-cached clients stayed counted forever and
+    // reservedClientsCount leaked.
+    _reservedClients.remove(client);
     final host = _clientHosts[client];
     if (host != null && host.isNotEmpty) {
       final existing = _idleClientsByHost.remove(host);

@@ -598,6 +598,31 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
 
   Future<void> _injectAllScripts(BrowserTab tab, String url) async {
     final settings = _settings;
+    // Per-site custom JS/CSS from the per-host settings store.
+    final host = Uri.tryParse(url)?.host.toLowerCase() ?? '';
+    var siteCustomJs = '';
+    var siteCustomCss = '';
+    if (host.isNotEmpty) {
+      try {
+        final siteSettings = await _siteSettingsStore.getForHost(host);
+        siteCustomJs = (siteSettings.customJs ?? const []).join('\n');
+        siteCustomCss = (siteSettings.customCss ?? const []).join('\n');
+        // Re-apply persisted per-host zoom on navigation.
+        final zoom = siteSettings.zoomLevel;
+        if (zoom != null && tab.controller != null) {
+          final target = zoom.round();
+          try {
+            final currentSettings = await tab.controller?.getSettings();
+            if (currentSettings?.textZoom != target) {
+              currentSettings?.textZoom = target;
+              await tab.controller?.setSettings(settings: currentSettings!);
+            }
+          } catch (_) {}
+        }
+      } catch (e) {
+        _log.warning('[Browser] Failed to load per-site settings: $e');
+      }
+    }
     await _scriptInjector.injectAllScripts(
       tab,
       url,
@@ -605,6 +630,8 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
       adBlocker: AdBlockerService.instance,
       customJs: _customJs,
       customCss: _customCss,
+      siteCustomJs: siteCustomJs,
+      siteCustomCss: siteCustomCss,
     );
   }
 

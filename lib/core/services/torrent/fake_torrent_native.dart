@@ -62,6 +62,20 @@ class FakeTorrentNative implements ITorrentNative {
   @override
   bool get isBridgeCompatible => fakeBridgeCompatible;
 
+  /// Scriptable capability matrix. Defaults to the pinned 1.9.2 bridge so
+  /// existing tests see identical behavior; tests simulating a newer bridge can
+  /// set `capabilities = const TorrentNativeCapabilities.all()`.
+  TorrentNativeCapabilities _capabilities =
+      const TorrentNativeCapabilities.v192();
+
+  @override
+  TorrentNativeCapabilities get capabilities => _capabilities;
+
+  set capabilities(TorrentNativeCapabilities value) => _capabilities = value;
+
+  @override
+  bool get forceRecheckSupported => _capabilities.forceRecheck;
+
   @override
   Stream<NativeAlertEvent> get alertStream => _alertCtrl.stream;
 

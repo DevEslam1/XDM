@@ -442,8 +442,15 @@ mixin _BuildMixin on _BrowserScreenStateBase {
                                               textClr),
                                           _menuItem(
                                               Icons.history,
-                                              'Browser History',
+                                              L10n.of(
+                                                  context, 'browser_history_title'),
                                               'show_history',
+                                              textClr),
+                                          _menuItem(
+                                              Icons.restore_rounded,
+                                              L10n.of(context,
+                                                  'browser_recently_closed'),
+                                              'recently_closed',
                                               textClr),
                                           const PopupMenuDivider(),
 

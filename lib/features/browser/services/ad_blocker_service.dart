@@ -183,6 +183,9 @@ class AdBlockerService {
 
   static const _lastUpdateKey = 'last_adblock_update';
 
+  /// Guards the scheduler so repeated init() calls never start it twice.
+  static bool? _schedulerStarted;
+
   Future<void> init() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -196,6 +199,19 @@ class AdBlockerService {
       // domains from disk. Without this, the adblocker relies only on
       // hardcoded hosts until the next scheduled filter update.
       await AdBlockFilterUpdater().init();
+      // Start the auto-update scheduler once. It performs the same 7-day
+      // staleness check as autoUpdateFilters() but guarded by a single
+      // in-flight completer, so we start ONLY this path to avoid the
+      // double-download that running both would cause.
+      if (_schedulerStarted != true) {
+        _schedulerStarted = true;
+        AdBlockFilterUpdater().startAutoUpdateScheduler(
+          onUpdated: () {
+            bumpGen();
+            refresh();
+          },
+        );
+      }
       await autoUpdateFilters();
     } catch (e) {
       _log.warning('AdBlocker init error: $e');

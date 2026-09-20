@@ -360,6 +360,41 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     return v.isEmpty ? null : v;
   }
 
+  /// Deterministically picks the best stream for a bulk quality preset.
+  /// Matches by parsed numeric height: exact first, then nearest ≤ chosen,
+  /// then falls back to the first stream.
+  static Map<String, dynamic> _pickBulkStream(
+    List<Map<String, dynamic>> streams,
+    String preset,
+  ) {
+    if (preset == 'audio_only') {
+      return streams.firstWhere(
+        (s) => s['type'] == 'audio',
+        orElse: () => streams.first,
+      );
+    }
+    final wanted = YoutubeService.parseQualityHeight(preset);
+    if (wanted > 0) {
+      Map<String, dynamic>? exact;
+      Map<String, dynamic>? nearestBelow;
+      var bestBelowGap = 1 << 30;
+      for (final s in streams) {
+        final h = YoutubeService.parseQualityHeight(
+          (s['quality'] ?? s['label'] ?? '') as String? ?? '',
+        );
+        if (h == wanted) {
+          exact ??= s;
+        } else if (h > 0 && h < wanted && wanted - h < bestBelowGap) {
+          bestBelowGap = wanted - h;
+          nearestBelow = s;
+        }
+      }
+      if (exact != null) return exact;
+      if (nearestBelow != null) return nearestBelow;
+    }
+    return streams.first;
+  }
+
   /// Shared input decoration for the advanced-section credential/header fields,
   /// matching the referrer/path field styling.
   InputDecoration _advInputDecoration({
@@ -1033,13 +1068,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
               if (streams != null && streams.isNotEmpty) {
                 final Map<String, dynamic> bestStream;
                 if (bulkQualityPreset != null) {
-                  bestStream = streams.firstWhere(
-                    (s) =>
-                        s['quality'] == bulkQualityPreset ||
-                        (bulkQualityPreset == 'audio_only' &&
-                            s['type'] == 'audio'),
-                    orElse: () => streams.first,
-                  );
+                  bestStream = _pickBulkStream(streams, bulkQualityPreset);
                 } else {
                   bestStream = streams.first;
                 }
@@ -1064,6 +1093,9 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                   mergedAudioUrl: bestStream['audioSrc'] as String?,
                   audioSize: (bestStream['audioSize'] as num?)?.toInt() ?? 0,
                   thumbnailUrl: bestStream['thumbnailUrl'] as String?,
+                  authUsername: _authUsernameOrNull,
+                  authPassword: _authPasswordOrNull,
+                  customHeaders: _collectCustomHeaders(),
                 );
                 addedCount++;
                 AddDownloadDialog.recordAddedUrl(singleUrl);
@@ -1102,6 +1134,9 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                           : settings.customDownloadPath ?? '',
                       threadCount: _selectedThreads,
                       downloadPageUrl: singleUrl,
+                      authUsername: _authUsernameOrNull,
+                      authPassword: _authPasswordOrNull,
+                      customHeaders: _collectCustomHeaders(),
                     );
                     addedCount++;
                     AddDownloadDialog.recordAddedUrl(singleUrl);
@@ -1129,6 +1164,9 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
             mergedAudioUrl: _resolvedAudioUrl,
             audioSize: _resolvedAudioSize ?? 0,
             thumbnailUrl: _resolvedThumbnailUrl,
+            authUsername: _authUsernameOrNull,
+            authPassword: _authPasswordOrNull,
+            customHeaders: _collectCustomHeaders(),
           );
           addedCount++;
           AddDownloadDialog.recordAddedUrl(singleUrl);
@@ -1449,6 +1487,9 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                       mergedAudioUrl: _resolvedAudioUrl,
                       audioSize: _resolvedAudioSize ?? 0,
                       thumbnailUrl: _resolvedThumbnailUrl,
+                      authUsername: _authUsernameOrNull,
+                      authPassword: _authPasswordOrNull,
+                      customHeaders: _collectCustomHeaders(),
                     );
                     if (!mounted) return;
                     if (!context.mounted) return;

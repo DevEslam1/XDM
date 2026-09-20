@@ -431,6 +431,10 @@ const Map<String, String> enTranslations = {
   'select_category': 'Select Category',
   'selected_count': '{count} selected',
   'selected_count_singular': '1 selected',
+  'semantics_off': 'Off',
+  'semantics_on': 'On',
+  'semantics_required': '(Required)',
+  'semantics_status': 'Status: {status}',
   'settings_about': 'About XDM',
   'settings_about_desc':
       'High-performance multi-threaded download manager and web browser.',

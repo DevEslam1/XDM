@@ -1,4 +1,4 @@
-import 'package:dmx/core/services/torrent_models.dart';
+import 'package:dmx/core/domain/torrent_models.dart';
 import 'package:dmx/core/services/tracker_manager.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -50,7 +50,9 @@ void main() {
 
     test('reannounce sets status to updating for all trackers', () {
       trackerManager.addTracker(1, 'http://tracker1.org/announce');
-      trackerManager.reannounce(1);
+      // force bypasses the deliberate minAnnounceInterval rate limit that
+      // addTracker just triggered for this URL.
+      trackerManager.reannounce(1, force: true);
 
       final trackers = trackerManager.getTrackers(1);
       expect(trackers.first.status, equals(TrackerStatus.updating));

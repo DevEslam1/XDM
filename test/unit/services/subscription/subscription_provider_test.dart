@@ -11,20 +11,25 @@ void main() {
     late SubscriptionService subscriptionService;
     late PurchaseService purchaseService;
     late SubscriptionProvider provider;
+    var providerDisposed = false;
 
     setUp(() {
       subscriptionService = SubscriptionService();
       purchaseService = PurchaseService(
         subscriptionService: subscriptionService,
+        // Simulate a platform that successfully initiates the purchase flow,
+        // so the pending-completer pipeline is exercised.
+        platformPurchaseInitiator: (_) async => true,
       );
       provider = SubscriptionProvider(
         subscriptionService: subscriptionService,
         purchaseService: purchaseService,
       );
+      providerDisposed = false;
     });
 
     tearDown(() {
-      provider.dispose();
+      if (!providerDisposed) provider.dispose();
       purchaseService.dispose();
       subscriptionService.dispose();
     });
@@ -95,10 +100,19 @@ void main() {
       expect(result, isA<bool>());
     });
 
-    test('clearError resets error', () {
+    test('clearError resets error', () async {
       provider.selectPlan(SubscriptionPlan.monthly);
-      provider.purchaseSelectedPlan();
-      // After no plan selected error
+
+      final purchaseFuture = provider.purchaseSelectedPlan();
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      purchaseService.completePurchase(
+        productId: SubscriptionPlan.monthly.productId,
+        success: false,
+        error: 'Payment declined',
+      );
+      await purchaseFuture;
+
       provider.clearError();
       expect(provider.error, isNull);
     });
@@ -113,6 +127,7 @@ void main() {
 
     test('dispose removes listener from subscription service', () {
       provider.dispose();
+      providerDisposed = true;
       // Should not throw when subscription service notifies
       subscriptionService.notifyListeners();
     });

@@ -18,23 +18,31 @@ class TorrentService {
   static double progressFor(int id) => 0.0;
   static Uint8List? fetchResumeBytes(int id) => null;
   static Uint8List? resumeBlobFor(int id) => null;
-  static bool fileProgressSupported = false;
-  static bool filePrioritiesSupported = false;
-  static bool resumeDataSupported = false;
-  static bool get trackersSupported => false;
-  static bool get createTorrentSupported => false;
-  static bool get ipFilterSupported => false;
-  static bool get sequentialDownloadSupported => false;
-  static bool get superSeedingSupported => false;
-  static bool get pieceDeadlineSupported => false;
-  static bool get webSeedsSupported => false;
-  static bool get proxySupported => false;
-  static bool get sslSupported => false;
-  static bool get peerExchangeSupported => false;
-  static bool get localPeerDiscoverySupported => false;
-  static bool get natPmpSupported => false;
-  static bool get anonymousModeSupported => false;
-  static bool get perTorrentConnectionLimitSupported => false;
+  // No native bridge on this platform; delegate to the pinned 1.9.2 matrix so
+  // the capability surface matches the FFI build. The rationale for each flag
+  // lives on [TorrentNativeCapabilities.v192].
+  static const TorrentNativeCapabilities _capabilities =
+      TorrentNativeCapabilities.v192();
+  static bool get fileProgressSupported => _capabilities.fileProgress;
+  static bool get filePrioritiesSupported => _capabilities.filePriorities;
+  static bool get resumeDataSupported => _capabilities.resumeData;
+  static bool get trackersSupported => _capabilities.trackers;
+  static bool get createTorrentSupported => _capabilities.createTorrent;
+  static bool get ipFilterSupported => _capabilities.ipFilter;
+  static bool get sequentialDownloadSupported =>
+      _capabilities.sequentialDownload;
+  static bool get superSeedingSupported => _capabilities.superSeeding;
+  static bool get pieceDeadlineSupported => _capabilities.pieceDeadline;
+  static bool get webSeedsSupported => _capabilities.webSeeds;
+  static bool get proxySupported => _capabilities.proxy;
+  static bool get sslSupported => _capabilities.ssl;
+  static bool get peerExchangeSupported => _capabilities.peerExchange;
+  static bool get localPeerDiscoverySupported =>
+      _capabilities.localPeerDiscovery;
+  static bool get natPmpSupported => _capabilities.natPmp;
+  static bool get anonymousModeSupported => _capabilities.anonymousMode;
+  static bool get perTorrentConnectionLimitSupported =>
+      _capabilities.perTorrentConnectionLimit;
   static bool get sequentialDownloadEnabled => false;
   static double get shareRatioLimit => 2.0;
   static int get maxSeedingTimeMinutes => 0;

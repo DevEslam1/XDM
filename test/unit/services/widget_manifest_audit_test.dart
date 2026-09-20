@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('Widget Manifest & Build Configuration Audit Tests [W-9 & W-10]', () {
     test(
-        '[W-9] AndroidManifest WidgetActionReceiver is unexported and has no redundant intent-filters',
+        '[W-9] AndroidManifest WidgetActionReceiver is unexported and exposes only the package-scoped UPDATE_WIDGETS action',
         () {
       final manifestFile = File('android/app/src/main/AndroidManifest.xml');
       expect(manifestFile.existsSync(), isTrue);
@@ -15,14 +15,22 @@ void main() {
           isTrue);
       expect(content.contains('android:exported="false"'), isTrue);
 
-      // Check that redundant inner actions were stripped from unexported receiver
+      // The receiver must stay unexported and must NOT duplicate the exported
+      // widget provider's APPWIDGET_UPDATE filter. It keeps exactly one
+      // intent-filter: the package-scoped UPDATE_WIDGETS broadcast that
+      // WidgetUpdateWorker.refreshAllWidgets() sends (setPackage, no
+      // component) — without it the broadcast is never delivered on API 26+.
       final receiverSection = content.substring(
         content.indexOf('android:name=".widget.WidgetActionReceiver"'),
       );
-      final receiverEnd = receiverSection.indexOf('/>');
+      final receiverEnd = receiverSection.indexOf('</receiver>');
       expect(receiverEnd, isNot(equals(-1)));
-      final receiverTag = receiverSection.substring(0, receiverEnd + 2);
-      expect(receiverTag.contains('<intent-filter>'), isFalse);
+      final receiverTag = receiverSection.substring(0, receiverEnd);
+      expect(receiverTag.contains('<intent-filter>'), isTrue);
+      expect(
+          receiverTag.contains('com.xdm.downloadmanager.UPDATE_WIDGETS'),
+          isTrue);
+      expect(receiverTag.contains('APPWIDGET_UPDATE'), isFalse);
     });
 
     test('[W-10] build.gradle.kts pins targetSdk 36 and valid compileSdk', () {

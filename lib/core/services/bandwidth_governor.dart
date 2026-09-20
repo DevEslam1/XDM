@@ -6,7 +6,6 @@ import 'package:flutter/foundation.dart';
 import 'package:synchronized/synchronized.dart';
 
 import 'power_monitor.dart';
-import 'tick_manager.dart';
 
 /// A token-bucket bandwidth governor.
 ///
@@ -50,23 +49,15 @@ class BandwidthGovernor {
   @visibleForTesting
   Timer? get domainCleanupTimerForTesting => _domainCleanupTimer;
 
-  String get _tickId => 'bandwidth_governor_cleanup_${identityHashCode(this)}';
-
   void _startDomainCleanup() {
     _domainCleanupTimer?.cancel();
     _domainCleanupTimer = Timer.periodic(
       const Duration(minutes: 5),
       (_) => _cleanupStaleDomainStates(),
     );
-    TickManager.instance.unregisterTick(_tickId);
-    TickManager.instance.registerTick(
-      id: _tickId,
-      interval: const Duration(minutes: 5),
-      priority: TickPriority.normal,
-      callback: (_) {
-        _cleanupStaleDomainStates();
-      },
-    );
+    // FIX: a TickManager tick used to be registered here too, so the cleanup
+    // ran twice per interval. The raw timer stays (tests assert on it and
+    // dispose/unregisterConsumer both cancel it); the duplicate tick is gone.
   }
 
   void _cleanupStaleDomainStates() {
@@ -78,7 +69,6 @@ class BandwidthGovernor {
   /// Releases all per-task and per-domain tracking state and cancels timers.
   void dispose() {
     PowerMonitor.throttleFactorNotifier.removeListener(onPowerStateChanged);
-    TickManager.instance.unregisterTick(_tickId);
     _domainCleanupTimer?.cancel();
     _domainCleanupTimer = null;
     _taskLimits.clear();

@@ -32,17 +32,22 @@ void main() {
   group('PurchaseService', () {
     late SubscriptionService subscriptionService;
     late PurchaseService purchaseService;
+    var purchaseServiceDisposed = false;
 
     setUp(() {
       subscriptionService = SubscriptionService();
+      purchaseServiceDisposed = false;
       purchaseService = PurchaseService(
         subscriptionService: subscriptionService,
+        // Simulate a platform that successfully initiates the purchase flow,
+        // so the pending-completer pipeline is exercised.
+        platformPurchaseInitiator: (_) async => true,
       );
     });
 
     tearDown(() async {
       await Future.delayed(Duration.zero);
-      purchaseService.dispose();
+      if (!purchaseServiceDisposed) purchaseService.dispose();
       subscriptionService.dispose();
     });
 
@@ -114,6 +119,7 @@ void main() {
       await Future.delayed(const Duration(milliseconds: 100));
 
       purchaseService.dispose();
+      purchaseServiceDisposed = true;
 
       final result = await purchaseFuture.timeout(const Duration(seconds: 5));
       expect(result.success, isFalse);

@@ -41,6 +41,14 @@ class LibtorrentNativeImpl implements ITorrentNative {
   @override
   bool get isBridgeCompatible => true;
 
+  /// Pinned to `libtorrent_flutter: 1.9.2`; a bridge upgrade overrides this.
+  @override
+  TorrentNativeCapabilities get capabilities =>
+      const TorrentNativeCapabilities.v192();
+
+  @override
+  bool get forceRecheckSupported => capabilities.forceRecheck;
+
   void _logStubWarning(String method) {
     if (_warnedStubs.add(method)) {
       DiagnosticService.instance.record(

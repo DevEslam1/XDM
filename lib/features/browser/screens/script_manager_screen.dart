@@ -12,6 +12,7 @@ import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
 import '../../../shared/design/dmx_design.dart';
 import '../../../shared/widgets/section_header.dart';
+import '../../../shared/widgets/themed_snackbar.dart';
 import '../../settings/provider/settings_provider.dart';
 
 class ScriptManagerScreen extends StatefulWidget {
@@ -94,16 +95,20 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen>
     if (result == null) return;
     if (!mounted) return;
     HapticHelper.triggerHaptic(context.read<SettingsProvider>());
-    await _manager.add(
-      UserScript(
-        id: '${DateTime.now().microsecondsSinceEpoch}_${result.name.hashCode.abs()}',
-        name: result.name,
-        urlPattern: result.urlPattern,
-        code: result.code,
-        isCss: result.isCss,
-        permissions: result.permissions,
-      ),
-    );
+    try {
+      await _manager.add(
+        UserScript(
+          id: '${DateTime.now().microsecondsSinceEpoch}_${result.name.hashCode.abs()}',
+          name: result.name,
+          urlPattern: result.urlPattern,
+          code: result.code,
+          isCss: result.isCss,
+          permissions: result.permissions,
+        ),
+      );
+    } catch (e) {
+      _showScriptError(e);
+    }
   }
 
   Future<void> _editScript(UserScript script) async {
@@ -120,14 +125,30 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen>
     if (result == null) return;
     if (!mounted) return;
     HapticHelper.triggerHaptic(context.read<SettingsProvider>());
-    await _manager.update(
-      script.copyWith(
-        name: result.name,
-        urlPattern: result.urlPattern,
-        code: result.code,
-        isCss: result.isCss,
-        permissions: result.permissions,
-      ),
+    try {
+      await _manager.update(
+        script.copyWith(
+          name: result.name,
+          urlPattern: result.urlPattern,
+          code: result.code,
+          isCss: result.isCss,
+          permissions: result.permissions,
+        ),
+      );
+    } catch (e) {
+      _showScriptError(e);
+    }
+  }
+
+  void _showScriptError(Object e) {
+    if (!mounted) return;
+    final settings = context.read<SettingsProvider>();
+    ThemedSnackbar.show(
+      context,
+      message: e.toString(),
+      color: settings.isDarkMode ? AppTheme.neonRed : AppTheme.lightNeonRed,
+      icon: Icons.error_outline_rounded,
+      isDarkMode: settings.isDarkMode,
     );
   }
 
@@ -159,7 +180,11 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen>
             label: isRtl ? 'تراجع' : 'UNDO',
             textColor: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
             onPressed: () async {
-              await _manager.add(script);
+              try {
+                await _manager.add(script);
+              } catch (e) {
+                _showScriptError(e);
+              }
             },
           ),
         ),

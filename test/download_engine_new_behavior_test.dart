@@ -799,8 +799,23 @@ void main() {
         }
 
         await server.close();
-        if (localFile.existsSync()) localFile.deleteSync();
-        if (tempFile.existsSync()) tempFile.deleteSync();
+        // The worker isolate may still be unwinding its writer for a moment
+        // after the cancel completes (Windows reports the temp file as
+        // "in use"), so retry the test-file cleanup deterministically.
+        Future<void> deleteWhenReleased(String path) async {
+          for (var attempt = 0; attempt < 50; attempt++) {
+            final f = File(path);
+            if (!f.existsSync()) return;
+            try {
+              f.deleteSync();
+              return;
+            } on FileSystemException {
+              await Future<void>.delayed(const Duration(milliseconds: 50));
+            }
+          }
+        }
+        await deleteWhenReleased(localFile.path);
+        await deleteWhenReleased(tempFile.path);
       },
     );
 

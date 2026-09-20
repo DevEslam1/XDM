@@ -39,10 +39,15 @@ void main() {
       await BackgroundService.start();
       expect(BackgroundService.dataSyncSessionStartTimeForTesting, isNotNull);
 
+      // The timeout handler early-returns when no downloads are active, so
+      // simulate an active download before triggering the timeout.
+      await BackgroundService.setDownloadActive(true, 'p1-1-task');
+
       await BackgroundService.triggerDataSyncTimeoutForTesting();
       expect(pauseCallbackInvoked, isTrue);
       expect(BackgroundService.dataSyncSessionStartTimeForTesting, isNull);
 
+      await BackgroundService.setDownloadActive(false, 'p1-1-task');
       await BackgroundService.stop();
       BackgroundService.onDataSyncTimeout = null;
     });

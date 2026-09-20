@@ -28,6 +28,7 @@ class YoutubeService {
   static String? _oauthToken;
   static const _secureStorage = FlutterSecureStorage();
   static const _cookiesStorageKey = 'youtube_cookies_persisted';
+  static const _oauthTokenStorageKey = 'youtube_oauth_token_persisted';
 
   // FIX-H4: Circuit breaker state
   static int _consecutiveTimeouts = 0;
@@ -72,6 +73,11 @@ class YoutubeService {
         _cookies = savedCookies;
         debugPrint('[YouTubeService] Loaded persisted cookies');
       }
+      final savedOAuth = await _secureStorage.read(key: _oauthTokenStorageKey);
+      if (savedOAuth != null && savedOAuth.isNotEmpty) {
+        _oauthToken = savedOAuth;
+        debugPrint('[YouTubeService] Loaded persisted OAuth token');
+      }
     } catch (e) {
       debugPrint('[YouTubeService] Failed to load persisted cookies: $e');
     }
@@ -105,14 +111,28 @@ class YoutubeService {
     }
   }
 
+  static Future<void> _persistOAuthToken(String accessToken) async {
+    try {
+      await _secureStorage.write(key: _oauthTokenStorageKey, value: accessToken);
+    } catch (e) {
+      debugPrint('[YouTubeService] Failed to persist OAuth token: $e');
+    }
+  }
+
   static Future<void> signInWithOAuth(String accessToken) async {
     _oauthToken = accessToken;
     await resetClient();
     _notifyAuthState();
+    await _persistOAuthToken(accessToken);
   }
 
   static Future<void> clearOAuth() async {
     _oauthToken = null;
+    try {
+      await _secureStorage.delete(key: _oauthTokenStorageKey);
+    } catch (e) {
+      debugPrint('[YouTubeService] Failed to clear persisted OAuth token: $e');
+    }
     _notifyAuthState();
   }
 
@@ -125,6 +145,7 @@ class YoutubeService {
     try {
       await CookieManager.instance().deleteAllCookies();
       await _secureStorage.delete(key: _cookiesStorageKey);
+      await _secureStorage.delete(key: _oauthTokenStorageKey);
     } catch (e) {
       debugPrint(
         '[YouTubeService] Failed to clear WebView cookies on signout: $e',
@@ -136,6 +157,7 @@ class YoutubeService {
   static Future<void> refreshOAuthToken(String newToken) async {
     _oauthToken = newToken;
     _notifyAuthState();
+    await _persistOAuthToken(newToken);
   }
 
   static Future<void> resetClient() async {
@@ -608,7 +630,7 @@ class YoutubeService {
       }
     } on TimeoutException catch (e) {
       throw Exception(
-          e.message ?? 'Stream resolution timed out after 35 seconds');
+          e.message ?? 'Stream resolution timed out after 45 seconds');
     } on BackendException catch (e) {
       throw Exception(e.toUserMessage());
     } catch (e) {

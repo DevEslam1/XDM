@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../../core/services/database_service.dart';
 import '../../../../core/services/download_engine.dart';
+import '../../../../core/services/engines/connection_warmer.dart';
 import '../../../../core/services/power_monitor.dart';
 import '../../../../features/settings/provider/settings_provider.dart';
 import '../../models/download_task.dart';
@@ -235,6 +236,14 @@ mixin DownloadQueueMixin {
           if (orderCmp != 0) return orderCmp;
           return a.createdAt.compareTo(b.createdAt);
         });
+
+        // Pre-warm TLS connections for the head of the queue so starts skip
+        // the TCP/TLS handshake (battery-aware, TTL-throttled internally).
+        if (iteration == 1) {
+          unawaited(ConnectionWarmer.instance
+              .warmQueuedTasks(queued)
+              .catchError((_) {}));
+        }
 
         effectiveThreadOverrides.removeWhere(
           (id, _) => !queued.any((t) => t.id == id),

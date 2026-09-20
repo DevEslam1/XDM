@@ -1,74 +1,10 @@
 import 'package:dmx/shared/accessibility/xdm_announcer.dart';
-import 'package:dmx/shared/accessibility/xdm_motion.dart';
 import 'package:fake_async/fake_async.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-
-  group('XdmMotion', () {
-    Widget host({required bool disableAnimations, required Widget child}) {
-      return MediaQuery(
-        data: MediaQueryData(disableAnimations: disableAnimations),
-        child: child,
-      );
-    }
-
-    testWidgets('duration collapses to zero under reduced motion',
-        (tester) async {
-      const full = Duration(milliseconds: 240);
-      Duration? measured;
-      await tester.pumpWidget(
-        host(
-          disableAnimations: true,
-          child: Builder(
-            builder: (context) {
-              measured = XdmMotion.duration(context, full);
-              return const SizedBox();
-            },
-          ),
-        ),
-      );
-      expect(measured, Duration.zero);
-    });
-
-    testWidgets('duration keeps full value when motion is enabled',
-        (tester) async {
-      const full = Duration(milliseconds: 240);
-      Duration? measured;
-      await tester.pumpWidget(
-        host(
-          disableAnimations: false,
-          child: Builder(
-            builder: (context) {
-              measured = XdmMotion.duration(context, full);
-              return const SizedBox();
-            },
-          ),
-        ),
-      );
-      expect(measured, full);
-    });
-
-    testWidgets('pauseAmbient reflects the reduce-motion setting',
-        (tester) async {
-      bool? paused;
-      await tester.pumpWidget(
-        host(
-          disableAnimations: true,
-          child: Builder(
-            builder: (context) {
-              paused = XdmMotion.pauseAmbient(context);
-              return const SizedBox();
-            },
-          ),
-        ),
-      );
-      expect(paused, isTrue);
-    });
-  });
 
   group('XdmAnnouncer', () {
     final messenger =

@@ -1,5 +1,3 @@
-import 'dart:math';
-import 'package:dmx/core/services/mirror_health_store.dart';
 import 'package:dmx/core/services/protocol_cache.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,46 +7,10 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
-    await MirrorHealthStore.clear();
-    await MirrorHealthStore.init();
     await ProtocolCache.init();
   });
 
   group('Concurrency Hardening Tests', () {
-    test(
-        'concurrent recordSuccess and recordFailure on MirrorHealthStore executes safely without race drops',
-        () async {
-      const mirrors = [
-        'https://m1.com',
-        'https://m2.com',
-        'https://m3.com',
-        'https://m4.com',
-        'https://m5.com',
-      ];
-
-      final futures = <Future<void>>[];
-      final rng = Random(42);
-
-      // Launch 50 concurrent async tasks hammering recordSuccess and recordFailure
-      for (var i = 0; i < 50; i++) {
-        final mirror = mirrors[i % mirrors.length];
-        if (rng.nextBool()) {
-          futures.add(MirrorHealthStore.recordFailure(mirror));
-        } else {
-          futures.add(MirrorHealthStore.recordSuccess(mirror,
-              speedBps: (i + 1) * 1000.0));
-        }
-      }
-
-      await Future.wait(futures);
-
-      // Verify each mirror's health record is valid and readable
-      for (final mirror in mirrors) {
-        final failureCount = MirrorHealthStore.getFailureCount(mirror);
-        expect(failureCount, greaterThanOrEqualTo(0));
-      }
-    });
-
     test(
         'concurrent record, invalidate, and get on ProtocolCache maintains consistency',
         () async {

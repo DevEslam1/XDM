@@ -157,7 +157,15 @@ class DmxDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = context.watch<SettingsProvider>().isDarkMode;
+    // FIX: guarded lookup — DmxDivider can be used outside the provider tree
+    // (same fallback as DmxCardShell).
+    SettingsProvider settings;
+    try {
+      settings = context.watch<SettingsProvider>();
+    } catch (_) {
+      settings = SettingsProvider.instance;
+    }
+    final isDark = settings.isDarkMode;
     return Divider(
       height: height,
       thickness: 1,

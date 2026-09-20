@@ -21,6 +21,14 @@ class ActiveFakeEngine extends DownloadEngine {
 
   ActiveFakeEngine() : super(enableCleanupTimer: false);
 
+  // The real disk-space check spawns a PowerShell subprocess on Windows
+  // (several hundred ms), which alone consumed this test's entire wait
+  // window and left the task "queued". The provider logic under test doesn't
+  // involve storage capacity, so return a fixed positive answer.
+  @override
+  Future<bool> hasEnoughDiskSpace(String saveDir, int requiredBytes) async =>
+      true;
+
   @override
   Future<DownloadMetadata> resolveMetadata({
     required String url,

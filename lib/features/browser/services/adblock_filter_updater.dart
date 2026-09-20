@@ -347,14 +347,19 @@ class AdBlockFilterUpdater {
 
   Timer? _autoUpdateTimer;
 
-  void startAutoUpdateScheduler() {
+  void startAutoUpdateScheduler({VoidCallback? onUpdated}) {
     _autoUpdateTimer?.cancel();
     _autoUpdateTimer = Timer.periodic(const Duration(hours: 24), (_) {
-      updateIfNeeded();
+      updateIfNeeded().then((updated) {
+        if (updated) onUpdated?.call();
+      }).catchError((Object e) {
+        _log.warning('Failed to update if needed', e);
+      });
     });
-    unawaited(updateIfNeeded().catchError((e) {
+    unawaited(updateIfNeeded().then((updated) {
+      if (updated) onUpdated?.call();
+    }).catchError((Object e) {
       _log.warning('Failed to update if needed', e);
-      return false;
     }));
   }
 

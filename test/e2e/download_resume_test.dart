@@ -36,6 +36,23 @@ void main() {
       response.headers.set('etag', '"test-etag-123"');
 
       final rangeHeader = request.headers.value(HttpHeaders.rangeHeader);
+      Future<void> pacedWrite(List<int> bytes) async {
+        // Serve uploads in small paced pieces so the "pause at 30%" phase
+        // reliably lands MID-transfer. Without pacing the whole 1 MB
+        // loopback payload could land before the first throttled progress
+        // report, and the resume phase of this test would silently never run.
+        const pieceSize = 16 * 1024;
+        var offset = 0;
+        while (offset < bytes.length) {
+          final end = min(offset + pieceSize, bytes.length);
+          response.add(bytes.sublist(offset, end));
+          offset = end;
+          if (offset < bytes.length) {
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+          }
+        }
+      }
+
       if (rangeHeader != null && rangeHeader.startsWith('bytes=')) {
         final parts = rangeHeader.substring(6).split('-');
         final start = int.parse(parts[0]);
@@ -51,13 +68,13 @@ void main() {
         response.headers.contentLength = length;
         response.headers.contentType = ContentType.binary;
 
-        response.add(payload.sublist(start, clampedEnd + 1));
+        await pacedWrite(payload.sublist(start, clampedEnd + 1));
         await response.close();
       } else {
         response.statusCode = HttpStatus.ok;
         response.headers.contentLength = fileSize;
         response.headers.contentType = ContentType.binary;
-        response.add(payload);
+        await pacedWrite(payload);
         await response.close();
       }
     });
@@ -121,8 +138,12 @@ void main() {
     await pool.shutdown();
     await Future.delayed(const Duration(milliseconds: 200));
 
-    // Verify state or completed file exists
-    final state = await StateStore.instance.load(tempFilePath);
+    // Verify state or completed file exists. The worker persists state keyed
+    // by taskId (`temp.<taskId>.dmxstate`), so load the same file it reads on
+    // resume — the legacy extension-less path here would always be null and
+    // silently skip the resume phase of this test.
+    final state =
+        await StateStore.instance.load(tempFilePath, taskId: cmd.taskId);
     if (state != null && !state.isComplete) {
       // 3. Restart new isolate pool and resume download
       pool = DownloadIsolatePool(size: 2);

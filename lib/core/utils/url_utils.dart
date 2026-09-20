@@ -67,8 +67,9 @@ String? extractUrlFromText(String text) {
   final match = regExp.firstMatch(trimmed);
   if (match != null) {
     var rawUrl = match.group(0)!;
-    // Strip trailing punctuation often appended by user messages or apps
-    rawUrl = rawUrl.replaceAll(RegExp(r'[.,;!)]+$'), '');
+    // Strip trailing punctuation and closing brackets/quotes often
+    // appended by user messages or apps
+    rawUrl = rawUrl.replaceAll(RegExp(r'''[.,;)\]}\>"']+$'''), '');
     return rawUrl;
   }
   return null;

@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:isolate';
 import 'package:dio/dio.dart';
-import 'package:dmx/core/services/engine/chunk_scheduler.dart';
 import 'package:dmx/core/services/engine/engine_models.dart';
 import 'package:dmx/core/services/engine/http_transfer_job.dart';
+import 'package:dmx/core/services/engines/http_download_engine.dart';
 import 'package:dmx/core/services/transfer_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 

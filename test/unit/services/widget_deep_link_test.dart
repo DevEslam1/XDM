@@ -52,6 +52,10 @@ void main() {
       for (final route in routesToTest) {
         expect(() => WidgetDeepLinkHandler.handleUrl(route), returnsNormally);
       }
+
+      // Flush the pending pumpQueue debounce timer scheduled by
+      // pauseAllTasks so no timer is left pending at teardown.
+      await tester.pump(const Duration(milliseconds: 100));
     });
   });
 }

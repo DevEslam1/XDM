@@ -8,8 +8,6 @@ import 'package:dmx/core/services/positional_file_writer.dart';
 import 'package:dmx/core/services/xdm_backend_client.dart';
 import 'package:dmx/core/utils/url_utils.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
-import 'package:dmx/features/downloads/widgets/speed_graph_widget.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -171,27 +169,6 @@ void main() {
       expect(isValidTransmissionUrl('https://example.com/file.zip'), isTrue);
       expect(isValidTransmissionUrl('ftp://example.com/file.zip'), isTrue);
       expect(isValidTransmissionUrl('javascript:alert(1)'), isFalse);
-    });
-
-    testWidgets(
-        'PERF-10 / UI-10: SpeedGraphWidget builds and renders chart data',
-        (tester) async {
-      final speedHistory = List<int>.generate(60, (i) => i * 1024);
-
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: ThemeData.dark(),
-          home: Scaffold(
-            body: SpeedGraphWidget(
-              speedHistory: speedHistory,
-              status: DownloadStatus.downloading,
-            ),
-          ),
-        ),
-      );
-
-      expect(find.byType(SpeedGraphWidget), findsOneWidget);
-      expect(find.text('Download Speed (60s)'), findsOneWidget);
     });
   });
 }

@@ -130,9 +130,21 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
         _isLoadingMore = false;
         _filterCacheDirty = true;
       });
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       setState(() => _isLoadingMore = false);
+      final isDark = context.read<SettingsProvider>().isDarkMode;
+      if (!mounted) return;
+      // Surface the failure so the user can retry by scrolling again.
+      ThemedSnackbar.show(
+        context,
+        message: L10n.isRtl(context)
+            ? 'تعذر تحميل المزيد من الفيديوهات'
+            : 'Could not load more videos',
+        color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+        icon: Icons.error_outline,
+        isDarkMode: isDark,
+      );
     }
   }
 

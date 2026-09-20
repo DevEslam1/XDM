@@ -63,12 +63,14 @@ void main() {
         child: const SettingsScreen(initialSection: 'power'),
         settingsProvider: settings,
       ));
-      await tester.pumpAndSettle();
+      // The settings screen runs ambient animations by design and never
+      // settles — pump a fixed duration like the sibling tests above.
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(settings.activeSettingsTabIndex, equals(5));
 
       await settings.setBatterySaverMode(true);
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(settings.batterySaverMode, isTrue);
       expect(settings.activeSettingsTabIndex, equals(5));

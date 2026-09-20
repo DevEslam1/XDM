@@ -111,14 +111,24 @@ void main() {
       expect(cleared.errorMessage, isNull);
     });
 
-    test('6. progress returns -1.0 when fileSize is 0', () {
+    test('6. progress returns 0.0 and isIndeterminate when fileSize is 0', () {
       final task = createDummyTask(
         id: 'task-105',
         fileSize: 0,
         downloadedBytes: 1024,
       );
 
-      expect(task.progress, equals(-1.0));
+      // FIX v2.0.0: unknown-size progress is 0.0; indeterminacy is signalled
+      // by the dedicated isIndeterminate getter instead of a -1.0 sentinel.
+      expect(task.progress, equals(0.0));
+
+      final downloadingTask = createDummyTask(
+        id: 'task-105b',
+        fileSize: 0,
+        downloadedBytes: 1024,
+        status: DownloadStatus.downloading,
+      );
+      expect(downloadingTask.isIndeterminate, isTrue);
     });
 
     test('7. progress clamps to 0.0-1.0', () {

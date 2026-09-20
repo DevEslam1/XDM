@@ -207,7 +207,12 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
         !_allocated) {
       return RepaintBoundary(
         child: ColoredBox(
-          color: Colors.black.withValues(alpha: 0.85),
+          // FIX: derive the no-blur scrim from the resolved theme surface so
+          // it stays correct in light mode (was hardcoded black).
+          color: Theme.of(context)
+              .colorScheme
+              .surface
+              .withValues(alpha: 0.85),
           child: RepaintBoundary(child: widget.child),
         ),
       );
@@ -234,7 +239,12 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
     if (reduceVisuals || classicUi) {
       return RepaintBoundary(
         child: ColoredBox(
-          color: Colors.black.withValues(alpha: 0.35),
+          // FIX: light scrim derived from the theme surface (was hardcoded
+          // black, which rendered dark in light mode).
+          color: Theme.of(context)
+              .colorScheme
+              .surface
+              .withValues(alpha: 0.35),
           child: RepaintBoundary(child: widget.child),
         ),
       );

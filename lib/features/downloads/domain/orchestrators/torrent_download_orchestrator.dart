@@ -106,6 +106,8 @@ class TorrentDownloadOrchestrator {
         getTorrentFiles: getTorrentFiles,
         torrentId: torrentId,
         isRetry: isRetry,
+        // Forward the user-configured magnet metadata timeout end-to-end.
+        metadataTimeoutSeconds: metadataTimeoutSeconds,
       );
     } finally {
       await alertSub?.cancel();

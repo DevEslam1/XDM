@@ -148,7 +148,9 @@ void main() {
         final snapshots = dashboard([task('a', speed: 100)]);
 
         await bridge.pushDashboard(snapshots);
-        await bridge.pushDashboard(snapshots);
+        // Different payload: an identical payload would be skipped by the
+        // FIX-21 duplicate-payload guard in _doPush.
+        await bridge.pushDashboard(dashboard([task('a', speed: 200)]));
         expect(pushes.length, 1);
 
         await Future<void>.delayed(

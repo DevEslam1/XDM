@@ -6,7 +6,6 @@ import '../../features/downloads/data/drift_task_repository.dart';
 import '../../features/downloads/data/task_repository.dart';
 import '../../features/downloads/domain/orchestrators/http_download_orchestrator.dart';
 import '../../features/downloads/domain/orchestrators/torrent_download_orchestrator.dart';
-import '../../features/downloads/provider/download_queue_engine.dart';
 import '../../features/downloads/provider/torrent_provider.dart';
 import '../../features/downloads/services/torrent_session_manager.dart';
 import '../../features/settings/provider/settings_provider.dart';
@@ -22,7 +21,6 @@ import '../services/background_timer_manager.dart';
 import '../services/bandwidth_governor.dart';
 import '../services/checksum_service.dart';
 import '../services/clipboard_service.dart';
-import '../services/connection_manager.dart';
 import '../services/crash_reporting_service.dart';
 import '../services/database/repositories/bookmark_repository.dart';
 import '../services/database/repositories/browser_history_repository.dart';
@@ -131,14 +129,6 @@ Future<void> configureDependencies() async {
       },
     );
 
-    getIt.registerLazySingleton<DownloadQueueEngine>(
-      () => DownloadQueueEngine(),
-    );
-    // FIX(M-11): The dead parallel state layer (DownloadListProvider /
-    // DownloadQueueProvider / DownloadFilterProvider / DownloadStatsNotifier)
-    // was removed from DI and the widget tree — nothing consumed them and
-    // they formed a second source of truth for the task list next to
-    // [DownloadProvider]. The classes remain available to tests.
     getIt.registerLazySingleton<TorrentProvider>(
       () => TorrentProvider(torrentService: getIt<ITorrentService>()),
       dispose: (p) => p.dispose(),
@@ -171,8 +161,6 @@ Future<void> configureDependencies() async {
       () => PowerMonitor(),
       dispose: (_) => PowerMonitor.dispose(),
     );
-    getIt.registerLazySingleton<ConnectionManager>(() => ConnectionManager(),
-        dispose: (c) => c.dispose());
     getIt.registerLazySingleton<ServerIdentityCache>(
         () => ServerIdentityCache(),
         dispose: (c) => c.dispose());
@@ -202,7 +190,7 @@ Future<void> configureDependencies() async {
     );
 
     getIt.registerLazySingleton<SubscriptionService>(
-      () => SubscriptionService(),
+      () => SubscriptionService(unlocked: !kPurchasesEnabled),
       dispose: (s) => s.dispose(),
     );
     getIt.registerLazySingleton<PurchaseService>(

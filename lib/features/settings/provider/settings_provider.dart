@@ -96,6 +96,7 @@ class SettingsProvider extends ChangeNotifier
       'maxConcurrentFilesPerTorrent';
   static const _shareRatioLimitKey = 'shareRatioLimit';
   static const _maxSeedingTimeKey = 'maxSeedingTimeMinutes';
+  static const _minSeedTimeMinutesKey = 'minSeedTimeMinutes';
   static const _maxPeerConnectionsPerTorrentKey =
       'maxPeerConnectionsPerTorrent';
   static const _maxHalfOpenConnectionsKey = 'maxHalfOpenConnections';
@@ -295,23 +296,22 @@ class SettingsProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  @override
+  // FIX(S3): These five fields were previously shadowed by identical backing
+  // fields in TorrentSettingsMixin (with a conflicting maxActiveTorrents
+  // default of 5 vs 3). The dead mixin copies were removed; these are the
+  // single source of truth now.
   bool globalTorrentSeeding = true;
   bool globalTorrentSeedingLimited = false;
   int globalTorrentSeedingLimitKbps = 500;
   int torrentMetadataTimeoutSeconds = 300;
-  @override
   bool enableDht = true;
   bool enableUpnp = true;
   bool enableNatPmp = true;
   bool enableLpd = true;
-  @override
   bool enablePex = true;
-  @override
   int maxActiveTorrents = 3;
   int maxActiveDownloads = 2;
   int maxActiveSeeds = 2;
-  @override
   bool queueTorrents = true;
   bool forceEncrypt = false;
   int torrentConnectionsLimit = 200;
@@ -684,6 +684,8 @@ class SettingsProvider extends ChangeNotifier
           _prefs.getDouble(_shareRatioLimitKey) ?? shareRatioLimit;
       maxSeedingTimeMinutes =
           _prefs.getInt(_maxSeedingTimeKey) ?? maxSeedingTimeMinutes;
+      minSeedTimeMinutes =
+          _prefs.getInt(_minSeedTimeMinutesKey) ?? minSeedTimeMinutes;
       maxPeerConnectionsPerTorrent =
           _prefs.getInt(_maxPeerConnectionsPerTorrentKey) ??
               maxPeerConnectionsPerTorrent;
@@ -1102,6 +1104,14 @@ class SettingsProvider extends ChangeNotifier
     notifyListeners();
   }
 
+  /// Minimum seeding time in minutes (0 = no minimum). Clamped to 0–10080
+  /// (one week) and consumed by TorrentSeedingManager's seeding policies.
+  Future<void> setMinSeedTime(int value) async {
+    minSeedTimeMinutes = value.clamp(0, 10080);
+    await _prefs.setInt(_minSeedTimeMinutesKey, minSeedTimeMinutes);
+    notifyListeners();
+  }
+
   Future<void> setTorrentMetadataTimeoutSeconds(int value) async {
     torrentMetadataTimeoutSeconds = value.clamp(30, 1800);
     await _prefs.setInt(
@@ -1424,6 +1434,7 @@ class SettingsProvider extends ChangeNotifier
       _maxConcurrentFilesPerTorrentKey,
       _shareRatioLimitKey,
       _maxSeedingTimeKey,
+      _minSeedTimeMinutesKey,
       _defaultThreadCountKey,
       _customDownloadPathKey,
       _incognitoEnabledKey,
@@ -1553,6 +1564,7 @@ class SettingsProvider extends ChangeNotifier
     _maxConcurrentFilesPerTorrent = 0;
     shareRatioLimit = 2.0;
     maxSeedingTimeMinutes = 0;
+    minSeedTimeMinutes = 0;
     incognitoEnabled = false;
     desktopMode = false;
     pinchToZoom = true;
@@ -1738,6 +1750,7 @@ class SettingsProvider extends ChangeNotifier
         _maxConcurrentFilesPerTorrentKey, _maxConcurrentFilesPerTorrent);
     await _prefs.setDouble(_shareRatioLimitKey, shareRatioLimit);
     await _prefs.setInt(_maxSeedingTimeKey, maxSeedingTimeMinutes);
+    await _prefs.setInt(_minSeedTimeMinutesKey, minSeedTimeMinutes);
     // Proxy
     await _prefs.setString(_proxyHostKey, proxyHost);
     await _prefs.setInt(_proxyPortKey, proxyPort);

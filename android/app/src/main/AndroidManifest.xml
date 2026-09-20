@@ -122,7 +122,13 @@
         </receiver>
         <receiver
             android:name=".widget.WidgetActionReceiver"
-            android:exported="false" />
+            android:exported="false">
+            <!-- Package-scoped UPDATE_WIDGETS broadcasts (WidgetUpdateWorker)
+                 route here; the action stays off the exported widget provider. -->
+            <intent-filter>
+                <action android:name="com.xdm.downloadmanager.UPDATE_WIDGETS" />
+            </intent-filter>
+        </receiver>
         <!-- Restores background queue sync and widget alarms on system boot -->
         <receiver
             android:name=".BootReceiver"

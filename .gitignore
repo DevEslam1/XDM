@@ -13,6 +13,12 @@
 migrate_working_dir/
 test/goldens/failures
 test/goldens/goldens
+# Runtime/test artifacts written by the download engine and e2e tests
+*.journal
+*.dmxstate
+*.dmxpart
+*.dmxdone
+test_integration.journal
 # IntelliJ related
 *.iml
 *.ipr

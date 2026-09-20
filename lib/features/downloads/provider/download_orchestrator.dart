@@ -137,7 +137,7 @@ class DownloadOrchestrator {
     if (_host.enableBackgroundTimers) {
       _orphanCleanupTimer = Timer.periodic(const Duration(seconds: 60), (_) {
         if (_host.providerDisposed) return;
-        // Periodic check for orphan temp files
+        unawaited(_sweepOrphanSidecars());
       });
     }
   }
@@ -170,6 +170,10 @@ class DownloadOrchestrator {
         // force-kill mid-download doesn't leave the DB row (read by
         // widgets/backup/export) at stale byte counts.
         unawaited(flushPendingProgressToDatabase());
+        // FIX-2.2: progress ticks parked in pendingProgressUpdates only
+        // refresh the model between throttle windows — coalesce a listener
+        // refresh on this cadence (no-op when backgrounded / nothing pending).
+        onProgressTick();
         if (TorrentService.activeTorrentIds.isNotEmpty) {
           unawaited(TorrentResumeStore.saveAll(
             TorrentService.activeTorrentIds,
@@ -198,6 +202,38 @@ class DownloadOrchestrator {
   }
 
   static const _mediaChannel = MethodChannel('com.dmx.app/media');
+
+  /// FIX-2.5: Periodic orphan-sidecar sweep. Removes `.dmxstate`/`.journal`
+  /// sidecars whose temp part file is already gone (task completed, failed
+  /// with cleaned parts, or cancelled) — leftovers the finalize/failure
+  /// cleanup missed. Tasks that can still resume (part file present) and all
+  /// active tasks are never touched.
+  Future<void> _sweepOrphanSidecars() async {
+    try {
+      for (final task in _host.providerTasks) {
+        final tempPath = task.tempFilePath;
+        if (tempPath.isEmpty) continue;
+        final isTerminal = task.status == DownloadStatus.completed ||
+            task.status == DownloadStatus.failed ||
+            task.isCancelled;
+        if (!isTerminal) continue;
+        if (await File(tempPath).exists()) continue;
+        for (final sidecar in [
+          '$tempPath.dmxstate',
+          '$tempPath.journal',
+          '$tempPath.audio.dmxstate',
+          '$tempPath.audio.journal',
+        ]) {
+          try {
+            final f = File(sidecar);
+            if (await f.exists()) await f.delete();
+          } catch (_) {}
+        }
+      }
+    } catch (e) {
+      debugPrint('[DMX] Orphan sidecar sweep failed: $e');
+    }
+  }
 
   /// Records a classified, bounded diagnostic entry for [taskId]'s failure.
   void _recordDownloadFailure(String taskId, Object error) {
@@ -2283,6 +2319,9 @@ class DownloadOrchestrator {
             }
             _host.pendingProgressUpdates.add(task.id);
           }
+          // Throttled progress telemetry for the home-screen widget; the
+          // provider debounces and the bridge throttles further.
+          _host.updateTelemetryWidget();
         } finally {
           _pushScheduled[task.id] = false;
         }
@@ -3818,6 +3857,19 @@ class DownloadOrchestrator {
             debugPrint(
                 '[DMX] FIX(04): Both video and audio streams complete. Skipping download, executing merge.');
             final notificationId = _host.notifications.idFor(task.id);
+            // BUG9-MERGE: the task is still `queued` here (the FIX(04) block
+            // runs before the downloading commit below). _mergeAudioVideo's
+            // status guard bails out for a queued task, so both the merge and
+            // the failure bookkeeping below silently no-oped, stranding the
+            // task in `queued` and restarting it forever. Commit `downloading`
+            // (with a merging status message, mirroring the FIX YT-2/YT-6
+            // resume-merge path above) so the merge can actually run.
+            await _host.setTaskState(task.copyWith(
+              status: DownloadStatus.downloading,
+              statusMessage: DownloadStatusMessages.merging,
+              cycleState: CycleState.merging,
+              clearError: true,
+            ));
             DownloadStateMachine(
               taskId: task.id,
               initialState: DownloadStateMachine.fromStatus(task.status),
@@ -3830,8 +3882,17 @@ class DownloadOrchestrator {
                 taskId: task.id,
                 initialState: DomainDownloadState.downloading,
               ).transition(DomainDownloadState.failed, reason: 'Merge failed.');
-              await _host.setTaskState(task.copyWith(
-                errorMessage: 'Merge failed. Tap retry to re-attempt merge.',
+              // BUG9-MERGE: commit the terminal failure with the canonical
+              // merge-failed message (previously only the errorMessage was
+              // written while the status stayed `queued` — a zombie task).
+              final failedTask = _host.findTaskById(task.id) ?? task;
+              await _host.setTaskState(failedTask.copyWith(
+                status: DownloadStatus.failed,
+                statusMessage: DownloadStatusMessages.ffmpegMergeFailed,
+                errorMessage:
+                    '${DownloadStatusMessages.ffmpegMergeFailed} Both streams are complete — tap retry to re-attempt the merge.',
+                speed: 0,
+                clearEta: true,
               ));
             }
             earlyReturnCompleter.complete();
@@ -4601,6 +4662,13 @@ class DownloadOrchestrator {
               cancelReasonOf(realError, cancelToken),
               alreadyUserPaused: current.pausedByUser,
             );
+            // Keep the wifi-only resume set in sync when this handler is what
+            // publishes a policy pause (the engine unwind exceeded the
+            // monitor's 5s window).
+            if (outcome.waitingMessage ==
+                DownloadStatusMessages.waitingWifi) {
+              _host.networkMonitor.markWifiWaiting(task.id);
+            }
             await _host.setTaskState(
               current.copyWith(
                 status: DownloadStatus.paused,

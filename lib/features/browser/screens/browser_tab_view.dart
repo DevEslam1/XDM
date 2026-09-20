@@ -150,6 +150,7 @@ class _BrowserTabViewState extends State<_BrowserTabView> {
                             source: '''
                   window.XDM_LongPress = { postMessage: function(msg) { window.flutter_inappwebview.callHandler('XDM_LongPress', msg); } };
                   window.XDM_Popups = { postMessage: function(msg) { window.flutter_inappwebview.callHandler('XDM_Popups', msg); } };
+                  window.XDM_Autofill = { postMessage: function(msg) { window.flutter_inappwebview.callHandler('XDM_Autofill', msg); } };
                   window.XdmPickerChannel = { postMessage: function(msg) { window.flutter_inappwebview.callHandler('XdmPickerChannel', msg); } };
                   ${ScriptInjector.kLongPressScript}
                 ''',

@@ -523,8 +523,13 @@ class DownloadEngine implements IDownloadEngine {
     setActiveDownloadsCount(activeDownloadsCount + 1);
     try {
       if (isTorrent) {
-        return await _torrentHandler.handleTorrentDownload(
-          taskId: taskId,
+        // FIX: route through the orchestrator, not the raw handler. The
+        // orchestrator wraps the handler AND adds torrent-alert handling
+        // (fastresumeRejected → verifying state, saveResumeDataFailed →
+        // telemetry + delayed re-save) that never ran when the handler was
+        // called directly.
+        return await _torrentOrchestrator.download(
+          effectiveTaskId: taskId,
           url: url,
           currentLocalFilePath: localFilePath,
           knownFileSize: knownFileSize,
@@ -532,8 +537,6 @@ class DownloadEngine implements IDownloadEngine {
           onProgress: onProgress,
           getTorrentFiles: getTorrentFiles,
           torrentId: torrentId,
-          clientBuilder: (url) => _dioPool.acquireClient(url: url),
-          clientReleaser: (client) => _dioPool.releaseClient(client),
           isRetry: isRetry,
           // B1: forward the user-configured metadata timeout — it was received
           // here but silently dropped, so the setting never reached the magnet

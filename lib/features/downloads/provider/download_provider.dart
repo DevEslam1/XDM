@@ -33,6 +33,7 @@ import '../domain/executor/task_executor.dart';
 import '../models/download_add_spec.dart';
 import '../models/download_task.dart';
 import '../services/download_engine_adapter.dart';
+import '../services/download_widget_sync.dart';
 import 'download_orchestrator.dart';
 import 'mixins/download_backup_mixin.dart';
 import 'mixins/download_filter_mixin.dart';
@@ -85,16 +86,6 @@ class DownloadProvider extends ChangeNotifier
       pumpQueue: pumpQueue,
       onNetworkChanged: (cmd) => _executor.dispatch(cmd),
     );
-    _scheduleManager = ScheduleManager(
-      tasks: () => _tasks,
-      databaseService: _databaseService,
-      isDisposed: () => _disposed,
-      downloadingTasksCount: () => downloadingTasksCount,
-      updateTorrentUploadLimit: updateTorrentUploadLimit,
-      notifyListeners: notifyListeners,
-      pumpQueue: pumpQueue,
-      onScheduleFired: (id) => _executor.dispatch(ScheduleFired(id)),
-    );
     _notifications = NotificationCoordinator(
       notificationService: _notificationService,
       settingsProvider: _settingsProvider,
@@ -109,6 +100,20 @@ class DownloadProvider extends ChangeNotifier
       onStopAll: pauseAllTasks,
       onStartAll: resumeAllTasks,
       onExitApp: () async => exit(0),
+    );
+    // SCHED-FIX-5: route the scheduled-start callback into the coordinator so
+    // a scheduled task that auto-starts posts its notification.
+    _scheduleManager = ScheduleManager(
+      tasks: () => _tasks,
+      databaseService: _databaseService,
+      isDisposed: () => _disposed,
+      downloadingTasksCount: () => downloadingTasksCount,
+      updateTorrentUploadLimit: updateTorrentUploadLimit,
+      notifyListeners: notifyListeners,
+      pumpQueue: pumpQueue,
+      onScheduleFired: (id) => _executor.dispatch(ScheduleFired(id)),
+      onScheduledTaskStarted: (taskName, scheduledAt) =>
+          _notifications.showScheduledStarted(taskName, scheduledAt),
     );
     _orchestrator = DownloadOrchestrator(this);
     _engineAdapter = DownloadEngineAdapter(
@@ -175,6 +180,7 @@ class DownloadProvider extends ChangeNotifier
   final Set<String> _pendingTaskOperations = {};
   String? lastError;
   Timer? _widgetUpdateTimer;
+  final DownloadWidgetSync _widgetSync = DownloadWidgetSync();
   Timer? _torrentPollingTimer;
 
   final Map<String, CancelToken> _cancelTokens = {};
@@ -262,10 +268,8 @@ class DownloadProvider extends ChangeNotifier
   Map<String, DownloadMetrics> get downloadMetrics => _downloadMetrics;
   final Set<String> _reservedTaskIds = <String>{};
 
-  @override
-  double get currentDownloadSpeed => _tasks
-      .where((t) => t.status == DownloadStatus.downloading)
-      .fold(0.0, (s, t) => s + t.speed);
+  // `currentDownloadSpeed` is provided by DownloadFilterMixin (identical
+  // aggregate over providerTasks); a second definition here was a duplicate.
   int get totalDownloadedBytes =>
       _tasks.fold(0, (s, t) => s + t.downloadedBytes);
 
@@ -380,6 +384,7 @@ class DownloadProvider extends ChangeNotifier
   void _onDomainEvent(DownloadEvent event) {
     _syncEngineSpeedLimit();
     filteredTasksDirty = true;
+    updateTelemetryWidget();
     safeNotify();
   }
 
@@ -532,6 +537,23 @@ class DownloadProvider extends ChangeNotifier
       // FIX(C-5): ScheduleManager.start() was never invoked anywhere, so the
       // dynamic scheduling tick never ran on any platform.
       _scheduleManager.start();
+      // BG-09: register the OS-level alarm dispatcher so scheduled downloads
+      // also fire when the app process is killed (the in-app tick only
+      // covers the foreground case).
+      try {
+        await ScheduleManager.initialize();
+      } catch (e) {
+        debugPrint('[DownloadProvider] ScheduleManager.initialize failed: $e');
+      }
+      // Re-register OS alarms for schedules that are still pending after a
+      // restart (one-off Workmanager tasks may have been consumed).
+      for (final task in _tasks) {
+        if (task.status == DownloadStatus.paused &&
+            !task.pausedByUser &&
+            task.scheduledAt != null) {
+          unawaited(ScheduleManager.scheduleAlarm(task.id, task.scheduledAt!));
+        }
+      }
       await _networkMonitor.ensureInitialConnectivity();
       // FIX(C-7): Start watching connectivity changes. Previously init() was
       // never invoked, so wifi-only / pause-on-cellular enforcement and
@@ -1260,6 +1282,10 @@ class DownloadProvider extends ChangeNotifier
       pausedByUser: false,
     );
     await _setTask(task);
+    if (scheduledAt != null) {
+      // BG-09: mirror the schedule as an OS alarm so it fires when killed.
+      unawaited(ScheduleManager.scheduleAlarm(newTaskId, scheduledAt));
+    }
     if (scheduledAt == null) pumpQueue();
     return newTaskId;
   }
@@ -1402,6 +1428,7 @@ class DownloadProvider extends ChangeNotifier
         pauseReason: reason.name,
       );
     }
+    updateTelemetryWidget();
   }
 
   @override
@@ -1425,6 +1452,7 @@ class DownloadProvider extends ChangeNotifier
       isCancelled: false,
     );
     _startTorrentPollingTimer();
+    updateTelemetryWidget();
   }
 
   Future<void> cancelTask(String id) async {
@@ -1435,6 +1463,8 @@ class DownloadProvider extends ChangeNotifier
     _retryTimers.remove(id)?.cancel();
     _cancelTokens.remove(id)?.cancel('cancelled');
     _notifications.cancelForTask(id);
+    // BG-09: a cancelled task must not leave a pending OS schedule alarm.
+    unawaited(ScheduleManager.cancelAlarm(id));
     await _applyStateChange(
       id,
       DomainDownloadState.failed,
@@ -1444,6 +1474,7 @@ class DownloadProvider extends ChangeNotifier
       pausedByUser: true,
       isCancelled: true,
     );
+    updateTelemetryWidget();
   }
 
   Future<void> cancelDownload(String taskId) => cancelTask(taskId);
@@ -1476,6 +1507,8 @@ class DownloadProvider extends ChangeNotifier
           _retryCounts.remove(id);
           _activeFutures.remove(id);
           _notifications.cancelForTask(id);
+          // BG-09: drop any pending OS schedule alarm for the deleted task.
+          unawaited(ScheduleManager.cancelAlarm(id));
           if (deleteFiles) {
             await _deleteFileSafely(task.localFilePath);
             final tempPath = task.tempFilePath;
@@ -1704,7 +1737,21 @@ class DownloadProvider extends ChangeNotifier
   Future<void> updateTaskUrl(String id, String url, {String? newAudioUrl}) =>
       updateTaskUrlAndResume(id, url, newAudioUrl: newAudioUrl);
   @override
-  void updateTelemetryWidget() {}
+  void updateTelemetryWidget() {
+    // Debounce: coalesce bursts of state changes into one widget push; the
+    // WidgetDataBridge throttles (and dedupes payloads) further on its side.
+    // Disabled with background timers (incl. FLUTTER_TEST) like the other
+    // periodic timers.
+    if (_disposed || !enableBackgroundTimers) return;
+    _widgetUpdateTimer ??= Timer(const Duration(seconds: 2), () {
+      _widgetUpdateTimer = null;
+      unawaited(_widgetSync.syncDashboard(
+        allTasks: List.unmodifiable(_tasks),
+        speedHistories: _speedHistories,
+        isOnWifi: _networkMonitor.hasWifiOrEthernet,
+      ));
+    });
+  }
   @override
   void providerStartWidgetTimer() {
     _startTorrentPollingTimer();

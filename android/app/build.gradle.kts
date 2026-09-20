@@ -87,6 +87,29 @@ android {
             if (hasValidKeystore && signingConfigs.findByName("release") != null) {
                 signingConfig = signingConfigs.getByName("release")
             } else {
+                // W-7: Never ship a debug-signed release silently. Require an
+                // explicit opt-in via ALLOW_DEBUG_SIGNED_RELEASE=true (env or
+                // -P property) before falling back to the debug signing key.
+                val isReleaseBuildRequested = gradle.startParameter.taskNames.any {
+                    it.contains("Release", ignoreCase = true) ||
+                        it.contains("bundle", ignoreCase = true) ||
+                        it == "assemble" ||
+                        it == "build"
+                }
+                val allowDebugSignedRelease =
+                    System.getenv("ALLOW_DEBUG_SIGNED_RELEASE") == "true" ||
+                        (project.findProperty("ALLOW_DEBUG_SIGNED_RELEASE") as? String) == "true"
+                if (isReleaseBuildRequested && !allowDebugSignedRelease) {
+                    throw org.gradle.api.GradleException(
+                        "Release build attempted without a valid keystore configuration. " +
+                            "Provide a valid keystore.properties, key.properties, or CI environment variables " +
+                            "(KEYSTORE_PATH, STORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD) to sign release artifacts, " +
+                            "or explicitly set ALLOW_DEBUG_SIGNED_RELEASE=true to permit a debug-signed release build."
+                    )
+                }
+                if (allowDebugSignedRelease) {
+                    println("WARNING: Building release build with debug signing key because no keystore was found.")
+                }
                 signingConfig = signingConfigs.getByName("debug")
             }
         }

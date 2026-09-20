@@ -348,6 +348,31 @@ class TorrentSettingsPage extends StatelessWidget with HapticHelper {
                   }
                 },
               ),
+              DropdownTile<int>(
+                accentColor: accent,
+                title: isRtl ? 'أدنى زمن للرفع' : 'Min Seeding Time',
+                subtitle: settings.minSeedTimeMinutes == 0
+                    ? (isRtl ? 'بدون حد أدنى' : 'No minimum (0 mins)')
+                    : '${settings.minSeedTimeMinutes} minutes',
+                value: settings.minSeedTimeMinutes,
+                items: const [0, 15, 30, 60, 120, 240, 1440, 10080],
+                itemLabels: const {
+                  0: 'NONE',
+                  15: '15 MINS',
+                  30: '30 MINS',
+                  60: '1 HOUR',
+                  120: '2 HOURS',
+                  240: '4 HOURS',
+                  1440: '24 HOURS',
+                  10080: '7 DAYS',
+                },
+                onChanged: (val) {
+                  if (val != null) {
+                    settings.setMinSeedTime(val);
+                    triggerHaptic(settings);
+                  }
+                },
+              ),
             ],
           ),
           const SizedBox(height: 12),

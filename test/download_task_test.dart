@@ -344,7 +344,7 @@ void main() {
       expect(task.progress, 1.0);
     });
 
-    test('progress returns -1.0 when fileSize is 0', () {
+    test('progress returns 0.0 and isIndeterminate when fileSize is 0', () {
       final now = DateTime(2026, 7, 23);
       final task = DownloadTask(
         id: 'p3',
@@ -363,7 +363,10 @@ void main() {
         updatedAt: now,
       );
 
-      expect(task.progress, -1.0);
+      // FIX v2.0.0: unknown-size progress is 0.0; indeterminacy is signalled
+      // by the dedicated isIndeterminate getter instead of a -1.0 sentinel.
+      expect(task.progress, 0.0);
+      expect(task.isIndeterminate, isTrue);
     });
   });
 

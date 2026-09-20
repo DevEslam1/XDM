@@ -1,6 +1,3 @@
-import 'package:dmx/core/services/shared_prefs_batcher.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
 import 'error_taxonomy.dart';
 
 enum CircuitBreakerState { closed, open, halfOpen }
@@ -62,13 +59,6 @@ class CircuitBreaker {
       case CircuitBreakerState.open:
         if (now.difference(_lastStateChange) >= openTimeout) {
           _transition(CircuitBreakerState.halfOpen, now);
-          // FIX P1-8b: Allow the request that triggers halfOpen to probe immediately,
-          // instead of requiring one extra request (saves openTimeout latency).
-          if (!_probeInFlight) {
-            _probeInFlight = true;
-            _probeStartedAt = now;
-            return true;
-          }
         }
         return false;
       case CircuitBreakerState.halfOpen:
@@ -169,118 +159,4 @@ class CircuitBreaker {
   }
 }
 
-class CircuitBreakerRegistry {
-  static const String _prefsPrefix = 'cb_open_';
-  final Map<String, CircuitBreaker> _breakers = {};
 
-  Future<void> restoreState() async {
-    final prefs = await SharedPreferences.getInstance();
-    final keys = prefs.getKeys().where((k) => k.startsWith(_prefsPrefix));
-    final now = DateTime.now().millisecondsSinceEpoch;
-
-    for (final key in keys) {
-      final expireTime = prefs.getInt(key);
-      if (expireTime != null && expireTime > now) {
-        final hostKey = key.substring(_prefsPrefix.length);
-        final cb = getBreaker(hostKey);
-        // Pre-open the circuit breaker
-        cb._transition(CircuitBreakerState.open, DateTime.now());
-      } else {
-        SharedPrefsBatcher.instance.remove(key);
-      }
-    }
-  }
-
-  CircuitBreaker getBreaker(
-    String hostKey, {
-    int failureThreshold = 3,
-    Duration openTimeout = const Duration(seconds: 30),
-    Duration halfOpenTimeout = const Duration(seconds: 5),
-  }) {
-    if (_breakers.containsKey(hostKey)) {
-      return _breakers[hostKey]!;
-    }
-
-    final breaker = CircuitBreaker(
-      failureThreshold: failureThreshold,
-      openTimeout: openTimeout,
-      halfOpenTimeout: halfOpenTimeout,
-      key: hostKey,
-      onStateChange: _onStateChange,
-    );
-    _breakers[hostKey] = breaker;
-    return breaker;
-  }
-
-  void _onStateChange(CircuitBreakerState state, String? key) {
-    if (key == null) return;
-    final prefsKey = '$_prefsPrefix$key';
-
-    if (state == CircuitBreakerState.open) {
-      final breaker = _breakers[key];
-      if (breaker != null) {
-        final ttl = breaker.openTimeout * 3;
-        final expireTime = DateTime.now().add(ttl).millisecondsSinceEpoch;
-        SharedPrefsBatcher.instance.setInt(prefsKey, expireTime);
-      }
-    } else if (state == CircuitBreakerState.closed) {
-      SharedPrefsBatcher.instance.remove(prefsKey);
-    }
-  }
-}
-
-/// FIX-23: Circuit breaker helper specifically for URLs/hosts
-class UrlCircuitBreaker {
-  UrlCircuitBreaker._();
-  static final UrlCircuitBreaker instance = UrlCircuitBreaker._();
-
-  final Map<String, int> _urlFailures = {};
-  final Map<String, DateTime> _lastFailures = {};
-
-  bool shouldBlock(String url) {
-    try {
-      final uri = Uri.tryParse(url);
-      final host = uri?.host ?? url;
-      final failures = _urlFailures[host] ?? 0;
-      final last = _lastFailures[host];
-      if (failures >= 5 &&
-          last != null &&
-          DateTime.now().difference(last) < const Duration(minutes: 30)) {
-        return true;
-      }
-    } catch (_) {}
-    return false;
-  }
-
-  void recordFailure(String url) {
-    try {
-      final uri = Uri.tryParse(url);
-      final host = uri?.host ?? url;
-      _urlFailures[host] = (_urlFailures[host] ?? 0) + 1;
-      _lastFailures[host] = DateTime.now();
-      // FIX P1-8c: Bound map to prevent leak on burst 429/5xx across many hosts.
-      if (_urlFailures.length > 500) {
-        final oldest = _lastFailures.entries.toList()
-          ..sort((a, b) => a.value.compareTo(b.value));
-        for (var i = 0; i < 100 && i < oldest.length; i++) {
-          _urlFailures.remove(oldest[i].key);
-          _lastFailures.remove(oldest[i].key);
-        }
-      }
-    } catch (_) {}
-  }
-
-  void recordSuccess(String url) {
-    try {
-      final uri = Uri.tryParse(url);
-      final host = uri?.host ?? url;
-      _urlFailures.remove(host);
-      _lastFailures.remove(host);
-    } catch (_) {}
-  }
-
-  void reset() {
-    _urlFailures.clear();
-    _lastFailures.clear();
-  }
-}

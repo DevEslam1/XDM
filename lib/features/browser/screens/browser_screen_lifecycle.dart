@@ -29,6 +29,8 @@ mixin _LifecycleMixin on _BrowserScreenStateBase {
     _loadSnifferPref();
     _loadCustomJsCss();
     _loadCustomShortcuts(); // Bug #8 fix: load persisted shortcuts on startup
+    // Load persisted page_classifier_enabled / known_ad_domains for live use.
+    unawaited(PageIntentClassifier.instance.init());
     UserScriptManager.instance.load();
     _checkOnboardingTooltip();
 

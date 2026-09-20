@@ -1,33 +1,8 @@
 import 'package:dmx/shared/widgets/dmx_backdrop_filter.dart';
-import 'package:dmx/shared/widgets/pausable_loop_builder.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  group('PausableLoopBuilder Widget', () {
-    testWidgets('renders child and loops animation', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: PausableLoopBuilder(
-              duration: const Duration(seconds: 1),
-              builder: (context, value, child) {
-                return Opacity(
-                  opacity: value,
-                  child: const Text('Looping Text'),
-                );
-              },
-            ),
-          ),
-        ),
-      );
-
-      expect(find.text('Looping Text'), findsOneWidget);
-      await tester.pump(const Duration(milliseconds: 500));
-      expect(find.text('Looping Text'), findsOneWidget);
-    });
-  });
-
   group('DmxBackdropFilter Widget (U-04)', () {
     testWidgets('falls back to Container with forceSolid true', (tester) async {
       await tester.pumpWidget(

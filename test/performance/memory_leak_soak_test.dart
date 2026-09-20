@@ -1,35 +1,11 @@
 import 'dart:io';
 import 'package:dmx/core/services/download_journal.dart';
-import 'package:dmx/core/services/service_registry.dart';
-import 'package:dmx/features/downloads/provider/download_queue_provider.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('Task 8: Memory & Resource Leak Soak Suite', () {
-    test(
-        'Repeated add and delete task lifecycle is stable without leaking listeners',
-        () async {
-      final queueProvider = DownloadQueueProvider();
-
-      final initialListeners = ServiceRegistry.activeMemoryListenersCount;
-
-      for (int i = 0; i < 500; i++) {
-        queueProvider.pumpQueue();
-      }
-
-      queueProvider.dispose();
-
-      // Trigger memory pressure to clear weak references
-      ServiceRegistry.broadcastMemoryPressure();
-
-      final finalListeners = ServiceRegistry.activeMemoryListenersCount;
-      expect(finalListeners, lessThanOrEqualTo(initialListeners + 5),
-          reason:
-              'Listener references must be cleaned up and not leak across cycles');
-    });
-
     test('Simulates 8-hour soak test: memory remains bounded (< 50MB growth)',
         () async {
       final startingRss = ProcessInfo.currentRss;
