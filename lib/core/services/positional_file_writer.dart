@@ -309,6 +309,7 @@ class PositionalFileWriter
       await raf.setPosition(pos);
       await raf.writeFrom(bytes);
       // FIX(C-2): record durable progress only after the write succeeded.
+      // Already called within _metaLock context from _flushAllInternal / _flushBuffersInternal
       if (bufferKey != null) {
         final end = pos + bytes.length;
         final existing = _flushedHighWater[bufferKey] ?? 0;
@@ -370,10 +371,13 @@ class PositionalFileWriter
       final lock = _handleLocks[handleKey]!;
       await lock.synchronized(() async {
         if (!_closed) {
-          for (final bufferEntry in _buffers.entries.toList(growable: false)) {
-            if (bufferEntry.key % _maxHandles == handleKey) {
-              await _flushBufferInternal(handle, bufferEntry.value,
-                  bufferKey: bufferEntry.key);
+          final bufferKeys = _buffers.keys.toList(growable: false);
+          for (final bKey in bufferKeys) {
+            if (bKey % _maxHandles == handleKey) {
+              final buf = _buffers[bKey];
+              if (buf != null) {
+                await _flushBufferInternal(handle, buf, bufferKey: bKey);
+              }
             }
           }
           await handle.flush();
@@ -416,10 +420,13 @@ class PositionalFileWriter
       final lock = _handleLocks[handleKey]!;
       await lock.synchronized(() async {
         if (!_closed) {
-          for (final bufferEntry in _buffers.entries.toList(growable: false)) {
-            if (bufferEntry.key % _maxHandles == handleKey) {
-              await _flushBufferInternal(handle, bufferEntry.value,
-                  bufferKey: bufferEntry.key);
+          final bufferKeys = _buffers.keys.toList(growable: false);
+          for (final bKey in bufferKeys) {
+            if (bKey % _maxHandles == handleKey) {
+              final buf = _buffers[bKey];
+              if (buf != null) {
+                await _flushBufferInternal(handle, buf, bufferKey: bKey);
+              }
             }
           }
         }
@@ -501,14 +508,17 @@ class PositionalFileWriter
           try {
             if (lock != null) {
               await lock.synchronized(() async {
-                for (final bufferEntry
-                    in _buffers.entries.toList(growable: false)) {
-                  if (bufferEntry.key % _maxHandles == handleKey) {
-                    try {
-                      await _flushBufferInternal(handle, bufferEntry.value,
-                          bufferKey: bufferEntry.key);
-                    } catch (e, st) {
-                      _log.finest('Flush buffer during close failed', e, st);
+                final bufferKeys = _buffers.keys.toList(growable: false);
+                for (final bKey in bufferKeys) {
+                  if (bKey % _maxHandles == handleKey) {
+                    final buf = _buffers[bKey];
+                    if (buf != null) {
+                      try {
+                        await _flushBufferInternal(handle, buf,
+                            bufferKey: bKey);
+                      } catch (e, st) {
+                        _log.finest('Flush buffer during close failed', e, st);
+                      }
                     }
                   }
                 }

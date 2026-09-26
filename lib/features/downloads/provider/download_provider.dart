@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:collection';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -502,6 +501,30 @@ class DownloadProvider extends ChangeNotifier
                 debugPrint(
                     '[DownloadProvider] Startup reconciliation error for ${task.id}: $e');
               }
+            }
+          } else if (task.status == DownloadStatus.completed) {
+            // FIX(M-28 / P0-3): Reconcile completed tasks with disk and pin bytes to 100%
+            final targetPath = task.localFilePath.isNotEmpty
+                ? task.localFilePath
+                : (task.savePath.isNotEmpty ? task.savePath : '');
+            if (targetPath.isNotEmpty && !task.isTorrent) {
+              final targetFile = File(targetPath);
+              if (await targetFile.exists()) {
+                final diskLen = await targetFile.length();
+                if (diskLen > 0 &&
+                    (task.fileSize <= 0 || task.downloadedBytes != diskLen)) {
+                  reconciled = reconciled.copyWith(
+                    downloadedBytes: diskLen,
+                    fileSize: task.fileSize > 0 ? task.fileSize : diskLen,
+                  );
+                }
+              }
+            }
+            if (reconciled.fileSize > 0 &&
+                reconciled.downloadedBytes != reconciled.fileSize) {
+              reconciled = reconciled.copyWith(
+                downloadedBytes: reconciled.fileSize,
+              );
             }
           }
 
@@ -1138,11 +1161,14 @@ class DownloadProvider extends ChangeNotifier
     if (!isZeroProgress) {
       await _deleteFileSafely(task.tempFilePath);
       await _deleteFileSafely('${task.tempFilePath}.dmxstate');
+      await _deleteFileSafely(StateStore.pathFor(task.tempFilePath, taskId: task.id));
+      await _deleteFileSafely('${task.tempFilePath}.journal');
     }
     await _setTask(task.copyWith(
       threadCount: threadCount,
       chunks: List<double>.filled(threadCount, 0.0),
       downloadedBytes: isZeroProgress ? task.downloadedBytes : 0,
+      status: isZeroProgress ? task.status : DownloadStatus.paused,
     ));
   }
 
@@ -1370,28 +1396,8 @@ class DownloadProvider extends ChangeNotifier
         (taskBeforePause.status == DownloadStatus.downloading ||
             taskBeforePause.status == DownloadStatus.queued);
 
-    // Publish paused before waiting for the in-flight downloader.
-    if (wasActive) {
-      // BUG3: flush any pending progress-only DB update first so the row
-      // reflects the latest bytes, then re-read the task so the paused
-      // state carries the newest in-memory receivedBytes/chunks. Engine
-      // ticks are dropped after the status flip, so this pre-flush is the
-      // last chance to persist them.
-      await flushPendingProgress(id);
-      // BUG3: re-read the task after the flush so the paused state carries
-      // the newest in-memory receivedBytes/chunks (the flush window can
-      // still have moved progress; a task deleted in that window is skipped).
-      final liveToPause = _findTask(id);
-      if (liveToPause == null) return;
-      await setTaskState(liveToPause.copyWith(
-        status: DownloadStatus.paused,
-        speed: 0,
-        clearEta: true,
-        pausedByUser: reason == PauseReason.userRequested,
-        pauseReason: reason,
-      ));
-    }
-
+    // BUG-6 & BUG-16: Cancel the worker tokens and await the worker future
+    // first so the worker isolate flushes buffers to disk and saves durable state.
     // BUG7: cancel any pending auto-retry timer so the pause takes effect
     // immediately and a manual retry inside the timer window isn't silently
     // swallowed by the queue pump's waiting-for-retry filter.
@@ -1416,6 +1422,37 @@ class DownloadProvider extends ChangeNotifier
         await future.timeout(const Duration(seconds: 5), onTimeout: () {});
       } catch (_) {}
     }
+
+    if (wasActive) {
+      // BUG3: flush any pending progress-only DB update first so the row
+      // reflects the latest bytes, then re-read the task so the paused
+      // state carries the newest in-memory receivedBytes/chunks.
+      await flushPendingProgress(id);
+      final liveToPause = _findTask(id);
+      if (liveToPause == null) return;
+      await setTaskState(liveToPause.copyWith(
+        status: DownloadStatus.paused,
+        speed: 0,
+        clearEta: true,
+        pausedByUser: reason == PauseReason.userRequested,
+        pauseReason: reason,
+      ));
+    }
+    // Synchronize TaskExecutor state machine so subsequent StartTask/ResumeTask are not dropped
+    final sm = _executor.stateMachineFor(id);
+    if (sm.currentState != DomainDownloadState.paused) {
+      try {
+        sm.transition(
+          DomainDownloadState.paused,
+          command: PauseTask(id,
+              reason: reason.name,
+              userInitiated: reason == PauseReason.userRequested),
+          reason: reason.name,
+          caller: 'DownloadProvider.pauseTask',
+          engine: 'DownloadEngine',
+        );
+      } catch (_) {}
+    }
     if (!wasActive) {
       await _applyStateChange(
         id,
@@ -1423,9 +1460,8 @@ class DownloadProvider extends ChangeNotifier
         PauseTask(id,
             reason: reason.name,
             userInitiated: reason == PauseReason.userRequested),
-        reason: reason.name,
         pausedByUser: reason == PauseReason.userRequested,
-        pauseReason: reason.name,
+        isCancelled: false,
       );
     }
     updateTelemetryWidget();
@@ -1443,6 +1479,22 @@ class DownloadProvider extends ChangeNotifier
     if (task.status == DownloadStatus.completed && isTorrent) {
       await _setTask(task.copyWith(seedingEnabled: true));
       return;
+    }
+    // BUG-14 & BUG-6: verify state file or temp file before queueing
+    if (!isTorrent &&
+        task.downloadedBytes > 0 &&
+        task.tempFilePath.isNotEmpty) {
+      final stateFile =
+          File(StateStore.pathFor(task.tempFilePath, taskId: task.id));
+      final legacyState = File('${task.tempFilePath}.dmxstate');
+      final tempFile = File(task.tempFilePath);
+      if (!stateFile.existsSync() &&
+          !legacyState.existsSync() &&
+          !tempFile.existsSync()) {
+        debugPrint(
+          '[DMX] State file and temp file missing for task $id on resume. Download will restart from 0.',
+        );
+      }
     }
     await _applyStateChange(
       id,
@@ -1518,9 +1570,11 @@ class DownloadProvider extends ChangeNotifier
               await _deleteFileSafely('$tempPath.dmx_meta');
               await _deleteFileSafely('$tempPath.parts');
               await _deleteFileSafely('$tempPath.journal');
+              await _deleteFileSafely(StateStore.pathFor(tempPath, taskId: task.id));
               await _deleteFileSafely('$tempPath.dmxstate');
               await _deleteFileSafely('$tempPath.audio');
               await _deleteFileSafely('$tempPath.audio.journal');
+              await _deleteFileSafely(StateStore.pathFor('$tempPath.audio', taskId: task.id));
               await _deleteFileSafely('$tempPath.audio.dmxstate');
               await deleteDownloadParts(tempPath);
               await DownloadJournal.deleteJournalFor(tempPath);
@@ -1598,21 +1652,17 @@ class DownloadProvider extends ChangeNotifier
     if (shouldResetProgress) {
       downloadedBytes = 0;
       await _deleteFileSafely(task.tempFilePath);
+      await _deleteFileSafely(StateStore.pathFor(task.tempFilePath, taskId: task.id));
       await _deleteFileSafely('${task.tempFilePath}.dmxstate');
       await _deleteFileSafely('${task.tempFilePath}.journal');
       await _deleteFileSafely('${task.tempFilePath}.audio');
+      await _deleteFileSafely(StateStore.pathFor('${task.tempFilePath}.audio', taskId: task.id));
       await _deleteFileSafely('${task.tempFilePath}.audio.dmxstate');
       await _deleteFileSafely('${task.tempFilePath}.audio.journal');
     } else {
-      final stateFile = File('${task.tempFilePath}.dmxstate');
-      if (await stateFile.exists()) {
-        try {
-          final content = await stateFile.readAsString();
-          downloadedBytes = calculateDownloadedFromState(
-              jsonDecode(content) as Map<String, dynamic>);
-        } catch (_) {
-          downloadedBytes = 0;
-        }
+      final state = await StateStore.load(task.tempFilePath, taskId: task.id);
+      if (state != null) {
+        downloadedBytes = state.downloadedBytes;
       }
     }
     await _applyStateChange(id, DomainDownloadState.queued, RetryTask(id),
@@ -1724,11 +1774,20 @@ class DownloadProvider extends ChangeNotifier
     if (_disposed) return;
     final task = _findTask(id);
     if (task == null) return;
-    final updated = task.copyWith(
+    final isRunning = task.status == DownloadStatus.downloading ||
+        task.status == DownloadStatus.queued ||
+        _cancelTokens.containsKey(id);
+    if (isRunning) {
+      await pauseTask(id, reason: PauseReason.userRequested);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    final current = _findTask(id) ?? task;
+    final updated = current.copyWith(
       url: url,
-      mergedAudioUrl: newAudioUrl ?? task.mergedAudioUrl,
+      mergedAudioUrl: newAudioUrl ?? current.mergedAudioUrl,
       updatedAt: DateTime.now(),
       errorMessage: null,
+      clearStatusMessage: true,
     );
     await _setTask(updated);
     await resumeTask(id);
@@ -1818,23 +1877,33 @@ class DownloadProvider extends ChangeNotifier
     if (_disposed) return;
     final t = _findTask(id);
     if (t == null) return;
-    if (deleteTempFiles) {
-      await _deleteFileSafely(t.tempFilePath);
-      await _deleteFileSafely('${t.tempFilePath}.dmxstate');
-      await _deleteFileSafely('${t.tempFilePath}.journal');
-      await _deleteFileSafely('${t.tempFilePath}.audio');
-      await _deleteFileSafely('${t.tempFilePath}.audio.dmxstate');
-      await _deleteFileSafely('${t.tempFilePath}.audio.journal');
+    final isRunning = t.status == DownloadStatus.downloading ||
+        t.status == DownloadStatus.queued ||
+        _cancelTokens.containsKey(id);
+    if (isRunning) {
+      await pauseTask(id, reason: PauseReason.userRequested);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
     }
-    final updated = t.copyWith(
+    final taskNow = _findTask(id) ?? t;
+    if (deleteTempFiles) {
+      await _deleteFileSafely(taskNow.tempFilePath);
+      await _deleteFileSafely(StateStore.pathFor(taskNow.tempFilePath, taskId: taskNow.id));
+      await _deleteFileSafely('${taskNow.tempFilePath}.dmxstate');
+      await _deleteFileSafely('${taskNow.tempFilePath}.journal');
+      await _deleteFileSafely('${taskNow.tempFilePath}.audio');
+      await _deleteFileSafely(StateStore.pathFor('${taskNow.tempFilePath}.audio', taskId: taskNow.id));
+      await _deleteFileSafely('${taskNow.tempFilePath}.audio.dmxstate');
+      await _deleteFileSafely('${taskNow.tempFilePath}.audio.journal');
+    }
+    final updated = taskNow.copyWith(
       url: url,
-      mergedAudioUrl: clearAudioUrl ? null : (newAudioUrl ?? t.mergedAudioUrl),
-      fileSize: newFileSize ?? (deleteTempFiles ? 0 : t.fileSize),
-      audioSize: newAudioSize ?? (deleteTempFiles ? 0 : t.audioSize),
-      downloadedBytes: deleteTempFiles ? 0 : t.downloadedBytes,
-      audioDownloadedBytes: deleteTempFiles ? 0 : t.audioDownloadedBytes,
-      audioProgress: deleteTempFiles ? 0.0 : t.audioProgress,
-      chunks: deleteTempFiles ? List.filled(t.threadCount, 0.0) : t.chunks,
+      mergedAudioUrl: clearAudioUrl ? null : (newAudioUrl ?? taskNow.mergedAudioUrl),
+      fileSize: newFileSize ?? (deleteTempFiles ? 0 : taskNow.fileSize),
+      audioSize: newAudioSize ?? (deleteTempFiles ? 0 : taskNow.audioSize),
+      downloadedBytes: deleteTempFiles ? 0 : taskNow.downloadedBytes,
+      audioDownloadedBytes: deleteTempFiles ? 0 : taskNow.audioDownloadedBytes,
+      audioProgress: deleteTempFiles ? 0.0 : taskNow.audioProgress,
+      chunks: deleteTempFiles ? List.filled(taskNow.threadCount, 0.0) : taskNow.chunks,
       status: DownloadStatus.queued,
       errorMessage: null,
       updatedAt: DateTime.now(),

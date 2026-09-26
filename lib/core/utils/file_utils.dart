@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:dmx/core/services/logging_service.dart';
+import 'package:flutter/foundation.dart' show compute;
 import 'package:path/path.dart' as p;
 import 'package:synchronized/synchronized.dart';
 
@@ -258,7 +259,10 @@ int scanFolderBytesSync(String path) {
                 raf.closeSync();
                 final hasContent = probe.any((b) => b != 0);
                 downloaded = hasContent ? diskLen : 0;
-              } catch (_) {
+              } catch (e) {
+                LoggingService.logger('FileUtils').info(
+                  '[FileUtils] probe read failed, fallback to diskLen: $e',
+                );
                 downloaded = diskLen; // fallback
               }
             } else if (diskLen >= length) {
@@ -293,6 +297,9 @@ int scanFolderBytesSync(String path) {
                   );
                 }
               } catch (probeErr) {
+                LoggingService.logger('FileUtils').info(
+                  '[FileUtils] probe full file failed, setting downloaded=0: $probeErr',
+                );
                 downloaded = 0;
               }
             }
@@ -310,6 +317,27 @@ int scanFolderBytesSync(String path) {
     return copy;
   }).toList();
   return (total: total, files: files);
+}
+
+({int total, List<Map<String, dynamic>> files}) _scanTorrentFilesWorker(
+  ({String saveRoot, List<Map<String, dynamic>> fileList}) args,
+) {
+  return scanTorrentFilesOnDisk(args.saveRoot, args.fileList);
+}
+
+/// Offloads [scanTorrentFilesOnDisk] to a background isolate via [compute]
+/// to prevent blocking the UI isolate during large multi-file disk scans.
+Future<({int total, List<Map<String, dynamic>> files})> scanTorrentFilesOnDiskAsync(
+  String saveRoot,
+  List<Map<String, dynamic>> fileList,
+) async {
+  if (fileList.isEmpty) {
+    return (total: 0, files: <Map<String, dynamic>>[]);
+  }
+  return compute(
+    _scanTorrentFilesWorker,
+    (saveRoot: saveRoot, fileList: fileList),
+  );
 }
 
 Future<void> deleteDownloadParts(String tempFilePath) async {

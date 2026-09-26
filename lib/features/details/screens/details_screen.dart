@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
 import '../../../core/app_theme.dart';
+import '../../../core/services/checksum_service.dart';
 import '../../../core/services/engine/torrent_file_normalizer.dart';
 import '../../../core/services/torrent_service.dart';
 import '../../../core/services/tracker_manager.dart';
@@ -2337,10 +2338,18 @@ class _TorrentStatsPanelState extends State<_TorrentStatsPanel> {
   @override
   void initState() {
     super.initState();
-    // Created once and reused across rebuilds: constructing a fresh
-    // TrackerManager in build() would drop user-added trackers on every
-    // provider notify (the stats panel rebuilds while a download runs).
     _trackerManager = TrackerManager();
+    final tid = widget.task.torrentId ?? 0;
+    if (widget.task.url.startsWith('magnet:')) {
+      final uri = Uri.tryParse(widget.task.url);
+      final trs = uri?.queryParametersAll['tr'] ?? [];
+      for (final tr in trs) {
+        if (tr.isNotEmpty) {
+          _trackerManager.addTracker(tid, tr);
+        }
+      }
+    }
+    _trackerManager.autoAddDefaultsIfSparse(tid);
   }
 
   @override
@@ -3304,13 +3313,24 @@ class _MetadataPanel extends StatelessWidget with HapticHelper {
                   );
                 },
               ),
+            if (task.status == DownloadStatus.completed)
+              _MetaRow(
+                label: L10n.isRtl(context)
+                    ? 'التحقق من التكامل'
+                    : 'INTEGRITY VERIFICATION',
+                value: L10n.isRtl(context)
+                    ? 'فحص المجموع الاختباري (SHA-256)'
+                    : 'Verify SHA-256 Checksum',
+                isDark: isDark,
+                onOpen: () => _showChecksumVerificationDialog(context, task),
+              ),
             _MetaRow(
               label: L10n.of(context, 'details_established'),
               value: formatLocalizedDateTime(context, task.createdAt),
               isDark: isDark,
             ),
             Builder(builder: (context) {
-              final reliability = SiteIntelligenceService()
+              final reliability = SiteIntelligenceService.instance
                   .getReliability(Uri.tryParse(task.url)?.host ?? '');
               if (reliability == null) return const SizedBox.shrink();
 
@@ -3923,3 +3943,316 @@ Future<bool?> _showDeleteConfirmationDialog(
     return null;
   });
 }
+
+void _showChecksumVerificationDialog(BuildContext context, DownloadTask task) {
+  final settings = context.read<SettingsProvider>();
+  final isDark = settings.isDarkMode;
+  final isRtl = L10n.isRtl(context);
+
+  showDialog(
+    context: context,
+    builder: (dialogCtx) => _ChecksumVerificationDialog(
+      task: task,
+      isDark: isDark,
+      isRtl: isRtl,
+    ),
+  );
+}
+
+class _ChecksumVerificationDialog extends StatefulWidget {
+  final DownloadTask task;
+  final bool isDark;
+  final bool isRtl;
+
+  const _ChecksumVerificationDialog({
+    required this.task,
+    required this.isDark,
+    required this.isRtl,
+  });
+
+  @override
+  State<_ChecksumVerificationDialog> createState() =>
+      _ChecksumVerificationDialogState();
+}
+
+class _ChecksumVerificationDialogState
+    extends State<_ChecksumVerificationDialog> {
+  final TextEditingController _expectedController = TextEditingController();
+  bool _isCalculating = true;
+  String? _calculatedHash;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.task.expectedSha256 != null &&
+        widget.task.expectedSha256!.isNotEmpty) {
+      _expectedController.text = widget.task.expectedSha256!;
+    }
+    _calculateHash();
+  }
+
+  @override
+  void dispose() {
+    _expectedController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _calculateHash() async {
+    setState(() {
+      _isCalculating = true;
+      _error = null;
+    });
+
+    final path = widget.task.localFilePath;
+    if (path.isEmpty || !File(path).existsSync()) {
+      setState(() {
+        _isCalculating = false;
+        _error = widget.isRtl
+            ? 'الملف غير موجود على القرص'
+            : 'File not found on disk';
+      });
+      return;
+    }
+
+    try {
+      final hash = await ChecksumService.sha256File(path);
+      if (mounted) {
+        setState(() {
+          _calculatedHash = hash;
+          _isCalculating = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isCalculating = false;
+          _error = e.toString();
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = widget.isDark;
+    final isRtl = widget.isRtl;
+    final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
+    final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
+
+    final expected = _expectedController.text.trim().toLowerCase();
+    final calculated = _calculatedHash?.toLowerCase();
+    final hasExpected = expected.isNotEmpty;
+    final isMatch = hasExpected && calculated != null && expected == calculated;
+
+    return AlertDialog(
+      backgroundColor: isDark ? AppTheme.surface : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: BorderSide(
+          color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+        ),
+      ),
+      title: Row(
+        children: [
+          Icon(Icons.verified_outlined, color: accent, size: 20),
+          const SizedBox(width: 8),
+          Text(
+            isRtl ? 'التحقق من التكامل' : 'VERIFY INTEGRITY',
+            style: TextStyle(
+              color: accent,
+              fontWeight: FontWeight.bold,
+              fontSize: 15,
+            ),
+          ),
+        ],
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.task.fileName,
+              style: TextStyle(
+                color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              isRtl
+                  ? 'المجموع الاختباري المحسوب (SHA-256):'
+                  : 'Calculated SHA-256:',
+              style: AppTheme.microLabel(isDark: isDark, size: 9),
+            ),
+            const SizedBox(height: 6),
+            if (_isCalculating)
+              Row(
+                children: [
+                  SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: accent,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    isRtl ? 'جارٍ الحساب...' : 'Calculating...',
+                    style: TextStyle(
+                      color: isDark
+                          ? AppTheme.textSecondary
+                          : AppTheme.lightTextSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              )
+            else if (_error != null)
+              Text(
+                _error!,
+                style: TextStyle(color: redClr, fontSize: 12),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? const Color(0xFF0F0F16)
+                      : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: SelectableText(
+                        _calculatedHash!,
+                        style: TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 11,
+                          color: isDark
+                              ? AppTheme.textPrimary
+                              : AppTheme.lightTextPrimary,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.copy_rounded, size: 16),
+                      onPressed: () {
+                        Clipboard.setData(
+                          ClipboardData(text: _calculatedHash!),
+                        );
+                        ThemedSnackbar.show(
+                          context,
+                          message: isRtl
+                              ? 'تم نسخ المجموع الاختباري'
+                              : 'Checksum copied to clipboard',
+                          color: greenClr,
+                          icon: Icons.check_circle_outline,
+                          isDarkMode: isDark,
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 16),
+            Text(
+              isRtl ? 'المجموع الاختباري المتوقع:' : 'Expected SHA-256:',
+              style: AppTheme.microLabel(isDark: isDark, size: 9),
+            ),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _expectedController,
+              onChanged: (_) => setState(() {}),
+              style: TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 11,
+                color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+              ),
+              decoration: InputDecoration(
+                hintText: isRtl
+                    ? 'الصق المجموع الاختباري للمقارنة...'
+                    : 'Paste expected hash to compare...',
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                filled: true,
+                fillColor: isDark
+                    ? const Color(0xFF0F0F16)
+                    : const Color(0xFFF1F5F9),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            if (hasExpected && !_isCalculating && _calculatedHash != null)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  vertical: 8,
+                  horizontal: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: (isMatch ? greenClr : redClr).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isMatch ? greenClr : redClr,
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      isMatch ? Icons.check_circle : Icons.error,
+                      color: isMatch ? greenClr : redClr,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        isMatch
+                            ? (isRtl
+                                ? 'التكامل سليم ومطابق ✓'
+                                : 'VERIFIED: Hashes match ✓')
+                            : (isRtl
+                                ? 'تحذير: المجموع الاختباري غير مطابق ✗'
+                                : 'MISMATCH: Hashes do not match ✗'),
+                        style: TextStyle(
+                          color: isMatch ? greenClr : redClr,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(
+            isRtl ? 'إغلاق' : 'CLOSE',
+            style: TextStyle(
+              color: isDark
+                  ? AppTheme.textSecondary
+                  : AppTheme.lightTextSecondary,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+

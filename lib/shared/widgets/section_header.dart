@@ -124,7 +124,7 @@ class SettingsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cardClr = isAmoled
+    final cardClr = (isAmoled && isDark)
         ? AppTheme.amoledCardBg
         : (isDark
             ? AppTheme.surface.withValues(alpha: 0.8)

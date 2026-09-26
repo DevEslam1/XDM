@@ -223,6 +223,7 @@ class WidgetDataBridge {
   DateTime? _lastPush;
   Timer? _pendingTimer;
   bool _isPaused = false;
+  bool _isPushing = false;
 
   bool get isPaused => _isPaused;
 
@@ -261,8 +262,10 @@ class WidgetDataBridge {
       final wait = effectiveInterval - now.difference(_lastPush!);
       _pendingTimer = Timer(wait, () {
         _pendingTimer = null;
-        unawaited(_doPush(dashboard)
-            .catchError((e) => _log.warning('Failed to push widget data', e)));
+        if (!_isPushing) {
+          unawaited(_doPush(dashboard)
+              .catchError((e) => _log.warning('Failed to push widget data', e)));
+        }
       });
       return;
     }
@@ -273,12 +276,22 @@ class WidgetDataBridge {
   String? _lastPushedPayload;
 
   Future<void> _doPush(WidgetDashboard dashboard, {bool force = false}) async {
+    if (_isPushing) return;
+    _isPushing = true;
     try {
-      final payload = jsonEncode(dashboard.toJson());
-      if (!force && payload == _lastPushedPayload) {
-        return; // FIX-21: Skip duplicate payload write
+      final json = dashboard.toJson();
+      // FIX-21: `lastUpdated` is stamped with DateTime.now() on every
+      // WidgetDashboard construction, so comparing the raw payload made the
+      // duplicate check a no-op. Compare the payload with the volatile
+      // timestamp removed; identical dashboard state still pushes the fresh
+      // timestamp to the native layer when it does change.
+      final dedupKey = jsonEncode(Map<String, dynamic>.of(json)
+        ..remove('lastUpdated'));
+      if (!force && dedupKey == _lastPushedPayload) {
+        return; // Skip duplicate payload write
       }
-      _lastPushedPayload = payload;
+      _lastPushedPayload = dedupKey;
+      final payload = jsonEncode(json);
       ResourceProbe.instance.recordWidgetPush();
       final test = testSink;
       if (test != null) {
@@ -291,6 +304,8 @@ class WidgetDataBridge {
     } catch (e) {
       // Widget pushes are non-critical — never surface to the user.
       _log.fine('Widget dashboard push failed: $e');
+    } finally {
+      _isPushing = false;
     }
   }
 

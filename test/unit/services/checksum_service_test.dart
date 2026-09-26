@@ -77,6 +77,14 @@ void main() {
 
       final base64Header = ChecksumService.parseDigestHeader('MD5=4g5g2g==');
       expect(base64Header, isNotNull);
+
+      // Selects strongest algorithm (sha256) even when md5 is first
+      final mixedHeader = ChecksumService.parseDigestHeader(
+          'MD5=4g5g2g==, SHA-256="9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"');
+      expect(mixedHeader, isNotNull);
+      expect(mixedHeader!.key, equals('sha256'));
+      expect(mixedHeader.value,
+          equals('9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08'));
     });
   });
 }

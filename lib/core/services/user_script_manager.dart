@@ -95,16 +95,15 @@ class UserScriptManager extends ChangeNotifier implements ScriptRepository {
     if (RegExp(r'\beval\b').hasMatch(stripped) ||
         stripped.contains('eval(') ||
         stripped.contains('eval ') ||
-        RegExp(r'\bFunction\b').hasMatch(stripped) ||
-        stripped.contains('new Function') ||
+        RegExp(r'\bnew\s+Function\b').hasMatch(stripped) ||
         stripped.contains('importScripts(') ||
         stripped.contains('importScripts ') ||
-        stripped.contains('Function.prototype.bind') ||
-        RegExp(r'\.bind\s*\(').hasMatch(stripped)) {
+        (stripped.contains('Function.prototype.bind') &&
+            (stripped.contains('eval') || stripped.contains('Function')))) {
       _log.warning(
-          'Security Violation: Dynamic code execution (eval/Function/bind) detected in script "${script.name}"');
+          'Security Violation: Dynamic code execution (eval/Function) detected in script "${script.name}"');
       throw Exception(
-          'Dynamic code execution (eval, new Function, Function.bind) is prohibited for security.');
+          'Dynamic code execution (eval, new Function) is prohibited for security.');
     }
 
     if (stripped.contains('document.cookie') ||

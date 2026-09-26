@@ -314,8 +314,9 @@ class DownloadIsolatePool implements MemoryPressureListener {
   Future<void> _maybeExpandWorkers() async {
     if (_isSpawning ||
         _shuttingDown ||
-        PowerMonitor.screenOff ||
-        PowerMonitor.batterySaverMode != BatterySaverMode.off ||
+        (_powerAwareActive &&
+            (PowerMonitor.screenOff ||
+                PowerMonitor.batterySaverMode != BatterySaverMode.off)) ||
         _workers.length >= effectiveMaxSize) {
       return;
     }
@@ -481,6 +482,9 @@ class DownloadIsolatePool implements MemoryPressureListener {
           'Worker isolate died repeatedly: $err',
           null,
         );
+        Future<void>.delayed(const Duration(milliseconds: 500), () {
+          job.dispose();
+        });
       }
     }
     worker.disposeResources(killPriority: Isolate.immediate);
@@ -549,9 +553,17 @@ class DownloadIsolatePool implements MemoryPressureListener {
           null,
         );
       }
-      // Re-queue surviving sibling jobs to a fresh worker.
+      // Re-queue surviving sibling jobs to a fresh worker only if not cancelled or disposed.
       for (final job in remainingPending) {
-        _queue.add(job);
+        if (!job._disposed && !job._cancelled) {
+          _queue.add(job);
+        } else {
+          job._deliverError(
+            'cancelled',
+            'Job was cancelled',
+            null,
+          );
+        }
       }
       // Use beforeNextEvent first to allow isolate to finish any in-flight buffer flush,
       // with a 2-second fallback timer before hard killing.
@@ -586,6 +598,9 @@ class DownloadIsolatePool implements MemoryPressureListener {
       _queue.removeWhere((job) {
         if (job.command.taskId == taskId) {
           job._deliverError('forceCancelled', 'Job removed from queue', null);
+          Future<void>.delayed(const Duration(milliseconds: 500), () {
+            job.dispose();
+          });
           return true;
         }
         return false;
@@ -593,10 +608,84 @@ class DownloadIsolatePool implements MemoryPressureListener {
     }
   }
 
+  int _globalLimitBps = 0;
+  final Map<String, int> _jobSpeeds = {};
+
+  void _recordJobSpeed(String taskId, int speed) {
+    if (speed > 0) {
+      _jobSpeeds[taskId] = speed;
+      _rebalanceBandwidth();
+    }
+  }
+
+  void _removeJobSpeed(String taskId) {
+    _jobSpeeds.remove(taskId);
+    _rebalanceBandwidth();
+  }
+
   void updateSpeedLimit(int bytesPerSecond, int activeCount) {
+    _globalLimitBps = bytesPerSecond;
+    _rebalanceBandwidth(activeCount);
+  }
+
+  void _rebalanceBandwidth([int? explicitActiveCount]) {
+    final activeJobs = <PoolJob>[];
     for (final w in _workers) {
-      w.commandPort
-          ?.send({'t': 'limits', 'bps': bytesPerSecond, 'active': activeCount});
+      if (!w.dead) {
+        activeJobs.addAll(w.pending);
+      }
+    }
+    final count = explicitActiveCount ?? activeJobs.length;
+    if (_globalLimitBps <= 0 || count <= 0) {
+      for (final w in _workers) {
+        w.commandPort?.send({'t': 'limits', 'bps': 0, 'active': 1});
+      }
+      return;
+    }
+
+    if (activeJobs.length <= 1) {
+      // Single active job receives 100% of the global budget!
+      for (final w in _workers) {
+        w.commandPort
+            ?.send({'t': 'limits', 'bps': _globalLimitBps, 'active': 1});
+      }
+      return;
+    }
+
+    // Work-conserving dynamic budget allocation across multiple active downloads:
+    final fairShare = (_globalLimitBps / activeJobs.length).floor();
+    var surplus = 0;
+    final demandingJobs = <PoolJob>[];
+    final grants = <String, int>{};
+
+    for (final job in activeJobs) {
+      final measured = _jobSpeeds[job.command.taskId] ?? 0;
+      // If a job's measured speed is substantially lower than its fair share (e.g. capped by origin server),
+      // allocate measured speed + 25% headroom and return surplus to the pool.
+      if (measured > 0 && measured < (fairShare * 0.75)) {
+        final cappedGrant = (measured * 1.25).toInt();
+        grants[job.command.taskId] = cappedGrant;
+        surplus += (fairShare - cappedGrant);
+      } else {
+        demandingJobs.add(job);
+      }
+    }
+
+    final extraPerJob =
+        demandingJobs.isNotEmpty ? (surplus ~/ demandingJobs.length) : 0;
+    for (final job in demandingJobs) {
+      grants[job.command.taskId] = fairShare + extraPerJob;
+    }
+
+    for (final w in _workers) {
+      if (w.dead || w.commandPort == null) continue;
+      if (w.pending.isNotEmpty) {
+        final job = w.pending.first;
+        final grant = grants[job.command.taskId] ?? fairShare;
+        w.commandPort?.send({'t': 'limits', 'bps': grant, 'active': 1});
+      } else {
+        w.commandPort?.send({'t': 'limits', 'bps': fairShare, 'active': 1});
+      }
     }
   }
 
@@ -616,10 +705,17 @@ class DownloadIsolatePool implements MemoryPressureListener {
           .removeListener(_onForegroundChanged);
       _foregroundListenerAttached = false;
     }
+    for (final job in _queue) {
+      job.dispose();
+    }
     _queue.clear();
     for (final w in _workers) {
       w.commandPort?.send({'t': 'shutdown'});
       await Future<void>.delayed(const Duration(milliseconds: 50));
+      for (final job in w.pending) {
+        job.dispose();
+      }
+      w.pending.clear();
       w.disposeResources(killPriority: Isolate.beforeNextEvent);
     }
     _workers.clear();
@@ -643,9 +739,16 @@ class DownloadIsolatePool implements MemoryPressureListener {
       } catch (_) {}
       _foregroundListenerAttached = false;
     }
+    for (final job in _queue) {
+      job.dispose();
+    }
     _queue.clear();
     for (final w in _workers) {
       w.dead = true;
+      for (final job in w.pending) {
+        job.dispose();
+      }
+      w.pending.clear();
       w.disposeResources(killPriority: Isolate.immediate);
     }
     _workers.clear();
@@ -740,7 +843,14 @@ class PoolChunkResult {
 }
 
 class PoolJob {
+  static final Finalizer<ReceivePort> _portFinalizer = Finalizer((port) {
+    try {
+      port.close();
+    } catch (_) {}
+  });
+
   PoolJob._(this._pool, this.command, this._seq) {
+    _portFinalizer.attach(this, _incoming, detach: this);
     messages = _incoming
         .map(EngineMessage.tryDecode)
         .where((m) {
@@ -752,6 +862,12 @@ class PoolJob {
         })
         .cast<EngineMessage>()
         .asBroadcastStream();
+    messages.listen((msg) {
+      if (msg.type == EngineMessageType.progress) {
+        final speed = (msg.data['speed'] as num?)?.toInt() ?? 0;
+        _pool._recordJobSpeed(command.taskId, speed);
+      }
+    });
   }
   final DownloadIsolatePool _pool;
   final DownloadCommand command;
@@ -762,7 +878,12 @@ class PoolJob {
   _Worker? _worker;
   late final Stream<EngineMessage> messages;
   bool _disposed = false;
-  void cancel([PauseReason? reason]) => _pool._cancelJob(this, reason);
+  bool _cancelled = false;
+  bool get isCancelled => _cancelled;
+  void cancel([PauseReason? reason]) {
+    _cancelled = true;
+    _pool._cancelJob(this, reason);
+  }
   void _deliverError(String type, String message, int? status) {
     if (_disposed) return;
     _incoming.sendPort.send(EngineMessage.encode(
@@ -775,6 +896,10 @@ class PoolJob {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _incoming.close();
+    _portFinalizer.detach(this);
+    _pool._removeJobSpeed(command.taskId);
+    try {
+      _incoming.close();
+    } catch (_) {}
   }
 }

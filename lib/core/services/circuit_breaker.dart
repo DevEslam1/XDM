@@ -19,6 +19,7 @@ class CircuitBreaker {
     this.failureThreshold = 3,
     this.openTimeout = const Duration(seconds: 30),
     this.halfOpenTimeout = const Duration(seconds: 5),
+    this.failureDebounce = Duration.zero,
     this.key,
     this.onStateChange,
     DateTime Function()? clock,
@@ -27,6 +28,7 @@ class CircuitBreaker {
   final int failureThreshold;
   final Duration openTimeout;
   final Duration halfOpenTimeout;
+  final Duration failureDebounce;
   final String? key;
   final void Function(CircuitBreakerState, String?)? onStateChange;
   final DateTime Function() _clock;
@@ -105,7 +107,7 @@ class CircuitBreaker {
       if (classified.retryable ||
           classified.isServerError ||
           classified.isNetworkError) {
-        recordFailure();
+        recordFailure(debounce: const Duration(milliseconds: 500));
       }
       rethrow;
     }
@@ -121,14 +123,14 @@ class CircuitBreaker {
   }
 
   DateTime? _lastFailureTimestamp;
-  void recordFailure() {
+  void recordFailure({Duration? debounce}) {
     final now = _clock();
     _totalFailures++;
-    // Debounce rapid concurrent failures
-    if (_state != CircuitBreakerState.closed &&
+    final effectiveDebounce = debounce ?? failureDebounce;
+    // Debounce rapid concurrent failures across all states
+    if (effectiveDebounce > Duration.zero &&
         _lastFailureTimestamp != null &&
-        now.difference(_lastFailureTimestamp!) <
-            const Duration(milliseconds: 500)) {
+        now.difference(_lastFailureTimestamp!) < effectiveDebounce) {
       return;
     }
 

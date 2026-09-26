@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:synchronized/synchronized.dart';
@@ -29,6 +31,38 @@ class YoutubeService {
   static const _secureStorage = FlutterSecureStorage();
   static const _cookiesStorageKey = 'youtube_cookies_persisted';
   static const _oauthTokenStorageKey = 'youtube_oauth_token_persisted';
+
+  // Local fallback channel & offline stream cache
+  static const MethodChannel _extractorChannel =
+      MethodChannel('com.xdm.downloadmanager/youtube_extractor');
+  static final Map<String, List<Map<String, dynamic>>> _streamCache = {};
+
+  static Future<List<Map<String, dynamic>>?> _getLocalFallbackStreams(
+      String url) async {
+    try {
+      if (!kIsWeb && Platform.isAndroid) {
+        final res = await _extractorChannel.invokeMethod<List<dynamic>>(
+          'getStreams',
+          {'url': url},
+        );
+        if (res != null && res.isNotEmpty) {
+          final mapped = res
+              .map((item) => Map<String, dynamic>.from(item as Map))
+              .toList();
+          return mapped;
+        }
+      }
+    } catch (e) {
+      debugPrint('[YouTubeService] Local native extractor fallback failed: $e');
+    }
+    final videoId = extractVideoId(url) ?? url;
+    if (_streamCache.containsKey(videoId)) {
+      debugPrint(
+          '[YouTubeService] Returning offline cached streams for $videoId');
+      return _streamCache[videoId];
+    }
+    return null;
+  }
 
   // FIX-H4: Circuit breaker state
   static int _consecutiveTimeouts = 0;
@@ -143,7 +177,29 @@ class YoutubeService {
     _oauthToken = null;
     await resetClient();
     try {
-      await CookieManager.instance().deleteAllCookies();
+      final cm = CookieManager.instance();
+      const ytDomains = [
+        'https://youtube.com',
+        'https://www.youtube.com',
+        'https://m.youtube.com',
+        'https://accounts.google.com',
+        'https://google.com',
+        'https://www.google.com',
+      ];
+      for (final domain in ytDomains) {
+        try {
+          final uri = WebUri(domain);
+          final cookies = await cm.getCookies(url: uri);
+          for (final c in cookies) {
+            await cm.deleteCookie(
+              url: uri,
+              name: c.name,
+              domain: c.domain,
+              path: c.path ?? '/',
+            );
+          }
+        } catch (_) {}
+      }
       await _secureStorage.delete(key: _cookiesStorageKey);
       await _secureStorage.delete(key: _oauthTokenStorageKey);
     } catch (e) {
@@ -601,7 +657,12 @@ class YoutubeService {
 
     final settings = SettingsProvider.instance;
     if (!settings.useRemoteBackend) {
-      throw Exception('Remote backend is disabled in settings.');
+      final local = await _getLocalFallbackStreams(targetUrl);
+      if (local != null && local.isNotEmpty) {
+        _streamCache[videoId ?? url] = local;
+        return local;
+      }
+      throw Exception('Remote backend is disabled and no local extraction fallback was available.');
     }
 
     try {
@@ -615,6 +676,7 @@ class YoutubeService {
       });
 
       if (results != null && results.isNotEmpty) {
+        _streamCache[videoId ?? url] = results;
         if (kDebugMode) {
           final combinedCount =
               results.where((s) => s['type'] == 'combined').length;
@@ -629,14 +691,34 @@ class YoutubeService {
         return results;
       }
     } on TimeoutException catch (e) {
+      final local = await _getLocalFallbackStreams(targetUrl);
+      if (local != null && local.isNotEmpty) {
+        _streamCache[videoId ?? url] = local;
+        return local;
+      }
       throw Exception(
           e.message ?? 'Stream resolution timed out after 45 seconds');
     } on BackendException catch (e) {
+      final local = await _getLocalFallbackStreams(targetUrl);
+      if (local != null && local.isNotEmpty) {
+        _streamCache[videoId ?? url] = local;
+        return local;
+      }
       throw Exception(e.toUserMessage());
     } catch (e) {
+      final local = await _getLocalFallbackStreams(targetUrl);
+      if (local != null && local.isNotEmpty) {
+        _streamCache[videoId ?? url] = local;
+        return local;
+      }
       throw Exception(_parseErrorMessage(e));
     }
 
+    final local = await _getLocalFallbackStreams(targetUrl);
+    if (local != null && local.isNotEmpty) {
+      _streamCache[videoId ?? url] = local;
+      return local;
+    }
     throw Exception('No available streams found for this video.');
   }
 
@@ -1130,11 +1212,13 @@ class YoutubeService {
                 .where((s) => s['type'] == oldType && s['src'] != null)
                 .toList();
             if (sameType.isNotEmpty) {
+              // FIX(H-21): Sort ascending by distance (dist(a) - dist(b)) so
+              // the closest-quality stream is placed first.
               sameType.sort((a, b) =>
-                  (parseQualityHeight(b['quality']?.toString() ?? '') -
+                  (parseQualityHeight(a['quality']?.toString() ?? '') -
                           parseQualityHeight(oldQuality ?? ''))
                       .abs() -
-                  (parseQualityHeight(a['quality']?.toString() ?? '') -
+                  (parseQualityHeight(b['quality']?.toString() ?? '') -
                           parseQualityHeight(oldQuality ?? ''))
                       .abs());
               return {

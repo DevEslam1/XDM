@@ -395,12 +395,9 @@ class UpdateService {
           {'path': apkFile.path},
         );
       } on MissingPluginException {
-        _log.warning(
-            'Security channel unavailable; using file hash fingerprint fallback');
-        certFingerprint = await _computeSha256Streaming(apkFile);
+        _log.warning('Security channel unavailable for native APK signature check');
       } catch (e) {
         _log.warning('Security channel verification exception: $e');
-        certFingerprint = await _computeSha256Streaming(apkFile);
       }
 
       if (developerMode) {

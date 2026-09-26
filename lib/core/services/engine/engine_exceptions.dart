@@ -75,3 +75,19 @@ class DelayQueueFullException implements Exception {
   @override
   String toString() => 'DelayQueueFullException: $message';
 }
+
+/// F26: raised when resume-state persistence to the download folder keeps
+/// failing (EACCES / EROFS / EIO — e.g. the chosen folder is not writable under
+/// Android scoped storage). The byte data may still be flowing, but no progress
+/// can be recorded, so the download can never be resumed and the UI would sit at
+/// 0% before eventually failing with a misleading "File system error". Surfacing
+/// this as an explicit storage-write failure lets the user pick another folder
+/// or grant access. [directory] is the download folder (path without the
+/// `.dmxpart`/`.dmxstate` suffix) for the message.
+class StatePersistenceException implements Exception {
+  final String message;
+  final String directory;
+  const StatePersistenceException(this.message, {this.directory = ''});
+  @override
+  String toString() => 'StatePersistenceException: $message';
+}

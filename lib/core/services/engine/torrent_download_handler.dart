@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
+import 'package:synchronized/synchronized.dart';
 
 import '../../../features/downloads/models/download_task.dart';
 import '../../../features/downloads/provider/network_monitor.dart';
@@ -66,30 +67,34 @@ class TorrentSubscriptionRegistry {
   static final TorrentSubscriptionRegistry instance =
       TorrentSubscriptionRegistry._();
   final Map<int, _TorrentSubEntry> _registry = {};
+  final Lock _lock = Lock();
 
   // FIX(M1, H1): Single ownership of subscriptions and notify previous handler
   void register(
       int torrentId, TorrentDownloadHandler handler, StreamSubscription sub) {
-    final existing = _registry.remove(torrentId);
+    _TorrentSubEntry? existing;
+    _lock.synchronized(() {
+      existing = _registry.remove(torrentId);
+      _registry[torrentId] = _TorrentSubEntry(
+        handler: handler,
+        subscription: sub,
+      );
+    });
     if (existing != null) {
       try {
-        existing.subscription.cancel();
+        existing!.subscription.cancel();
       } catch (e, st) {
         _log.fine('Failed to cancel existing subscription: $e', e, st);
       }
-      if (!identical(existing.handler, handler)) {
+      if (!identical(existing!.handler, handler)) {
         try {
-          existing.handler.removeActiveTorrent(torrentId);
+          existing!.handler.removeActiveTorrent(torrentId);
         } catch (e, st) {
           _log.fine(
               'Failed to notify old handler on re-registration: $e', e, st);
         }
       }
     }
-    _registry[torrentId] = _TorrentSubEntry(
-      handler: handler,
-      subscription: sub,
-    );
   }
 
   StreamSubscription? getSubscription(int torrentId) {
@@ -104,9 +109,12 @@ class TorrentSubscriptionRegistry {
   /// live one up here or it leaks.
   Future<void> cancelCurrentFor(
       int torrentId, TorrentDownloadHandler handler) async {
-    final entry = _registry[torrentId];
-    if (entry == null || !identical(entry.handler, handler)) return;
-    _registry.remove(torrentId);
+    final _TorrentSubEntry? entry = await _lock.synchronized(() {
+      final cur = _registry[torrentId];
+      if (cur == null || !identical(cur.handler, handler)) return null;
+      return _registry.remove(torrentId);
+    });
+    if (entry == null) return;
     try {
       await entry.subscription.cancel();
     } catch (e, st) {
@@ -115,30 +123,38 @@ class TorrentSubscriptionRegistry {
   }
 
   void unregister(int torrentId, TorrentDownloadHandler handler) {
-    final entry = _registry[torrentId];
-    if (entry != null && identical(entry.handler, handler)) {
-      _registry.remove(torrentId);
-    }
+    _lock.synchronized(() {
+      final entry = _registry[torrentId];
+      if (entry != null && identical(entry.handler, handler)) {
+        _registry.remove(torrentId);
+      }
+    });
   }
 
   void unregisterAll(TorrentDownloadHandler handler) {
-    final toRemove = <int>[];
-    for (final entry in _registry.entries) {
-      if (identical(entry.value.handler, handler)) {
-        toRemove.add(entry.key);
+    final toRemove = <_TorrentSubEntry>[];
+    _lock.synchronized(() {
+      final keysToRemove = <int>[];
+      for (final entry in _registry.entries.toList(growable: false)) {
+        if (identical(entry.value.handler, handler)) {
+          keysToRemove.add(entry.key);
+        }
       }
-    }
-    for (final id in toRemove) {
-      final entry = _registry.remove(id);
+      for (final id in keysToRemove) {
+        final removed = _registry.remove(id);
+        if (removed != null) toRemove.add(removed);
+      }
+    });
+    for (final entry in toRemove) {
       try {
-        entry?.subscription.cancel();
+        entry.subscription.cancel();
       } catch (_) {}
     }
   }
 
   Map<int, StreamSubscription> subsForHandler(TorrentDownloadHandler handler) {
     final map = <int, StreamSubscription>{};
-    for (final entry in _registry.entries) {
+    for (final entry in _registry.entries.toList(growable: false)) {
       if (identical(entry.value.handler, handler)) {
         map[entry.key] = entry.value.subscription;
       }
@@ -147,7 +163,9 @@ class TorrentSubscriptionRegistry {
   }
 
   Future<void> disposeAsync(int torrentId) async {
-    final entry = _registry.remove(torrentId);
+    final _TorrentSubEntry? entry = await _lock.synchronized(() {
+      return _registry.remove(torrentId);
+    });
     if (entry == null) return;
     try {
       await entry.subscription.cancel();
@@ -164,14 +182,17 @@ class TorrentSubscriptionRegistry {
   }
 
   void dispose(int torrentId) {
-    final entry = _registry.remove(torrentId);
+    _TorrentSubEntry? entry;
+    _lock.synchronized(() {
+      entry = _registry.remove(torrentId);
+    });
     if (entry == null) return;
     try {
-      entry.subscription.cancel();
+      entry!.subscription.cancel();
     } catch (e, st) {
       _log.fine('Failed to cancel disposed subscription: $e', e, st);
     }
-    unawaited(entry.handler
+    unawaited(entry!.handler
         .haltTorrent(torrentId)
         .timeout(const Duration(seconds: 4))
         .catchError((e, st) {
@@ -181,14 +202,18 @@ class TorrentSubscriptionRegistry {
 
   @visibleForTesting
   void clear() {
-    for (final entry in _registry.values) {
+    final entries = <_TorrentSubEntry>[];
+    _lock.synchronized(() {
+      entries.addAll(_registry.values.toList(growable: false));
+      _registry.clear();
+    });
+    for (final entry in entries) {
       try {
         entry.subscription.cancel();
       } catch (e, st) {
         _log.fine('Failed to cancel registry subscription: $e', e, st);
       }
     }
-    _registry.clear();
   }
 
   @visibleForTesting
@@ -265,10 +290,15 @@ class TorrentRuntime {
 class TorrentDownloadHandler {
   final ITorrentService _torrentService;
   final Set<int> _activeTorrentIds = {};
+  final Set<int> _removedTorrentIds = {};
   final Map<int, TorrentRuntime> _runtime = {};
 
-  TorrentRuntime _getRuntime(int id) =>
-      _runtime.putIfAbsent(id, TorrentRuntime.new);
+  TorrentRuntime _getRuntime(int id) {
+    if (_removedTorrentIds.contains(id)) {
+      return _defaultRuntime;
+    }
+    return _runtime.putIfAbsent(id, TorrentRuntime.new);
+  }
 
   @visibleForTesting
   Map<int, StreamSubscription> get activeSubsForTesting =>
@@ -393,6 +423,7 @@ class TorrentDownloadHandler {
 
   // FIX(C1, C4): removeActiveTorrent cleans up and closes the specified torrent's runtime
   void removeActiveTorrent(int id) {
+    _removedTorrentIds.add(id);
     final rt = _runtime.remove(id);
     rt?.close();
     final def = _runtime.remove(-1);
@@ -409,12 +440,14 @@ class TorrentDownloadHandler {
     _defaultRuntime.close();
     _runtime.clear();
     _activeTorrentIds.clear();
+    _removedTorrentIds.clear();
     TorrentSubscriptionRegistry.instance.unregisterAll(this);
   }
 
   // FIX(C3, C4): Single shared deadline and reliable fallback cleanup
   Future<void> haltTorrent(int id,
       {Duration budget = const Duration(seconds: 4)}) async {
+    _removedTorrentIds.add(id);
     TorrentSubscriptionRegistry.instance.unregister(id, this);
     final rt = _runtime.remove(id);
     rt?.close();
@@ -1066,7 +1099,8 @@ class TorrentDownloadHandler {
             );
           }
         }
-
+        _removedTorrentIds.remove(id);
+        _activeTorrentIds.add(id);
         final rt = _getRuntime(id);
         if (id >= 0 && (preloadedResume != null || preloadedDegraded != null)) {
           hasLoadedResume = true;
@@ -1157,6 +1191,7 @@ class TorrentDownloadHandler {
     // FIX(C2): Guard post-add section so exceptions clean up live engine state
     try {
       TorrentResumeStore.registerSource(id, url);
+      _removedTorrentIds.remove(id);
       _activeTorrentIds.add(id);
       final rt = _getRuntime(id);
 
@@ -2197,6 +2232,9 @@ class TorrentDownloadHandler {
     required List<Map<String, dynamic>>? Function()? getTorrentFiles,
     required int knownFileSize,
   }) async {
+    if (!_activeTorrentIds.contains(id) || _removedTorrentIds.contains(id)) {
+      return;
+    }
     final rt = _getRuntime(id);
     final stateLabel = torrent.stateLabel.toLowerCase();
     final isStateChange = stateLabel != rt.lastStateLabel;

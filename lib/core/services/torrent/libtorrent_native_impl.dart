@@ -148,9 +148,11 @@ class LibtorrentNativeImpl implements ITorrentNative {
       queuePosition: info.queuePosition,
       fileProgress: const [],
       filePriorities: _cachedPriorities[info.id] ?? const [],
-      infoHashV1: '',
-      infoHashV2: '',
-      distributedCopies: 0.0,
+      distributedCopies: info.numSeeds > 0
+          ? info.numSeeds.toDouble()
+          : (info.numPeers > 0
+              ? (info.progress > 0 ? info.progress.clamp(0.0, 1.0) : 0.5)
+              : 0.0),
       activeTime: 0,
       seedingTime: 0,
     );

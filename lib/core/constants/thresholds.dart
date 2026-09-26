@@ -77,3 +77,19 @@ const int kMemoryPressureEvictBytes = 100 * 1024 * 1024;
 
 /// Default days of download history retained (0 = keep forever, user-configurable).
 const int kHistoryRetentionDays = 0;
+
+/// Max entries kept in the mirror health LRU store.
+const int kMirrorMaxEntries = 200;
+
+/// Minimum debounce interval for mirror health flushes.
+const Duration kMirrorMinFlushInterval = Duration(minutes: 5);
+
+/// Mirror blacklist duration after consecutive failures.
+const Duration kMirrorBlacklistTtl = Duration(hours: 6);
+
+/// Max entries kept in the site intelligence reliability store.
+const int kSiteReliabilityMaxEntries = 200;
+
+/// Periodic persist interval for site reliability records.
+const Duration kSiteReliabilityPersistInterval = Duration(seconds: 60);
+

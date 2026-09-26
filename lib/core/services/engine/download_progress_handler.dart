@@ -123,8 +123,6 @@ class DownloadProgressHandler {
         ytCounterpartSize: ytCounterpartSize,
         ytCounterpartDownloadedBytes: ytCounterpartDownloadedBytes,
       ));
-      _urlExpireCount = 0;
-      _urlExpireWindowStart = null;
       throw const DownloadIntegrityException(
         'Exceeded maximum URL expiration retries (3 within 5 minutes). '
         'The source may require re-authentication.',
@@ -400,12 +398,21 @@ class DownloadProgressHandler {
           ));
 
           // May throw DownloadIntegrityException if 3 retries exhausted
-          _handleUrlExpired();
-
-          throw const UrlExpiredException(
-            'Counterpart stream lost — refresh required',
-            refreshAllMirrors: true,
-          );
+          try {
+            _handleUrlExpired();
+            throw const UrlExpiredException(
+              'Counterpart stream lost — refresh required',
+              refreshAllMirrors: true,
+            );
+          } on DownloadIntegrityException catch (e, st) {
+            _log.severe(
+                'Max URL expiration retries reached in worker progress: $e',
+                e,
+                st);
+            // _handleUrlExpired already emitted CycleState.failed; return cleanly
+            // to avoid crashing the worker progress loop with an unhandled exception.
+            return;
+          }
         }
 
         final cpSize = dynamicYtCounterpartSize;
@@ -469,10 +476,14 @@ class DownloadProgressHandler {
 
     lastChunkDetails = chunkDetails ?? lastChunkDetails;
     if (chunkDetails != null) {
-      _lastChunkDetailsHash = chunkDetails.fold<int>(
-        0,
-        (h, c) => h ^ Object.hash(c.start, c.end, c.size, c.downloaded),
-      );
+      // Order-sensitive rolling hash. The previous XOR fold was commutative
+      // (a ^ b == b ^ a), so reordering chunks or swapping equal-sized ranges
+      // produced an identical fingerprint and the UI kept stale chunk details.
+      var hash = 0x1F;
+      for (final c in chunkDetails) {
+        hash = Object.hash(hash, c.start, c.end, c.size, c.downloaded);
+      }
+      _lastChunkDetailsHash = hash;
     }
     lastTotalChunks = isTorrent
         ? lastTotalChunks

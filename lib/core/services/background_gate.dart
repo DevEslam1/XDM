@@ -16,7 +16,8 @@ abstract class BackgroundGate {
 
   /// Returns true if lightweight operations are allowed.
   static bool get allowLightOps =>
-      !PowerMonitor.screenOff && DownloadEngine.appInForeground;
+      (!PowerMonitor.screenOff && DownloadEngine.appInForeground) ||
+      DownloadEngine.hasActiveDownloads;
 
   /// Scales a duration based on current power context.
   /// Call this to get the effective interval for any periodic operation.

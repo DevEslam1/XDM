@@ -61,6 +61,45 @@ class PermissionService {
     return _isStorageGranted();
   }
 
+  /// F27: verifies [directoryPath] is actually writable by creating and
+  /// removing a tiny probe file. `Permission.storage` reports "granted" on
+  /// Android even when the chosen folder is a public directory the app cannot
+  /// write (scoped storage without MANAGE_EXTERNAL_STORAGE), and `df` only
+  /// checks free space — so downloads into such a folder failed late with an
+  /// opaque "File system error". Probing up front lets the UI tell the user to
+  /// pick another folder instead. Returns null when writability can't be
+  /// determined (non-Android, probe unavailable) — callers should proceed and
+  /// let the real write surface the error.
+  Future<bool?> isDirectoryWritable(String directoryPath) async {
+    if (kIsWeb || !Platform.isAndroid) return null;
+    if (directoryPath.isEmpty) return null;
+    try {
+      final dir = Directory(directoryPath);
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+      final probe = File(p.join(directoryPath, '.dmx_write_probe'));
+      await probe.writeAsBytes(const [0], flush: true);
+      await probe.delete();
+      return true;
+    } on FileSystemException catch (e) {
+      final code = e.osError?.errorCode;
+      // Only permission-class failures mean "not writable". Transient IO or a
+      // missing parent is inconclusive — let the download proceed.
+      if (code == 13 || code == 1 || code == 30) return false;
+      final msg = e.message.toLowerCase();
+      if (msg.contains('permission denied') ||
+          msg.contains('read-only file system') ||
+          msg.contains('operation not permitted')) {
+        return false;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('[PermissionService] Write probe on $directoryPath failed: $e');
+      return null;
+    }
+  }
+
   Future<String> defaultDownloadDirectory() async {
     if (!kIsWeb &&
         (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
@@ -132,10 +171,15 @@ class PermissionService {
         if (!await dir.exists()) {
           await dir.create(recursive: true);
         }
+        // Test actual writeability before returning
+        final testFile = File(p.join(publicDownloadPath,
+            '.write_test_${DateTime.now().microsecondsSinceEpoch}'));
+        await testFile.writeAsString('ok');
+        await testFile.delete();
         return publicDownloadPath;
       } catch (e) {
         debugPrint(
-          '[PermissionService] Failed to create public download path: $e',
+          '[PermissionService] Public download path not writable: $e',
         );
       }
 

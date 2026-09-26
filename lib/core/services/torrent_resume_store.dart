@@ -264,6 +264,15 @@ class TorrentResumeStore {
         return false;
       }
       if (!await metaFile.exists()) {
+        // The meta rename failed after the blob was already renamed into place.
+        // Without a meta file the blob can never be loaded (loadResumeDataForSource
+        // checks meta first), so it would linger forever as an orphan. Delete the
+        // blob we just wrote to avoid leaking disk space.
+        if (shouldWriteBlob) {
+          try {
+            if (await blobFile.exists()) await blobFile.delete();
+          } catch (_) {}
+        }
         debugPrint('[TorrentResumeStore] meta rename verification failed');
         return false;
       }

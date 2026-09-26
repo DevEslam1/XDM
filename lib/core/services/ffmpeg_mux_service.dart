@@ -82,7 +82,9 @@ class FFmpegMuxService {
         final aFile = File(audioPath);
         if (vFile.existsSync()) totalBytes += vFile.lengthSync();
         if (aFile.existsSync()) totalBytes += aFile.lengthSync();
-      } catch (_) {}
+      } catch (e, st) {
+        _log.warning('Failed to inspect input file lengths for timeout estimate', e, st);
+      }
       final timeoutDuration = dynamicTimeout(totalBytes);
 
       return await _mergeLocked(
@@ -112,7 +114,9 @@ class FFmpegMuxService {
           try {
             final tmp = File('$outputPath.part');
             if (tmp.existsSync()) tmp.deleteSync();
-          } catch (_) {}
+          } catch (e, st) {
+            _log.warning('Failed to delete orphan part file on merge timeout', e, st);
+          }
           return false;
         },
       );
@@ -469,11 +473,14 @@ class FFmpegMuxService {
             if (await targetFile.exists()) {
               try {
                 await targetFile.delete();
-              } catch (_) {}
+              } catch (e, st) {
+                _log.warning('Could not delete existing target file before rename', e, st);
+              }
             }
             try {
               await tempFile.rename(outputPath);
-            } catch (_) {
+            } catch (renameErr) {
+              _log.info('Rename across mount points failed, falling back to copy+delete: $renameErr');
               await tempFile.copy(outputPath);
               await tempFile.delete();
             }

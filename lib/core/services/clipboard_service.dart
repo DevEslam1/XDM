@@ -17,7 +17,6 @@ class ClipboardService {
   String? _lastCheckedUrl;
   DateTime? _lastCheckedTime;
   bool _initialized = false;
-  bool _initStarted = false;
   int _initAttempts = 0;
   bool _clipboardMonitoringDegraded = false;
   bool get clipboardMonitoringDegraded => _clipboardMonitoringDegraded;
@@ -29,15 +28,22 @@ class ClipboardService {
   @visibleForTesting
   static bool bypassSecureStorage = false;
 
-  /// One-shot lazy init triggered only after a downloadable URL is detected.
-  ///
-  /// Never awaited from the synchronous clipboard-check path: the future is
-  /// scheduled in the background (fire-and-forget) so the UI thread can never
-  /// block on the secure-storage platform channel.
-  void _initIfNeeded() {
-    if (_initialized || _initStarted) return;
-    _initStarted = true;
-    unawaited(_initWithBackoff());
+  Completer<void>? _initCompleter;
+
+  /// Lazy init triggered when a downloadable URL is detected.
+  Future<void> _initIfNeeded() async {
+    if (_initialized) return;
+    if (_initCompleter != null) {
+      return _initCompleter!.future;
+    }
+    _initCompleter = Completer<void>();
+    try {
+      await _initWithBackoff();
+    } finally {
+      if (!_initCompleter!.isCompleted) {
+        _initCompleter!.complete();
+      }
+    }
   }
 
   /// Initializes from secure storage with a single 1.5s timeout per attempt and
@@ -90,10 +96,18 @@ class ClipboardService {
 
   bool? _cachedMonitoringEnabled;
   DateTime _lastPrefRead = DateTime.fromMillisecondsSinceEpoch(0);
+  DateTime? _lastClipboardReadAttempt;
+  static const Duration _minClipboardReadInterval = Duration(seconds: 3);
 
   Future<String?> checkClipboardForUrl() async {
+    final now = DateTime.now();
+    if (_lastClipboardReadAttempt != null &&
+        now.difference(_lastClipboardReadAttempt!) < _minClipboardReadInterval) {
+      return null;
+    }
+    _lastClipboardReadAttempt = now;
+
     try {
-      final now = DateTime.now();
       if (_cachedMonitoringEnabled == null ||
           now.difference(_lastPrefRead).inSeconds >= 60) {
         final prefs = await SharedPreferences.getInstance();
@@ -116,7 +130,7 @@ class ClipboardService {
         }
 
         // One-shot lazy init, triggered only after first URL detection.
-        _initIfNeeded();
+        await _initIfNeeded();
 
         final now = DateTime.now();
         if (text == _lastCheckedUrl && _lastCheckedTime != null) {

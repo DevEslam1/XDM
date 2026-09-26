@@ -516,6 +516,28 @@ class DownloadEngine implements IDownloadEngine {
       return;
     }
 
+    // F27: a destination the app cannot write (public Download folder under
+    // Android scoped storage without all-files access) used to fail late with an
+    // opaque "File system error". Probe writability up front so the user gets an
+    // actionable "choose another folder" message instead.
+    final destinationDir = p.dirname(tempFilePath);
+    if (destinationDir.isNotEmpty && destinationDir != '.') {
+      final writable = await permService.isDirectoryWritable(destinationDir);
+      if (writable == false) {
+        onProgress(DownloadProgress(
+          downloadedBytes: 0,
+          fileSize: knownFileSize,
+          speed: 0,
+          eta: null,
+          cycleState: CycleState.failed,
+          statusMessage: 'Cannot write to the download folder '
+              '($destinationDir). Pick a different folder or grant storage '
+              'access.',
+        ));
+        return;
+      }
+    }
+
     final isTorrent = isTorrentUrl(url, fileName: p.basename(localFilePath));
     // FIX: track in-flight downloads so `hasActiveDownloads` reflects reality.
     // TickManager / BackgroundGate / ambient-animation gating all read it, but

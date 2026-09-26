@@ -1,8 +1,10 @@
 package com.xdm.downloadmanager
 
+import android.content.BroadcastReceiver
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.PackageInfo
 import android.media.MediaScannerConnection
@@ -36,15 +38,30 @@ class MainActivity : FlutterActivity() {
     private var wakeLock: PowerManager.WakeLock? = null
 
     private var widgetBridgeChannel: MethodChannel? = null
+    private var powerChannel: MethodChannel? = null
     private var pendingDeepLink: String? = null
     private var forwardAttempts = 0
     private val mainHandler = Handler(Looper.getMainLooper())
+
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val isScreenOn = intent?.action == Intent.ACTION_SCREEN_ON
+            mainHandler.post {
+                powerChannel?.invokeMethod("screenStateChanged", isScreenOn)
+            }
+        }
+    }
 
     override fun onDestroy() {
         // Release all resources to prevent leaks
         backgroundExecutor.shutdownNow()
         wakeLock?.let { if (it.isHeld) it.release() }
         wakeLock = null
+        try {
+            unregisterReceiver(screenReceiver)
+        } catch (_: Exception) {}
+        powerChannel?.setMethodCallHandler(null)
+        powerChannel = null
         widgetBridgeChannel?.setMethodCallHandler(null)
         widgetBridgeChannel = null
         super.onDestroy()
@@ -419,20 +436,43 @@ class MainActivity : FlutterActivity() {
                 result.notImplemented()
             }
         }
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.dmx.app/power").setMethodCallHandler { call, result ->
-            if (call.method == "requestIgnoreBatteryOptimizations") {
-                try {
-                    val intent = Intent(
-                        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                        Uri.parse("package:$packageName")
-                    )
-                    startActivity(intent)
-                    result.success(true)
-                } catch (e: Exception) {
-                    result.error("IGNORE_BATTERY_OPTIMIZATIONS_FAILED", e.message, null)
+        val pChan = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.dmx.app/power")
+        powerChannel = pChan
+        try {
+            val filter = IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_SCREEN_OFF)
+            }
+            registerReceiver(screenReceiver, filter)
+        } catch (_: Exception) {}
+
+        pChan.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "requestIgnoreBatteryOptimizations" -> {
+                    try {
+                        val intent = Intent(
+                            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                            Uri.parse("package:$packageName")
+                        )
+                        startActivity(intent)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("IGNORE_BATTERY_OPTIMIZATIONS_FAILED", e.message, null)
+                    }
                 }
-            } else {
-                result.notImplemented()
+                "isScreenOn" -> {
+                    val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+                    val isScreenOn = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
+                        pm?.isInteractive ?: true
+                    } else {
+                        @Suppress("DEPRECATION")
+                        pm?.isScreenOn ?: true
+                    }
+                    result.success(isScreenOn)
+                }
+                else -> {
+                    result.notImplemented()
+                }
             }
         }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.dmx.app/security").setMethodCallHandler { call, result ->

@@ -164,7 +164,9 @@ class BandwidthGovernor {
   /// Blocking variant of [acquire] that awaits the calculated delay (if any)
   /// before returning the waited milliseconds.
   Future<int> acquireBlocking(int bytes, {String? taskId}) async {
-    final waitMs = acquireNonBlocking(bytes, taskId: taskId);
+    final waitMs = await _tokenLock.synchronized(
+      () => acquireNonBlocking(bytes, taskId: taskId),
+    );
     if (waitMs > 0) {
       await Future.delayed(Duration(milliseconds: waitMs));
     }

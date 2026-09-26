@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 import 'download_engine.dart';
 import 'power_monitor.dart';
+import 'service_registry.dart';
 
 enum TickPriority {
   /// Always runs (e.g. critical state flush, shutdown handlers).
@@ -34,10 +35,11 @@ class _TickSubscriber {
 
 /// Global centralized timer manager that consolidates periodic timers across
 /// the app to reduce CPU context switches and conserve battery.
-class TickManager {
+class TickManager implements DisposableService {
   static final _log = Logger('TickManager');
   static final TickManager instance = TickManager._();
   TickManager._() {
+    ServiceRegistry.register(this);
     _screenSub = PowerMonitor.screenStateStream.listen((screenOn) {
       _onPowerStateChanged();
     });
@@ -142,7 +144,9 @@ class TickManager {
     _isPaused = false;
   }
 
-  void dispose() {
+  @override
+  Future<void> dispose() async {
+    ServiceRegistry.unregister(this);
     _heartbeatTimer?.cancel();
     _heartbeatTimer = null;
     _screenSub?.cancel();

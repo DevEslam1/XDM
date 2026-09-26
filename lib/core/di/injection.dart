@@ -129,6 +129,20 @@ Future<void> configureDependencies() async {
       },
     );
 
+    // F29: wire the background-service active-download query to the engine's
+    // live counter. Without this the service's stop-guard always saw 0 active
+    // downloads (the setDownloadActive/reconcile helpers are never called), so
+    // it stopped the foreground service mid-download — leaving the app
+    // unprotected and its worker isolates at risk of being killed.
+    getIt.registerLazySingleton<BackgroundService>(
+      () {
+        BackgroundService.setActiveDownloadCountQuery(
+            () => DownloadEngine.activeDownloadsCount);
+        return BackgroundService();
+      },
+      dispose: (b) => b.dispose(),
+    );
+
     getIt.registerLazySingleton<TorrentProvider>(
       () => TorrentProvider(torrentService: getIt<ITorrentService>()),
       dispose: (p) => p.dispose(),
@@ -170,10 +184,6 @@ Future<void> configureDependencies() async {
     getIt.registerLazySingleton<ChecksumService>(() => ChecksumService());
     getIt.registerLazySingleton<ClipboardService>(() => ClipboardService());
     getIt.registerLazySingleton<ShareUrlHandler>(() => ShareUrlHandler());
-    getIt.registerLazySingleton<BackgroundService>(
-      () => BackgroundService(),
-      dispose: (b) => b.dispose(),
-    );
     getIt.registerLazySingleton<CrashReportingService>(
         () => CrashReportingService());
     getIt.registerLazySingleton<AppLockService>(() => AppLockService());

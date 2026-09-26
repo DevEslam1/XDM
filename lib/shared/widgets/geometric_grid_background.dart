@@ -19,7 +19,7 @@ class AmbientProgress with WidgetsBindingObserver {
   AmbientProgress() {
     WidgetsBinding.instance.addObserver(this);
     PowerMonitor.throttleFactorNotifier.addListener(_onPowerThrottleChanged);
-    PowerMonitor.screenStateStream.listen((screenOn) {
+    _screenStateSub = PowerMonitor.screenStateStream.listen((screenOn) {
       if (!screenOn) {
         _stopTimer();
       } else if (_refCount > 0 &&
@@ -34,6 +34,7 @@ class AmbientProgress with WidgetsBindingObserver {
 
   final ValueNotifier<double> progress = ValueNotifier<double>(0);
   Timer? _timer;
+  StreamSubscription<bool>? _screenStateSub;
   int _refCount = 0;
   int get refCount => _refCount;
   final _startTime = DateTime.now();
@@ -111,6 +112,8 @@ class AmbientProgress with WidgetsBindingObserver {
 
   void dispose() {
     _stopTimer();
+    _screenStateSub?.cancel();
+    _screenStateSub = null;
     WidgetsBinding.instance.removeObserver(this);
     PowerMonitor.throttleFactorNotifier.removeListener(_onPowerThrottleChanged);
   }

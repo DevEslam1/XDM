@@ -98,12 +98,12 @@ Dio buildTransferDio({
     // the download path. Added only on freshly-built (non-pooled) clients so
     // the interceptor isn't stacked twice.
     client.interceptors.add(InterceptorsWrapper(
-      onRequest: (options, handler) {
+      onRequest: (options, handler) async {
         try {
           // Initial (and non-redirect) requests allow LAN/loopback/private
           // targets so users can download from their own NAS/router/localhost,
           // while metadata/link-local/0.0.0.0/multicast stay blocked.
-          SsrfGuard.validate(options.uri,
+          await SsrfGuard.validateAsync(options.uri,
               httpsOnly: httpsOnly, allowPrivate: true);
         } on SsrfBlockedException catch (e) {
           handler.reject(DioException(
@@ -116,7 +116,7 @@ Dio buildTransferDio({
         }
         handler.next(options);
       },
-      onResponse: (response, handler) {
+      onResponse: (response, handler) async {
         // Only redirect hops need the strict re-check. A no-redirect response
         // was already validated on the initial request (allowPrivate:true for a
         // user-typed URL). When the server issued a 3xx, re-validate every hop
@@ -125,10 +125,10 @@ Dio buildTransferDio({
         if (response.redirects.isNotEmpty) {
           try {
             for (final r in response.redirects) {
-              SsrfGuard.validate(r.location,
+              await SsrfGuard.validateAsync(r.location,
                   httpsOnly: httpsOnly, allowPrivate: false);
             }
-            SsrfGuard.validate(response.realUri,
+            await SsrfGuard.validateAsync(response.realUri,
                 httpsOnly: httpsOnly, allowPrivate: false);
           } on SsrfBlockedException catch (e) {
             handler.reject(DioException(
@@ -253,13 +253,15 @@ String? firstNonEmpty(String? a, String? b) {
 }
 
 Future<int> actualDownloadedBytes(String tempFilePath,
-    {int threadCount = 1, StateStoreInstance? stateStore}) async {
+    {int threadCount = 1,
+    StateStoreInstance? stateStore,
+    String? taskId}) async {
   final file = File(tempFilePath);
   if (!await file.exists()) return 0;
   final fileLen = await file.length();
   final state = stateStore != null
-      ? await stateStore.load(tempFilePath)
-      : await StateStore.load(tempFilePath);
+      ? await stateStore.load(tempFilePath, taskId: taskId)
+      : await StateStore.load(tempFilePath, taskId: taskId);
   if (state != null) {
     final stateBytes = state.downloadedBytes;
     if (state.totalSize > 0) {

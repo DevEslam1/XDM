@@ -576,6 +576,9 @@ class DownloadTask {
     return raw;
   }
 
+  // BUG-19: Track original physical chunk thread count
+  int get originalThreadCount => chunks.isNotEmpty ? chunks.length : threadCount;
+
   // FIX-S8: Sanitized chunk progress ratios matching current threadCount with NaN/Inf guards
   List<double> get sanitizedChunks {
     final count = threadCount > 0 ? threadCount : 1;

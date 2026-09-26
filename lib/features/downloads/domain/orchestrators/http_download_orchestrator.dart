@@ -97,6 +97,7 @@ class HttpDownloadOrchestrator {
           url: url,
           threadCount: effectiveThreadCount,
           knownFileSize: resolvedFileSize,
+          taskId: taskId,
         );
         alreadyOnDisk = state.state.downloadedBytes;
 
@@ -262,6 +263,7 @@ class HttpDownloadOrchestrator {
         DownloadJournal.flushAndSyncForFile(tempFilePath);
       } catch (_) {}
       job.cancel(reason);
+      job.dispose();
       throw DioException(
         requestOptions: RequestOptions(path: punyUrl),
         type: DioExceptionType.cancel,
@@ -272,20 +274,8 @@ class HttpDownloadOrchestrator {
     unawaited(cancelToken.whenCancel.then((_) async {
       if (!completer.isCompleted) {
         final reason = getStructuredPauseReason();
-        try {
-          await DownloadJournal.flushAndSyncForFile(tempFilePath);
-          final existing = await StateStore.loadOrCreate(
-            tempFilePath,
-            url: activeDownloadUrl,
-            threadCount: effectiveThreadCount,
-            knownFileSize: resolvedFileSize,
-          );
-          existing.state.status = DmxStateStatus.paused;
-          existing.state.pauseReason = reason;
-          await StateStore.save(tempFilePath, existing.state,
-              durable: true, taskId: taskId);
-        } catch (_) {}
-
+        // Forward cancellation to worker isolate, which flushes memory buffers
+        // and persists durable TransferState without file sharing race conditions.
         job.cancel(reason);
         if (ytStreamKind != null) _ytCoordinator.unregister(taskId);
         completer.completeError(

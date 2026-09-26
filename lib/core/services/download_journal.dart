@@ -5,6 +5,7 @@ import 'dart:io';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:get_it/get_it.dart';
+import 'package:path/path.dart' as p;
 import 'package:synchronized/synchronized.dart';
 import '../constants/thresholds.dart';
 import 'crash_reporting_service.dart';
@@ -37,6 +38,37 @@ class StateStoreInstance {
   final Map<String, int> _lastWrittenBytes = {};
   final Map<String, DateTime> _lastSaveTimes = {};
   final Map<String, DmxStateStatus> _lastWrittenStatus = {};
+
+  /// F26: last write error per state target path, or absent if the most recent
+  /// save succeeded. `save()` deliberately swallows write errors so a live
+  /// download is never torn down by a transient disk hiccup, but callers that
+  /// persist resume state need to know when a failure is permanent (EACCES /
+  /// EROFS) instead of silently sitting at 0%. Cleared on the next success.
+  final Map<String, Object> _lastSaveErrors = {};
+
+  /// True when the most recent [save] for [tempFilePath] failed with an error
+  /// that will not heal on its own (permission denied / read-only filesystem).
+  /// Returns false when there is no recorded failure or it was transient.
+  bool hasPermanentSaveFailure(String tempFilePath, {String? taskId}) {
+    // Check the task-scoped path first, then the legacy un-suffixed path —
+    // callers are not always consistent about passing taskId, and either file
+    // failing to write means resume state for this download is not durable.
+    final candidates = <String>[
+      pathFor(tempFilePath, taskId: taskId),
+      _legacyPathFor(tempFilePath),
+    ];
+    for (final p in candidates) {
+      final err = _lastSaveErrors[p];
+      if (err != null && StateStore.isPermanentWriteFailure(err)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  @visibleForTesting
+  Map<String, Object> get lastSaveErrorsForTesting =>
+      Map<String, Object>.from(_lastSaveErrors);
   final LinkedHashMap<String, Lock> _pathLocks = LinkedHashMap<String, Lock>();
   final Set<String> _heldPaths = <String>{};
   static const int _maxPathLocks = 64;
@@ -72,6 +104,13 @@ class StateStoreInstance {
       return '$tempFilePath.$taskId.dmxstate';
     }
     return '$tempFilePath.dmxstate';
+  }
+
+  String journalPathFor(String tempFilePath, {String? taskId}) {
+    if (taskId != null && taskId.isNotEmpty) {
+      return '$tempFilePath.$taskId.journal';
+    }
+    return '$tempFilePath.journal';
   }
 
   String _legacyPathFor(String tempFilePath) => '$tempFilePath.dmxstate';
@@ -180,23 +219,45 @@ class StateStoreInstance {
           // Silent failures here cause resume-from-zero for large downloads with no
           // diagnostic trace. Log the JSON keys so schema regressions are identifiable.
           if (state == null && json.isNotEmpty) {
-            LoggingService.logger('DownloadJournal').warning(
-              'State file at $effectivePath is valid JSON but neither V3 nor V2 '
-              'parser could decode it. Keys: ${json.keys.toList()}. '
-              'Download will restart from zero.',
-            );
-            try {
-              final backupPath = '$effectivePath.bak';
-              await File(effectivePath).copy(backupPath);
-              LoggingService.logger('DownloadJournal').info(
-                'Corrupted state file backed up to $backupPath',
+            final rawChunks = json['chunks'];
+            final isJustEmptyChunks =
+                (json['v'] == TransferState.currentVersion ||
+                        json['version'] == TransferState.currentVersion ||
+                        json['v'] == null) &&
+                    rawChunks is List &&
+                    rawChunks.isEmpty;
+            if (isJustEmptyChunks) {
+              final totalSize =
+                  ((json['totalSize'] as num?)?.toInt() ?? 0).clamp(0, 1 << 62);
+              state = TransferState(
+                totalSize: totalSize,
+                threadCount:
+                    ((json['threadCount'] as num?)?.toInt() ?? 1).clamp(1, 64),
+                chunks: const [],
+                url: json['url'] as String?,
+                etag: json['etag'] as String?,
+                lastModified: json['lastModified'] as String?,
               );
-            } catch (backupErr, st) {
+            } else {
               LoggingService.logger('DownloadJournal').warning(
-                'Failed to backup corrupted state file',
-                backupErr,
-                st,
+                'State file at $effectivePath is valid JSON but neither V3 nor V2 '
+                'parser could decode it. Keys: ${json.keys.toList()}. '
+                'Download will restart from zero.',
               );
+              try {
+                final backupPath = '$effectivePath.bak';
+                await File(effectivePath).copy(backupPath);
+                await File(effectivePath).delete();
+                LoggingService.logger('DownloadJournal').info(
+                  'Corrupted state file backed up to $backupPath',
+                );
+              } catch (backupErr, st) {
+                LoggingService.logger('DownloadJournal').warning(
+                  'Failed to backup corrupted state file',
+                  backupErr,
+                  st,
+                );
+              }
             }
           }
         }
@@ -206,6 +267,7 @@ class StateStoreInstance {
         try {
           final backupPath = '$effectivePath.bak';
           await File(effectivePath).copy(backupPath);
+          await File(effectivePath).delete();
           LoggingService.logger('DownloadJournal').info(
             'Unreadable state file backed up to $backupPath',
           );
@@ -226,8 +288,18 @@ class StateStoreInstance {
     // 3. If snapshot is newer than journal head, use snapshot.
     // 4. If journal has newer events or snapshot is missing, replay journal.
     // 5. If both are corrupt/missing, perform clean restart (0 progress).
+    final journalScopedPath = journalPathFor(tempFilePath, taskId: taskId);
+    String effectiveJournalPath = journalScopedPath;
+    if (!await File(journalScopedPath).exists() &&
+        taskId != null &&
+        taskId.isNotEmpty) {
+      final legacyJournal = File('$tempFilePath.journal');
+      if (await legacyJournal.exists()) {
+        effectiveJournalPath = legacyJournal.path;
+      }
+    }
     final journalDetails =
-        await DownloadJournal.recoverWithDetails('$tempFilePath.journal');
+        await DownloadJournal.recoverWithDetails(effectiveJournalPath);
 
     if (journalDetails != null && journalDetails.chunkBytes.isNotEmpty) {
       if (state == null) {
@@ -292,14 +364,56 @@ class StateStoreInstance {
       }
     }
 
-    if (state == null && threadCount > 1) {
+    if (state != null && state.totalSize <= 0 && knownFileSize > 0) {
+      state.totalSize = knownFileSize;
+    }
+
+    if (state != null && state.chunks.isEmpty) {
       final tmp = File(tempFilePath);
       if (await tmp.exists()) {
-        try {
-          await tmp.delete();
-        } catch (e, st) {
-          LoggingService.logger('DownloadJournal')
-              .warning('Failed to delete temp file during loadOrCreate', e, st);
+        final len = await tmp.length();
+        if (len > 0) {
+          final effectiveTotal = state.totalSize > 0
+              ? state.totalSize
+              : (knownFileSize > 0 ? knownFileSize : len);
+          state.totalSize = effectiveTotal;
+          state.threadCount = 1;
+          state.chunks = [
+            ChunkState(
+              start: 0,
+              end: effectiveTotal > 0 ? effectiveTotal - 1 : -1,
+              downloaded:
+                  effectiveTotal > 0 ? len.clamp(0, effectiveTotal) : len,
+            ),
+          ];
+          migratedFrom ??= 'fileLength';
+        }
+      }
+    }
+
+    // BUG-1 fix: NEVER delete downloaded bytes if state is null or missing for single-thread downloads.
+    // Multi-threaded downloads cannot safely reconstruct from raw file length because chunks are non-contiguous.
+    if (state == null && threadCount <= 1) {
+      final tmp = File(tempFilePath);
+      if (await tmp.exists()) {
+        final len = await tmp.length();
+        if (len > 0) {
+          final effectiveTotal = knownFileSize > 0 ? knownFileSize : len;
+          state = TransferState(
+            totalSize: effectiveTotal,
+            threadCount: 1,
+            chunks: [
+              ChunkState(
+                start: 0,
+                end: effectiveTotal > 0 ? effectiveTotal - 1 : -1,
+                downloaded:
+                    effectiveTotal > 0 ? len.clamp(0, effectiveTotal) : len,
+              ),
+            ],
+            url: url,
+            migrationNote: 'recovered_from_orphan_file',
+          );
+          migratedFrom ??= 'orphanFile';
         }
       }
     }
@@ -320,10 +434,18 @@ class StateStoreInstance {
 
     // J2 Invariant: If a journal file exists, clear it after state reconciliation
     // and persist a durable compacted snapshot to disk.
-    final journalFile = File('$tempFilePath.journal');
-    if (await journalFile.exists()) {
+    final journalFile = File(journalPathFor(tempFilePath, taskId: taskId));
+    final legacyJournalFile = File('$tempFilePath.journal');
+    final hasJournal = await journalFile.exists();
+    final hasLegacy = await legacyJournalFile.exists();
+    if (hasJournal || hasLegacy) {
       await save(tempFilePath, state, durable: true, taskId: taskId);
-      await DownloadJournal.clearJournalFor(tempFilePath);
+      if (hasJournal) {
+        await DownloadJournal.clearJournalFor(journalFile.path);
+      }
+      if (hasLegacy) {
+        await DownloadJournal.clearJournalFor(legacyJournalFile.path);
+      }
     }
 
     return StateLoadResult(
@@ -402,12 +524,26 @@ class StateStoreInstance {
     if (state.downloadedBytes == 0) return false;
     final f = File(tempFilePath);
     if (!await f.exists()) {
-      for (final c in state.chunks) {
-        c.downloaded = 0;
+      final dir = f.parent;
+      final fileName = p.basename(tempFilePath);
+      var existsNearby = false;
+      if (await dir.exists()) {
+        try {
+          await dir.list().firstWhere(
+            (e) => e is File && p.basename(e.path) == fileName,
+          );
+          existsNearby = true;
+        } catch (_) {}
       }
-      state.migrationNote =
-          '${state.migrationNote ?? ''} disk_reconciled:file_missing'.trim();
-      return true;
+      if (!existsNearby) {
+        for (final c in state.chunks) {
+          c.downloaded = 0;
+        }
+        state.migrationNote =
+            '${state.migrationNote ?? ''} disk_reconciled:file_missing'.trim();
+        return true;
+      }
+      return false;
     }
 
     var adjusted = false;
@@ -439,6 +575,10 @@ class StateStoreInstance {
       // Multi-thread: state file is authoritative because files are pre-allocated.
       // Only cap if file is physically smaller than chunk start or downloaded offset.
       if (len < state.totalSize && len < state.downloadedBytes) {
+        LoggingService.logger('DownloadJournal').warning(
+          'File shorter than expected ($len < ${state.totalSize}). '
+          'Pre-allocation may have been interrupted.',
+        );
         for (final c in state.chunks) {
           if (c.start >= len) {
             if (c.downloaded > 0) {
@@ -526,13 +666,17 @@ class StateStoreInstance {
         try {
           final now = DateTime.now();
 
+          final snap = state.clone();
+          snap.updatedAt = now;
+          state.updatedAt = now;
+
           final bytesSinceLastWrite =
-              (state.downloadedBytes - (lastWrittenByte ?? 0)).abs();
+              (snap.downloadedBytes - (lastWrittenByte ?? 0)).abs();
           final statusChanged =
-              lastStatus != null && lastStatus != state.status;
-          final isTerminalOrPaused = state.status == DmxStateStatus.paused ||
-              state.status == DmxStateStatus.complete ||
-              state.status == DmxStateStatus.failed;
+              lastStatus != null && lastStatus != snap.status;
+          final isTerminalOrPaused = snap.status == DmxStateStatus.paused ||
+              snap.status == DmxStateStatus.complete ||
+              snap.status == DmxStateStatus.failed;
           final isDurable = durable || statusChanged || isTerminalOrPaused;
 
           // Task 2.1: Maximum 1 disk write per 5 seconds per task for non-durable saves
@@ -554,14 +698,19 @@ class StateStoreInstance {
           }
 
           // Screen-off threshold: always write when paused or status changed or durable
-          if (state.status == DmxStateStatus.paused || isDurable) {
+          if (snap.status == DmxStateStatus.paused || isDurable) {
             // Never skip when paused or durable
-          } else if (isScreenOff && bytesSinceLastWrite < 5 * 1024 * 1024) {
-            return; // skip small deltas when screen off (< 5MB)
+          } else if (isScreenOff) {
+            // FIX(M-24): Allow periodic timed flushes (>= 15s) even with < 2MB delta,
+            // so background downloads on slow connections don't remain unsaved for minutes.
+            final elapsed = now.difference(lastSave ?? DateTime.fromMillisecondsSinceEpoch(0));
+            if (bytesSinceLastWrite < 2 * 1024 * 1024 && elapsed < const Duration(seconds: 15)) {
+              return;
+            }
           }
 
           // Lightweight structural deduplication: skips redundant writes in O(N) without jsonEncode or SHA-256
-          final fingerprint = computeFingerprint(state);
+          final fingerprint = computeFingerprint(snap);
           if (!isDurable) {
             if (lastFp == fingerprint) {
               return; // Skip redundant state write without JSON serialization
@@ -582,18 +731,18 @@ class StateStoreInstance {
           if (isDurable) {
             final existing = await _readExistingProgress(targetPath);
             if (existing != null) {
-              final incomingBytes = state.downloadedBytes;
+              final incomingBytes = snap.downloadedBytes;
               final regressesBytes = existing.bytes > incomingBytes;
               final unCompletes =
                   existing.status == DmxStateStatus.complete.name &&
-                      state.status != DmxStateStatus.complete;
+                      snap.status != DmxStateStatus.complete;
               if (regressesBytes || unCompletes) {
                 DiagnosticService.instance.recordTelemetryAlert(
                   'stale_state_write_skipped',
                   taskId: taskId,
                   details: 'onDisk=${existing.bytes} incoming=$incomingBytes '
                       'onDiskStatus=${existing.status} '
-                      'incomingStatus=${state.status.name}',
+                      'incomingStatus=${snap.status.name}',
                 );
                 return;
               }
@@ -614,8 +763,7 @@ class StateStoreInstance {
             } catch (_) {}
           }
 
-          state.updatedAt = now;
-          final payload = jsonEncode(state.toJson());
+          final payload = jsonEncode(snap.toJson());
           final tmp = File(tmpPath);
           await tmp.parent.create(recursive: true);
           if (isDurable) {
@@ -664,8 +812,9 @@ class StateStoreInstance {
           // Mutate dedup cache ONLY after successful write to disk:
           _lastFingerprints[targetPath] = fingerprint; // LRU recency update
           _lastSaveTimes[targetPath] = now;
-          _lastWrittenStatus[targetPath] = state.status;
-          _lastWrittenBytes[targetPath] = state.downloadedBytes;
+          _lastWrittenStatus[targetPath] = snap.status;
+          _lastWrittenBytes[targetPath] = snap.downloadedBytes;
+          _lastSaveErrors.remove(targetPath);
           StateStore.markSaveSuccess();
 
           if (_lastFingerprints.length > _maxCachedPayloads) {
@@ -683,6 +832,7 @@ class StateStoreInstance {
           // M-2/M-4: don't silently swallow persistence failures. A failing
           // disk (full / read-only / EIO) previously left resume state stale
           // with only a debugPrint; now it is counted and surfaced.
+          _lastSaveErrors[targetPath] = e;
           StateStore.recordSaveFailure(tempFilePath, e, stackTrace);
         }
       });
@@ -880,12 +1030,35 @@ abstract class StateStore {
     if (_consecutiveSaveFailures != 0) _consecutiveSaveFailures = 0;
   }
 
+  /// F26: non-transient write failures (permission denied / read-only
+  /// filesystem) never heal without user action — callers should surface them
+  /// instead of retrying forever. Mirrors the errno/message checks used by the
+  /// HTTP engine.
+  static bool isPermanentWriteFailure(Object? error) {
+    final FileSystemException? fs =
+        error is FileSystemException ? error : null;
+    if (fs == null) return false;
+    final code = fs.osError?.errorCode;
+    if (code == 13 || code == 1 || code == 30) return true;
+    final msg = fs.message.toLowerCase();
+    return msg.contains('permission denied') ||
+        msg.contains('read-only file system') ||
+        msg.contains('operation not permitted');
+  }
+
+  /// F26: true when the last save for [tempFilePath] failed permanently.
+  static bool hasPermanentSaveFailure(String tempFilePath, {String? taskId}) =>
+      instance.hasPermanentSaveFailure(tempFilePath, taskId: taskId);
+
   static bool get stateSaveStrictDedup => instance.stateSaveStrictDedup;
   static set stateSaveStrictDedup(bool val) =>
       instance.stateSaveStrictDedup = val;
 
   static String pathFor(String tempFilePath, {String? taskId}) =>
       instance.pathFor(tempFilePath, taskId: taskId);
+
+  static String journalPathFor(String tempFilePath, {String? taskId}) =>
+      instance.journalPathFor(tempFilePath, taskId: taskId);
 
   static Future<TransferState?> load(String tempFilePath, {String? taskId}) =>
       instance.load(tempFilePath, taskId: taskId);
@@ -967,15 +1140,19 @@ class DownloadJournal {
 
   /// Flushes and fsyncs the journal corresponding to [tempFilePath].
   // FIX P1-4: Exact match, not prefix. Previously '/a/b' matched '/a/b2.journal'
-  static Future<void> flushAndSyncForFile(String tempFilePath) async {
-    final journalPath = '$tempFilePath.journal';
-    final active = _activeJournals
-        .where((j) => j.path == journalPath)
-        .firstOrNull;
+  static Future<void> flushAndSyncForFile(String tempFilePath,
+      {String? taskId}) async {
+    final journalPath = taskId != null && taskId.isNotEmpty
+        ? '$tempFilePath.$taskId.journal'
+        : (tempFilePath.endsWith('.journal')
+            ? tempFilePath
+            : '$tempFilePath.journal');
+    final active =
+        _activeJournals.where((j) => j.path == journalPath).firstOrNull;
     if (active != null) {
       await active.flushAndSync();
     } else {
-      final journalFile = File('$tempFilePath.journal');
+      final journalFile = File(journalPath);
       if (await journalFile.exists()) {
         try {
           final jRaf = await journalFile.open(mode: FileMode.writeOnlyAppend);
@@ -1087,35 +1264,37 @@ class DownloadJournal {
   /// capped at [maxRecordedEntries] (one entry per chunk across all jobs).
   final LinkedHashMap<int, int> _lastRecordedChunkBytes = LinkedHashMap();
   static const int maxRecordedEntries = kJournalMaxBgRecordedEntries;
-  int _lastGlobalWriteBytes = 0;
+
+  /// Accumulated absolute per-chunk byte change since the last journal write.
+  /// Tracking a running delta (rather than diffing the LRU sum against a
+  /// stored total) avoids the artificial spike produced when an entry is
+  /// evicted at >[maxRecordedEntries] chunks — the evicted bytes dropped out
+  /// of the sum and were misread as fresh progress, forcing an extra write.
+  int _bytesSinceLastJournalWrite = 0;
 
   Future<void> recordChunkProgress(int index, int bytes,
       {String? hash, bool force = false}) async {
-    // Disable chunk journal writes entirely when screen is off
-    if (PowerMonitor.screenOff && !force) return;
-
+    final isScreenOff = PowerMonitor.screenOff;
     final isBg =
-        !DownloadEngine.appInForeground || DownloadEngine.isInBackground;
+        !DownloadEngine.appInForeground || DownloadEngine.isInBackground || isScreenOff;
 
-    final threshold =
-        isBg ? kJournalBackgroundWriteDelta : kJournalForegroundWriteDelta;
+    final threshold = isScreenOff
+        ? (kJournalBackgroundWriteDelta * 2)
+        : (isBg ? kJournalBackgroundWriteDelta : kJournalForegroundWriteDelta);
 
     await _lock.synchronized(() async {
+      final previous = _lastRecordedChunkBytes[index];
+      _bytesSinceLastJournalWrite +=
+          previous == null ? bytes : (bytes - previous).abs();
       _lastRecordedChunkBytes[index] = bytes;
       while (_lastRecordedChunkBytes.length > maxRecordedEntries) {
         _lastRecordedChunkBytes.remove(_lastRecordedChunkBytes.keys.first);
       }
 
-      final totalWritten = _lastRecordedChunkBytes.values
-          .toList()
-          .fold<int>(0, (sum, b) => sum + b);
-      final totalBytesSinceLastWrite =
-          (totalWritten - _lastGlobalWriteBytes).abs();
-
-      if (!force && hash == null && totalBytesSinceLastWrite < threshold) {
+      if (!force && hash == null && _bytesSinceLastJournalWrite < threshold) {
         return;
       }
-      _lastGlobalWriteBytes = totalWritten;
+      _bytesSinceLastJournalWrite = 0;
 
       _ensureOpen();
       final line = _withCrc({
@@ -1308,6 +1487,7 @@ class DownloadJournal {
   /// from a `finally` block or before deleting the journal file.
   void dispose() {
     _lastRecordedChunkBytes.clear();
+    _bytesSinceLastJournalWrite = 0;
     _activeJournals.remove(this);
     if (!_isOpen) return;
     _isOpen = false;
@@ -1336,6 +1516,7 @@ class DownloadJournal {
         }
       }
       _lastRecordedChunkBytes.clear();
+      _bytesSinceLastJournalWrite = 0;
       await _fsyncLocked();
       await _closeLocked();
     });
@@ -1344,6 +1525,7 @@ class DownloadJournal {
   Future<void> delete() async {
     await _lock.synchronized(() async {
       _lastRecordedChunkBytes.clear();
+      _bytesSinceLastJournalWrite = 0;
       await _closeLocked();
     });
     try {
@@ -1357,60 +1539,70 @@ class DownloadJournal {
   }
 
   /// Safely deletes the journal for [tempFilePath], closing any active journal sink first (J1).
-  static Future<void> deleteJournalFor(String tempFilePath) async {
-    final journalPath = tempFilePath.endsWith('.journal')
-        ? tempFilePath
-        : '$tempFilePath.journal';
-    final active = _activeJournals.where((j) => j.path == journalPath).toList();
-    for (final j in active) {
+  static Future<void> deleteJournalFor(String tempFilePath,
+      {String? taskId}) async {
+    final paths = <String>[
+      if (taskId != null && taskId.isNotEmpty) '$tempFilePath.$taskId.journal',
+      tempFilePath.endsWith('.journal') ? tempFilePath : '$tempFilePath.journal',
+    ];
+    for (final journalPath in paths) {
+      final active =
+          _activeJournals.where((j) => j.path == journalPath).toList();
+      for (final j in active) {
+        try {
+          await j.close();
+        } catch (e, st) {
+          LoggingService.logger('DownloadJournal').warning(
+              'Failed to close active journal before deletion: $journalPath',
+              e,
+              st);
+        }
+      }
       try {
-        await j.close();
+        final file = File(journalPath);
+        if (await file.exists()) {
+          await file.delete();
+          LoggingService.logger('DownloadJournal')
+              .info('[Journal-J1] Deleted journal file: $journalPath');
+        }
       } catch (e, st) {
         LoggingService.logger('DownloadJournal').warning(
-            'Failed to close active journal before deletion: $journalPath',
-            e,
-            st);
+            '[Journal-J1] Failed to delete journal file $journalPath: $e', e, st);
       }
-    }
-    try {
-      final file = File(journalPath);
-      if (await file.exists()) {
-        await file.delete();
-        LoggingService.logger('DownloadJournal')
-            .info('[Journal-J1] Deleted journal file: $journalPath');
-      }
-    } catch (e, st) {
-      LoggingService.logger('DownloadJournal').warning(
-          '[Journal-J1] Failed to delete journal file $journalPath: $e', e, st);
     }
   }
 
   /// Clears the journal for [tempFilePath] after state replay (J2).
-  static Future<void> clearJournalFor(String tempFilePath) async {
-    final journalPath = tempFilePath.endsWith('.journal')
-        ? tempFilePath
-        : '$tempFilePath.journal';
-    final active = _activeJournals.where((j) => j.path == journalPath).toList();
-    for (final j in active) {
+  static Future<void> clearJournalFor(String tempFilePath,
+      {String? taskId}) async {
+    final paths = <String>[
+      if (taskId != null && taskId.isNotEmpty) '$tempFilePath.$taskId.journal',
+      tempFilePath.endsWith('.journal') ? tempFilePath : '$tempFilePath.journal',
+    ];
+    for (final journalPath in paths) {
+      final active =
+          _activeJournals.where((j) => j.path == journalPath).toList();
+      for (final j in active) {
+        try {
+          await j.close();
+        } catch (e, st) {
+          LoggingService.logger('DownloadJournal').warning(
+              'Failed to close active journal before clearing: $journalPath',
+              e,
+              st);
+        }
+      }
       try {
-        await j.close();
+        final file = File(journalPath);
+        if (await file.exists()) {
+          await file.delete();
+          LoggingService.logger('DownloadJournal').info(
+              '[Journal-J2] Cleared journal after state replay: $journalPath');
+        }
       } catch (e, st) {
         LoggingService.logger('DownloadJournal').warning(
-            'Failed to close active journal before clearing: $journalPath',
-            e,
-            st);
+            '[Journal-J2] Failed to clear journal $journalPath: $e', e, st);
       }
-    }
-    try {
-      final file = File(journalPath);
-      if (await file.exists()) {
-        await file.delete();
-        LoggingService.logger('DownloadJournal').info(
-            '[Journal-J2] Cleared journal after state replay: $journalPath');
-      }
-    } catch (e, st) {
-      LoggingService.logger('DownloadJournal').warning(
-          '[Journal-J2] Failed to clear journal $journalPath: $e', e, st);
     }
   }
 

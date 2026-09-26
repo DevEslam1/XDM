@@ -12,6 +12,7 @@ import 'package:synchronized/synchronized.dart';
 
 import '../../features/browser/models/bookmark.dart';
 import '../../features/downloads/models/download_task.dart';
+import 'circuit_breaker.dart';
 import 'database/app_database.dart';
 import 'database/hive_migration_service.dart';
 import 'database/repositories/bookmark_repository.dart';
@@ -39,6 +40,10 @@ class DatabaseService {
   DatabaseService._create();
 
   late AppDatabase _db;
+  final CircuitBreaker _dbCircuit = CircuitBreaker(
+    failureThreshold: 3,
+    openTimeout: const Duration(seconds: 10),
+  );
   bool _initialized = false;
   bool get isInitialized => _initialized;
   AppDatabase get db => _db;
@@ -342,6 +347,11 @@ class DatabaseService {
 
   Future<void> saveTask(DownloadTask task) async {
     _pendingProgressSaves.remove(task.id);
+    if (!_dbCircuit.allowRequest()) {
+      _log.warning(
+          'saveTask rejected by database circuit breaker for task ${task.id}');
+      throw TimeoutException('Database circuit breaker is open (too many busy/lock failures)');
+    }
     int retries = 3;
     int attempt = 0;
     while (true) {
@@ -350,6 +360,7 @@ class DatabaseService {
               _taskToCompanion(task),
               mode: drift.InsertMode.insertOrReplace,
             );
+        _dbCircuit.recordSuccess();
         if (task.status == DownloadStatus.completed) {
           _scheduleCompletedTaskCheckpoint();
         }
@@ -367,11 +378,12 @@ class DatabaseService {
         retries--;
         attempt++;
         if (retries <= 0) {
+          _dbCircuit.recordFailure();
           rethrow;
         }
-        final delayMs = 100 * (1 << (attempt - 1));
+        final delayMs = 200 * (1 << (attempt - 1));
         _log.warning(
-            'saveTask failed due to lock/busy, retrying in ${delayMs}ms... Error: $e');
+            'saveTask failed due to lock/busy, retrying in ${delayMs}ms (attempt $attempt)... Error: $e');
         await Future.delayed(Duration(milliseconds: delayMs));
       }
     }

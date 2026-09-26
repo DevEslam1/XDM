@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 /// Thrown when a request URL targets a scheme or host that is not allowed on
@@ -57,6 +58,69 @@ class SsrfGuard {
     }
   }
 
+  /// Asynchronously validates [uri], including DNS resolution for non-IP hostnames
+  /// to prevent DNS rebinding attacks targeting loopback, link-local (cloud metadata),
+  /// or internal addresses.
+  static Future<void> validateAsync(
+    Uri uri, {
+    bool httpsOnly = false,
+    bool allowPrivate = false,
+    Duration lookupTimeout = const Duration(seconds: 3),
+    Future<List<InternetAddress>> Function(String host)? lookupFn,
+  }) async {
+    validate(uri, httpsOnly: httpsOnly, allowPrivate: allowPrivate);
+
+    final host = uri.host;
+    var h = host;
+    if (h.startsWith('[') && h.endsWith(']')) {
+      h = h.substring(1, h.length - 1);
+    }
+    final isLiteral =
+        _decodeIpv4Literal(h) != null || InternetAddress.tryParse(h) != null;
+    if (isLiteral) return;
+
+    try {
+      final lookup = lookupFn ?? InternetAddress.lookup;
+      final addrs = await lookup(h).timeout(lookupTimeout);
+      for (final addr in addrs) {
+        if (addr.isLinkLocal || addr.isMulticast) {
+          throw SsrfBlockedException(
+            'Blocked request: host "$host" resolved to link-local/metadata address "${addr.address}".',
+            url: uri.toString(),
+          );
+        }
+        final raw = addr.rawAddress;
+        if (addr.type == InternetAddressType.IPv4 && raw.length == 4) {
+          if (_isBlockedIpv4(raw, allowPrivate: allowPrivate)) {
+            throw SsrfBlockedException(
+              'Blocked request: host "$host" resolved to blocked IP "${addr.address}".',
+              url: uri.toString(),
+            );
+          }
+        } else if (addr.type == InternetAddressType.IPv6 && raw.length == 16) {
+          if (addr.isLoopback && !allowPrivate) {
+            throw SsrfBlockedException(
+              'Blocked request: host "$host" resolved to loopback IPv6 "${addr.address}".',
+              url: uri.toString(),
+            );
+          }
+          if (_isBlockedIpv6(raw, allowPrivate: allowPrivate)) {
+            throw SsrfBlockedException(
+              'Blocked request: host "$host" resolved to blocked IPv6 "${addr.address}".',
+              url: uri.toString(),
+            );
+          }
+        }
+      }
+    } on SsrfBlockedException {
+      rethrow;
+    } on SocketException catch (_) {
+      // DNS resolution failure will be handled by network client
+    } on TimeoutException catch (_) {
+      // Timed out DNS lookup fallback
+    } catch (_) {}
+  }
+
   /// True when [host] is an IP literal in a blocked range. Returns false for
   /// ordinary hostnames (which are not resolved here). When [allowPrivate] is
   /// true, private / loopback / CGNAT / unique-local ranges are permitted, but
@@ -85,28 +149,53 @@ class SsrfGuard {
     return false;
   }
 
+  static int? _parseIpv4Part(String p) {
+    if (p.isEmpty) return null;
+    if (p.startsWith('0x') || p.startsWith('0X')) {
+      return int.tryParse(p.substring(2), radix: 16);
+    } else if (p.length > 1 && p.startsWith('0')) {
+      return int.tryParse(p, radix: 8);
+    } else {
+      return int.tryParse(p, radix: 10);
+    }
+  }
+
   /// Decodes integer / hex / octal IPv4 encodings into an
-  /// [InternetAddress]. Returns null for anything else.
+  /// [InternetAddress]. Supports 1-, 2-, 3-, and 4-part BSD notation (e.g.
+  /// `127.1`, `0x7f.1`, `0177.0.0.1`). Returns null for hostnames.
   static InternetAddress? _decodeIpv4Literal(String host) {
     final h = host.trim();
     if (h.contains('.')) {
       final parts = h.split('.');
-      if (parts.length == 4) {
-        final bytes = <int>[];
+      if (parts.length >= 2 && parts.length <= 4) {
+        final vals = <int>[];
         for (final p in parts) {
-          int? v;
-          if (p.startsWith('0x') || p.startsWith('0X')) {
-            v = int.tryParse(p.substring(2), radix: 16);
-          } else if (p.length > 1 && p.startsWith('0')) {
-            v = int.tryParse(p, radix: 8);
-          } else {
-            v = int.tryParse(p);
-          }
-          if (v == null || v < 0 || v > 255) return null;
-          bytes.add(v);
+          final v = _parseIpv4Part(p);
+          if (v == null || v < 0) return null;
+          vals.add(v);
         }
-        return InternetAddress.tryParse(
-            '${bytes[0]}.${bytes[1]}.${bytes[2]}.${bytes[3]}');
+        int b0, b1, b2, b3;
+        if (parts.length == 4) {
+          if (vals.any((v) => v > 255)) return null;
+          b0 = vals[0];
+          b1 = vals[1];
+          b2 = vals[2];
+          b3 = vals[3];
+        } else if (parts.length == 3) {
+          if (vals[0] > 255 || vals[1] > 255 || vals[2] > 0xFFFF) return null;
+          b0 = vals[0];
+          b1 = vals[1];
+          b2 = (vals[2] >> 8) & 0xFF;
+          b3 = vals[2] & 0xFF;
+        } else {
+          // parts.length == 2: a.b where b is 24-bit host number (e.g. 127.1 -> 127.0.0.1)
+          if (vals[0] > 255 || vals[1] > 0xFFFFFF) return null;
+          b0 = vals[0];
+          b1 = (vals[1] >> 16) & 0xFF;
+          b2 = (vals[1] >> 8) & 0xFF;
+          b3 = vals[1] & 0xFF;
+        }
+        return InternetAddress.tryParse('$b0.$b1.$b2.$b3');
       }
     }
     int? value;

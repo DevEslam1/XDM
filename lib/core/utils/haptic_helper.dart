@@ -1,5 +1,6 @@
 import 'package:dmx/core/services/logging_service.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 
 import '../../features/settings/provider/settings_provider.dart';
 
@@ -41,6 +42,9 @@ mixin HapticHelper {
   Future<void> _runErrorPulse() async {
     await HapticFeedback.mediumImpact();
     await Future.delayed(const Duration(milliseconds: 100));
+    if (this is State && !(this as State).mounted) {
+      return;
+    }
     await HapticFeedback.mediumImpact();
   }
 }

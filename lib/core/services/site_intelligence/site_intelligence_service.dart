@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show compute, visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../constants/thresholds.dart';
 import '../../utils/bounded_lru_cache.dart';
 import '../background_gate.dart';
 import '../logging_service.dart';
@@ -18,7 +19,7 @@ final _log = LoggingService.logger('SiteIntelligenceService');
 final RegExp _topLevelUrlSchemeRegex = RegExp(r'^[a-zA-Z][a-zA-Z0-9+.-]*://');
 
 List<UrlAnalysisResult> _analyzeUrlsBatchWorker(List<String> urls) {
-  final service = SiteIntelligenceService();
+  final service = SiteIntelligenceService.instance;
   return urls.map((u) => service.analyzeUrl(u)).toList();
 }
 
@@ -324,6 +325,7 @@ class SiteIntelligenceService
   @override
   Future<void> dispose() async {
     _disposed = true;
+    if (_shared == this) _shared = null;
     ServiceRegistry.unregister(this);
     ServiceRegistry.unregisterMemoryPressureListener(this);
     _persistTimer?.cancel();
@@ -682,7 +684,7 @@ class SiteIntelligenceService
     return 'Other';
   }
 
-  static const int maxReliabilityEntries = 200;
+  static const int maxReliabilityEntries = kSiteReliabilityMaxEntries;
 
   void recordOutcome(
     String url,

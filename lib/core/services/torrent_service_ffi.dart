@@ -142,16 +142,19 @@ class TorrentService {
       } catch (e, st) {
         _log.warning(
           'forceStopTorrent: native pause failed for id=$id '
-          '(native handle may be orphaned)',
+          '(native handle may be orphaned) - attempting emergency native remove',
           e,
           st,
         );
+        try {
+          _native.removeTorrent(id, deleteFiles: false);
+        } catch (_) {}
       }
       // B5: release any pending pauseTorrent waiter promptly — force-stop
       // removes the stats the waiter would otherwise time out waiting for.
-      final waiter = _pauseConfirmWaiters.remove(id);
-      if (waiter != null && !waiter.isCompleted) {
-        waiter.complete();
+      final waiterEntry = _pauseConfirmWaiters.remove(id);
+      if (waiterEntry != null && !waiterEntry.completer.isCompleted) {
+        waiterEntry.completer.complete();
       }
       _activeTorrentIds.remove(id);
       _latestProgress.remove(id);
@@ -171,12 +174,24 @@ class TorrentService {
   // they cannot starve Flutter's UI isolate on every status tick.
   static final Map<int, DateTime> _metadataProbeAt = {};
 
-  // B5: per-torrent pause confirmations. pauseTorrent registers a waiter
-  // before its native call and awaits it OUTSIDE the lock; the status
-  // processing path below completes it. Waiting on the (lock-guarded) stream
-  // from inside the lock could only ever match pre-buffered events, because
-  // the producer itself needs that lock to add new ticks.
-  static final Map<int, Completer<void>> _pauseConfirmWaiters = {};
+  // B5: per-torrent pause confirmations with timestamp to prevent leaks.
+  static final Map<int, ({Completer<void> completer, DateTime createdAt})>
+      _pauseConfirmWaiters = {};
+
+  static void _sweepStalePauseWaiters() {
+    if (_pauseConfirmWaiters.isEmpty) return;
+    final now = DateTime.now();
+    _pauseConfirmWaiters.removeWhere((id, entry) {
+      if (entry.completer.isCompleted) return true;
+      if (now.difference(entry.createdAt).inSeconds > 20) {
+        if (!entry.completer.isCompleted) {
+          entry.completer.complete();
+        }
+        return true;
+      }
+      return false;
+    });
+  }
 
   static DateTime? _lastEmitTime;
   static Map<int, TorrentUpdateInfo>? _pendingUpdate;
@@ -441,7 +456,18 @@ class TorrentService {
   }
 
   static void _startTrackingUpdates() {
-    if (_state == TorrentSessionLifecycleState.disposed || !isInitialized) {
+    if (_state == TorrentSessionLifecycleState.disposed) {
+      return;
+    }
+    if (!isInitialized) {
+      if (_state == TorrentSessionLifecycleState.initializing &&
+          _initCompleter != null) {
+        unawaited(_initCompleter!.future.then((_) {
+          if (_state == TorrentSessionLifecycleState.ready) {
+            _startTrackingUpdates();
+          }
+        }));
+      }
       return;
     }
     if (_updatesSub != null) return;
@@ -547,8 +573,18 @@ class TorrentService {
                   uploadPayloadRate: value.uploadRate,
                   totalPayloadDownload: value.totalDone,
                   totalPayloadUpload: value.totalUploaded,
-                  currentTracker: '',
-                  nextAnnounceSeconds: 0,
+                  currentTracker: () {
+                    final src = _torrentSources[value.id];
+                    if (src != null && src.toLowerCase().startsWith('magnet:')) {
+                      final uri = Uri.tryParse(src);
+                      final tr = uri?.queryParametersAll['tr'];
+                      if (tr != null && tr.isNotEmpty) return tr.first;
+                    }
+                    return TrackerManager.defaultTrackers.isNotEmpty
+                        ? TrackerManager.defaultTrackers.first
+                        : '';
+                  }(),
+                  nextAnnounceSeconds: 30,
                   infoHashV1: value.infoHashV1,
                   infoHashV2: value.infoHashV2,
                   distributedCopies: value.distributedCopies,
@@ -564,17 +600,20 @@ class TorrentService {
                 // completer is synchronous and needs no lock re-entry, so the
                 // waiter resolves as soon as the paused label is processed —
                 // even while the producer holds the lock.
-                final pauseWaiter = _pauseConfirmWaiters[value.id];
-                if (pauseWaiter != null && !pauseWaiter.isCompleted) {
+                final pauseEntry = _pauseConfirmWaiters[value.id];
+                if (pauseEntry != null && !pauseEntry.completer.isCompleted) {
                   final label = info.stateLabel.toLowerCase();
                   if (label.contains('paused') ||
                       label.contains('stopped') ||
                       label.contains('pausing')) {
-                    pauseWaiter.complete();
+                    _pauseConfirmWaiters.remove(value.id);
+                    pauseEntry.completer.complete();
                   }
                 }
                 return MapEntry(key, info);
               });
+
+              _sweepStalePauseWaiters();
 
               _pendingUpdate = mapped;
               final now = DateTime.now();
@@ -1024,6 +1063,10 @@ class TorrentService {
           } else {
             _torrentSources.remove(id);
           }
+          final waiterEntry = _pauseConfirmWaiters.remove(id);
+          if (waiterEntry != null && !waiterEntry.completer.isCompleted) {
+            waiterEntry.completer.complete();
+          }
           _latestProgress.remove(id);
           _latestStats.remove(id);
           _metadataProbeAt.remove(id);
@@ -1117,7 +1160,8 @@ class TorrentService {
         // Registered BEFORE the native pause call so no tick can slip past
         // between the call and the wait.
         final waiter = Completer<void>();
-        _pauseConfirmWaiters[id] = waiter;
+        _pauseConfirmWaiters[id] =
+            (completer: waiter, createdAt: DateTime.now());
         try {
           await _torrentLock.synchronized(() async {
             try {
@@ -1150,7 +1194,8 @@ class TorrentService {
         } catch (e) {
           _log.fine('Pause verification check attempt $attempt caught: $e');
         } finally {
-          if (identical(_pauseConfirmWaiters[id], waiter)) {
+          final current = _pauseConfirmWaiters[id];
+          if (current != null && identical(current.completer, waiter)) {
             _pauseConfirmWaiters.remove(id);
           }
         }
@@ -1448,7 +1493,11 @@ class TorrentService {
 
   static void enableSequentialDownload(int torrentId, bool enabled) {
     if (!isInitialized || torrentId < 0) return;
-    _native.setSequentialDownload(torrentId, enabled);
+    if (sequentialDownloadSupported) {
+      _native.setSequentialDownload(torrentId, enabled);
+    } else {
+      _log.fine('Sequential download not supported by native engine; ignored');
+    }
   }
 
   static void setPieceDeadline(int torrentId, int pieceIndex, int deadlineMs) {
@@ -1659,7 +1708,7 @@ class TorrentService {
   }
 
   static void autoEnableSequentialForVideo(int torrentId) {
-    if (!isInitialized || torrentId < 0) return;
+    if (!isInitialized || torrentId < 0 || !sequentialDownloadSupported) return;
     try {
       final nativeFiles = _native.getFiles(torrentId);
       final hasVideo = nativeFiles.any((f) =>
@@ -1867,9 +1916,8 @@ class TorrentServiceImpl implements ITorrentService {
   Map<String, dynamic>? getTorrentSnapshot(int id) => null;
   @override
 
-  /// Native core version bundled by libtorrent_flutter 2.0.0.
-  /// The v2.0.0 release is built against libtorrent core 2.1.1.
-  String get nativeVersion => '2.1.1';
+  /// Native core version bundled by libtorrent_flutter 1.9.2.
+  String get nativeVersion => '1.9.2';
   @override
   void configureSession([TorrentSessionSettings? settings]) =>
       TorrentService.configureSession(settings);

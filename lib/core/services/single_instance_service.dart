@@ -152,9 +152,11 @@ class SingleInstanceService {
 
     _serverSubscription = _server?.listen((HttpRequest request) async {
       try {
+        final tokenHeader = request.headers.value('X-DMX-Auth-Token');
         final tokenParam = request.uri.queryParameters['token'];
-        if (tokenParam == null ||
-            !timingSafeEqual(tokenParam, _securityToken!)) {
+        final token = tokenHeader ?? tokenParam;
+        if (token == null ||
+            !timingSafeEqual(token, _securityToken!)) {
           request.response.statusCode = HttpStatus.forbidden;
           await request.response.close();
           return;
@@ -281,10 +283,10 @@ class SingleInstanceService {
     try {
       final queryParams = <String, String>{
         'url': candidateUrl,
-        'token': token,
       };
       final uri = Uri.http('127.0.0.1:$port', '/', queryParams);
-      final req = await client.getUrl(uri);
+      final req = await client.postUrl(uri);
+      req.headers.set('X-DMX-Auth-Token', token);
       final response = await req.close();
       return response.statusCode == HttpStatus.ok;
     } catch (e) {

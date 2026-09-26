@@ -80,8 +80,17 @@ class LoggingService {
   static void _bufferReleaseLog(String entry) {
     _bufferLock.synchronized(() {
       _releaseLogBuffer.add(entry);
+      while (_releaseLogBuffer.length > _maxReleaseBufferSize * 2) {
+        _releaseLogBuffer.removeAt(0);
+      }
       if (_releaseLogBuffer.length >= _maxReleaseBufferSize) {
-        flushLogBuffer();
+        try {
+          flushLogBuffer();
+        } catch (_) {
+          while (_releaseLogBuffer.length >= _maxReleaseBufferSize) {
+            _releaseLogBuffer.removeAt(0);
+          }
+        }
         _releaseFlushTimer?.cancel();
         _releaseFlushTimer = null;
       } else {

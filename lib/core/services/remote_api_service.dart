@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -18,15 +19,20 @@ class RemoteApiService {
   static String? _cachedTokenFilePath;
 
   static const _tokenFileName = '.xdm_remote_token';
-  // FIX-7.3: Rate limiting state
-  static final List<int> _requestTimestamps = [];
+  // FIX-7.3: Rate limiting state. Timestamps are appended in non-decreasing
+  // order, so a Queue lets us drop expired entries from the front in O(k)
+  // without the per-request O(n) allocation/GC churn of List.removeWhere.
+  static final Queue<int> _requestTimestamps = Queue<int>();
   static const int _maxRequestsPerMinute = 120;
   static const int _maxRequestSize = 65536;
 
   static bool _checkRateLimit() {
     final now = DateTime.now().millisecondsSinceEpoch;
     final oneMinAgo = now - 60000;
-    _requestTimestamps.removeWhere((ts) => ts < oneMinAgo);
+    while (_requestTimestamps.isNotEmpty &&
+        _requestTimestamps.first < oneMinAgo) {
+      _requestTimestamps.removeFirst();
+    }
     if (_requestTimestamps.length >= _maxRequestsPerMinute) {
       return false;
     }

@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import 'package:crypto/crypto.dart';
 import 'package:dmx/core/services/update_service.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -9,12 +9,25 @@ void main() {
 
   late Directory tempDir;
   late File mockApkFile;
+  const mockFingerprint =
+      'aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899';
 
   setUp(() async {
     tempDir = await Directory.systemTemp.createTemp('update_test_');
     mockApkFile = File('${tempDir.path}/test_app.apk');
     // Valid ZIP header PK\x03\x04 + dummy content
     await mockApkFile.writeAsBytes([0x50, 0x4B, 0x03, 0x04, 1, 2, 3, 4, 5]);
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('com.dmx.app/security'),
+      (methodCall) async {
+        if (methodCall.method == 'verifyApkSignature') {
+          return mockFingerprint;
+        }
+        return null;
+      },
+    );
   });
 
   tearDown(() async {
@@ -55,13 +68,10 @@ void main() {
     });
 
     test('Matching certificate fingerprint passes verification', () async {
-      final bytes = await mockApkFile.readAsBytes();
-      final expectedHash = sha256.convert(bytes).toString();
-
       final service = UpdateService();
       final result = await service.verifyApkSignature(
         mockApkFile,
-        expectedFingerprint: expectedHash,
+        expectedFingerprint: mockFingerprint,
       );
 
       expect(result.isValid, isTrue);

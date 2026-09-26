@@ -12,16 +12,16 @@ class _HostCaps {
 
   _HostCaps({required this.support, required this.at});
 
-  bool get isExpired => DateTime.now().difference(at) > ProtocolCache._ttl;
+  bool get isExpired => DateTime.now().toUtc().difference(at.toUtc()) > ProtocolCache._ttl;
 
   Map<String, dynamic> toJson() => {
         'support': support.name,
-        'at': at.toIso8601String(),
+        'at': at.toUtc().toIso8601String(),
       };
 
   factory _HostCaps.fromJson(Map<String, dynamic> json) => _HostCaps(
         support: ProtocolSupport.values.byName(json['support'] as String),
-        at: DateTime.parse(json['at'] as String),
+        at: DateTime.parse(json['at'] as String).toUtc(),
       );
 }
 
@@ -78,7 +78,7 @@ class ProtocolCache {
 
     await _lock.synchronized(() async {
       _cache ??= {};
-      _cache![host] = _HostCaps(support: support, at: DateTime.now());
+      _cache![host] = _HostCaps(support: support, at: DateTime.now().toUtc());
 
       // Cap cache to 500 entries, evicting expired then oldest
       if (_cache!.length > _maxEntries) {

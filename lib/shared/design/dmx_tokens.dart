@@ -1,3 +1,6 @@
+import 'package:flutter/animation.dart';
+import '../../core/app_theme.dart';
+
 /// DMX Design Tokens — Single source of truth for all visual constants
 abstract final class DmxTokens {
   // === SPACING SCALE (4px base) ===
@@ -27,9 +30,9 @@ abstract final class DmxTokens {
   static const double iconXl = 32.0;
   static const double iconDisplay = 48.0;
 
-  // === FONT SIZES ===
-  static const double textXs = 9.0;
-  static const double textSm = 11.0;
+  // === FONT SIZES (Enforces 11sp floor for WCAG AA compliance) ===
+  static const double textXs = 11.0;
+  static const double textSm = 12.0;
   static const double textMd = 13.0;
   static const double textLg = 15.0;
   static const double textXl = 18.0;
@@ -41,11 +44,13 @@ abstract final class DmxTokens {
   static const double cardMinHeight = 80.0;
   static const double cardMaxWidth = 600.0;
 
-  // === ANIMATION DURATIONS ===
-  static const Duration animFast = Duration(milliseconds: 150);
-  static const Duration animNormal = Duration(milliseconds: 250);
-  static const Duration animSlow = Duration(milliseconds: 400);
-  static const Duration animReveal = Duration(milliseconds: 600);
+  // === ANIMATION DURATIONS (Unified with AppTheme motion tokens) ===
+  static const Duration animFast = AppTheme.motionFast;
+  static const Duration animNormal = AppTheme.motionBase;
+  static const Duration animSlow = AppTheme.motionSlow;
+  static const Duration animReveal = AppTheme.motionReveal;
+  static const Curve animCurve = AppTheme.motionCurve;
+  static const Curve animSpring = AppTheme.motionSpring;
 
   // === ELEVATION ===
   static const double elevationSm = 2.0;

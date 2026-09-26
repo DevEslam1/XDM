@@ -255,7 +255,7 @@ class MetadataProbeService {
         }
         supportsResume = isYoutube ||
             getResponse.statusCode == 206 ||
-            getResponse.headers.value('accept-ranges') == 'bytes';
+            getResponse.headers.value('accept-ranges')?.toLowerCase() == 'bytes';
         await getResponse.data?.stream.listen((_) {}).cancel();
       }
     } catch (e) {

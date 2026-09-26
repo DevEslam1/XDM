@@ -655,7 +655,10 @@ class _AppLifecycleObserver with WidgetsBindingObserver {
   static const _iosTorrentChannel = MethodChannel(
     'com.dmx.app/torrent_background',
   );
-  static bool _transitionInProgress = false;
+  @override
+  void didChangeMetrics() {
+    unawaited(PowerMonitor.updateScreenStateFromPlatform());
+  }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -679,7 +682,8 @@ class _AppLifecycleObserver with WidgetsBindingObserver {
         getIt<AmbientAnimationController>().stopAll();
       }
     }
-    PowerMonitor.setScreenOn(isResumed);
+    PowerMonitor.isAppForegrounded = isResumed;
+    unawaited(PowerMonitor.updateScreenStateFromPlatform());
 
     if (state == AppLifecycleState.resumed) {
       unawaited(

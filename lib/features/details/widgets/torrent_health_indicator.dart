@@ -26,16 +26,29 @@ HealthLevel calculateHealth({
   required double distributedCopies,
   required double downloadRate,
 }) {
-  // If data is actively flowing, the torrent is NOT dead — there must be at
-  // least one peer or web-seed connected even if the reported count is 0.
-  if (seeds <= 0 && peers <= 0 && downloadRate <= 0) return HealthLevel.dead;
-  if (seeds >= 10 && downloadRate > 100 * 1024) return HealthLevel.excellent;
-  if (seeds >= 3 || downloadRate > 20 * 1024) return HealthLevel.good;
-  if (seeds > 0 || peers > 0 || downloadRate > 0) return HealthLevel.fair;
-  // Health is derived only from real seeds/peers/rate. `availability` and
-  // `distributedCopies` are not used: the 1.9.2 bridge hardcodes
-  // distributedCopies to 0.0, so keying health off it would silently skew it.
-  return HealthLevel.good;
+  // If data is actively flowing or availability is positive, the torrent is NOT dead.
+  if (seeds <= 0 && peers <= 0 && downloadRate <= 0 && availability <= 0) {
+    return HealthLevel.dead;
+  }
+
+  // Effective copies: use direct availability/distributedCopies if positive;
+  // otherwise estimate from seeds/peers.
+  final effectiveCopies = availability > 0
+      ? availability
+      : (distributedCopies > 0
+          ? distributedCopies
+          : (seeds > 0 ? seeds.toDouble() : (peers > 0 ? 0.5 : 0.0)));
+
+  if ((seeds >= 10 || effectiveCopies >= 10) && downloadRate > 100 * 1024) {
+    return HealthLevel.excellent;
+  }
+  if (seeds >= 3 || effectiveCopies >= 3 || downloadRate > 20 * 1024) {
+    return HealthLevel.good;
+  }
+  if (seeds > 0 || effectiveCopies >= 1.0 || downloadRate > 0 || peers >= 3) {
+    return HealthLevel.fair;
+  }
+  return HealthLevel.poor;
 }
 
 class TorrentHealthIndicator extends StatelessWidget {

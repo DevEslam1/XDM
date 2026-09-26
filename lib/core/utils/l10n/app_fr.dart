@@ -46,7 +46,7 @@ const Map<String, String> frTranslations = {
   'browser_alternative_stream': 'Flux alternatif',
   'browser_apply_uppercase': 'APPLIQUER',
   'browser_audio_stream': 'Flux audio',
-  'browser_auto_intercept_active': 'INTERCEPTION AUTOMATIQUE ACTIVES',
+  'browser_auto_intercept_active': 'INTERCEPTION AUTOMATIQUE ACTIVE',
   'browser_auto_intercept_off': 'INTERCEPTION AUTOMATIQUE DÉSACTIVÉE',
   'browser_bookmark_saved': 'Favori enregistré',
   'browser_bookmarks': 'Favoris',

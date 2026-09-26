@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/widgets.dart';
 import 'package:logging/logging.dart';
 import 'download_engine.dart';
 import 'performance_monitor.dart';
@@ -85,8 +86,10 @@ class FrameWatchdog {
     // per-frame integer counters; the verbose jank logs below are debug-level).
     // This is what makes release-mode jank auto-degrade work. The screen-off /
     // background guards below still keep it idle when there is nothing to watch.
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
     if (_isRunning ||
         PowerMonitor.screenOff ||
+        (lifecycle != null && lifecycle != AppLifecycleState.resumed) ||
         !DownloadEngine.appInForeground ||
         DownloadEngine.isInBackground) {
       return;
@@ -107,8 +110,10 @@ class FrameWatchdog {
 
   // FIX-H9: Resume when active and screen is on
   static void resume() {
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
     if (_isRunning ||
         PowerMonitor.screenOff ||
+        (lifecycle != null && lifecycle != AppLifecycleState.resumed) ||
         !DownloadEngine.appInForeground ||
         DownloadEngine.isInBackground) {
       return;
@@ -125,7 +130,9 @@ class FrameWatchdog {
   }
 
   static void _onTimings(List<FrameTiming> timings) {
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
     if (PowerMonitor.screenOff ||
+        (lifecycle != null && lifecycle != AppLifecycleState.resumed) ||
         !DownloadEngine.appInForeground ||
         DownloadEngine.isInBackground) {
       return;

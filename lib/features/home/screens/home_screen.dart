@@ -15,12 +15,14 @@ import '../../../shared/widgets/geometric_grid_background.dart';
 import '../../../shared/widgets/skeleton_loader.dart';
 // themed_snackbar removed - unused in this file
 import '../../add_download/widgets/add_download_dialog.dart';
+import '../../categories/screens/categories_screen.dart';
 import '../../downloads/models/download_task.dart';
 import '../../downloads/provider/download_provider.dart';
 import '../../downloads/widgets/batch_operations_sheet.dart';
 import '../../downloads/widgets/download_card.dart';
 import '../../downloads/widgets/download_stats_panel.dart';
 import '../../downloads/widgets/filter_chips_bar.dart';
+import '../../history/screens/history_screen.dart';
 import '../../settings/provider/settings_provider.dart';
 
 bool _isActiveTask(DownloadTask t) {
@@ -180,6 +182,15 @@ class _HomeScreenState extends State<HomeScreen>
                     accentClr: accentClr,
                     isRtl: isRtl,
                   ),
+            drawer: isInSelectionMode
+                ? null
+                : _buildDrawer(
+                    context,
+                    isDark,
+                    settingsState.isAmoledMode,
+                    textClr,
+                    accentClr,
+                  ),
             bottomNavigationBar: isInSelectionMode
                 ? _buildBatchActionBar(context, isDark, textClr, accentClr)
                 : null,
@@ -326,6 +337,78 @@ class _HomeScreenState extends State<HomeScreen>
           ),
         );
       },
+    );
+  }
+
+  Widget _buildDrawer(
+    BuildContext context,
+    bool isDark,
+    bool isAmoled,
+    Color textClr,
+    Color accentClr,
+  ) {
+    final bg = isDark
+        ? (isAmoled ? AppTheme.amoledBackground : AppTheme.surface)
+        : AppTheme.lightSurface;
+    return Drawer(
+      backgroundColor: bg,
+      child: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Icon(Icons.download_rounded, color: accentClr, size: 28),
+                  const SizedBox(width: 12),
+                  Text(
+                    'XDM',
+                    style: TextStyle(
+                      color: textClr,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Divider(
+              color: isDark
+                  ? (isAmoled ? AppTheme.amoledBorder : AppTheme.border)
+                  : AppTheme.lightBorder,
+            ),
+            ListTile(
+              leading: Icon(Icons.home_outlined, color: textClr),
+              title: Text('Transmissions', style: TextStyle(color: textClr)),
+              onTap: () => Navigator.pop(context),
+            ),
+            ListTile(
+              leading: Icon(Icons.category_outlined, color: textClr),
+              title: Text('Categories', style: TextStyle(color: textClr)),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const CategoriesScreen()),
+                );
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.history_rounded, color: textClr),
+              title: Text('History', style: TextStyle(color: textClr)),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const HistoryScreen()),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -526,7 +609,31 @@ class _HomeScreenState extends State<HomeScreen>
               ],
             ),
       actions: [
-        if (!_isSearching)
+        if (!_isSearching) ...[
+          _AppBarIconButton(
+            icon: Icons.category_outlined,
+            color: textClr,
+            tooltip: 'Categories',
+            onPressed: () {
+              triggerHaptic(context.read<SettingsProvider>());
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const CategoriesScreen()),
+              );
+            },
+          ),
+          _AppBarIconButton(
+            icon: Icons.history_rounded,
+            color: textClr,
+            tooltip: 'History',
+            onPressed: () {
+              triggerHaptic(context.read<SettingsProvider>());
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const HistoryScreen()),
+              );
+            },
+          ),
           _AppBarIconButton(
             icon: _showAnalytics
                 ? Icons.pie_chart_rounded
@@ -538,6 +645,7 @@ class _HomeScreenState extends State<HomeScreen>
               setState(() => _showAnalytics = !_showAnalytics);
             },
           ),
+        ],
         _AppBarIconButton(
           icon: _isSearching ? Icons.close_rounded : Icons.search_rounded,
           color: _isSearching ? accentClr : textClr,
@@ -1436,57 +1544,76 @@ class _RedesignedAnalyticsPanel extends StatelessWidget {
                                 : '${sizeMb.toStringAsFixed(0)}M';
                             return Padding(
                               padding: const EdgeInsets.symmetric(
-                                vertical: 3,
+                                vertical: 2,
                               ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 8,
-                                    height: 8,
-                                    decoration: BoxDecoration(
-                                      color: card['color'] as Color,
-                                      borderRadius: BorderRadius.circular(3),
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(6),
+                                onTap: () {
+                                  triggerHaptic(context.read<SettingsProvider>());
+                                  context
+                                      .read<DownloadProvider>()
+                                      .toggleCategoryFilter(name);
+                                },
+                                child: Semantics(
+                                  button: true,
+                                  label: 'Filter by $name',
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 4,
+                                      vertical: 2,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          width: 8,
+                                          height: 8,
+                                          decoration: BoxDecoration(
+                                            color: card['color'] as Color,
+                                            borderRadius: BorderRadius.circular(3),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Icon(
+                                          card['icon'] as IconData,
+                                          size: 11,
+                                          color: (card['color'] as Color)
+                                              .withValues(alpha: 0.7),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: Text(
+                                            isRtl ? _translateCat(name) : name,
+                                            style: TextStyle(
+                                              color: textClr,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        Text(
+                                          '${pct.toStringAsFixed(0)}%',
+                                          style: TextStyle(
+                                            color: card['color'] as Color,
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.w700,
+                                            fontFamily: 'monospace',
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          sizeText,
+                                          style: TextStyle(
+                                            color: mutedClr,
+                                            fontSize: 9,
+                                            fontFamily: 'monospace',
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
-                                  Icon(
-                                    card['icon'] as IconData,
-                                    size: 11,
-                                    color: (card['color'] as Color)
-                                        .withValues(alpha: 0.7),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Expanded(
-                                    child: Text(
-                                      isRtl ? _translateCat(name) : name,
-                                      style: TextStyle(
-                                        color: textClr,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  Text(
-                                    '${pct.toStringAsFixed(0)}%',
-                                    style: TextStyle(
-                                      color: card['color'] as Color,
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w700,
-                                      fontFamily: 'monospace',
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    sizeText,
-                                    style: TextStyle(
-                                      color: mutedClr,
-                                      fontSize: 9,
-                                      fontFamily: 'monospace',
-                                    ),
-                                  ),
-                                ],
+                                ),
                               ),
                             );
                           }).toList(),

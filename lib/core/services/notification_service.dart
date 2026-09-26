@@ -48,17 +48,30 @@ Future<void> _forwardBackgroundAction(String actionId, String? payload) async {
             RegExp(r'^[a-zA-Z0-9_\-]+$').hasMatch(payload))
         ? payload
         : null;
-    final prefs = await SharedPreferences.getInstance();
-    final nonce = prefs.getString(_nonceKey);
-    final rawList = prefs.getStringList(_pendingActionsKey) ?? <String>[];
-    final actionJson = jsonEncode({
-      'action': actionId,
-      'taskId': safeTaskId,
-      'nonce': nonce,
-      'timestamp': DateTime.now().millisecondsSinceEpoch,
+
+    String? nonce;
+    await _nonceLock.synchronized(() async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+      var currentNonce = prefs.getString(_nonceKey);
+      if (currentNonce == null || currentNonce.isEmpty) {
+        final rand = Random.secure();
+        currentNonce = base64Encode(
+          List<int>.generate(16, (_) => rand.nextInt(256)),
+        );
+        await prefs.setString(_nonceKey, currentNonce);
+      }
+      nonce = currentNonce;
+      final rawList = prefs.getStringList(_pendingActionsKey) ?? <String>[];
+      final actionJson = jsonEncode({
+        'action': actionId,
+        'taskId': safeTaskId,
+        'nonce': nonce,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      });
+      rawList.add(actionJson);
+      await prefs.setStringList(_pendingActionsKey, rawList);
     });
-    rawList.add(actionJson);
-    await prefs.setStringList(_pendingActionsKey, rawList);
 
     final port = IsolateNameServer.lookupPortByName('dmx_notification_port');
     if (port != null) {
@@ -73,6 +86,7 @@ Future<void> _forwardBackgroundAction(String actionId, String? payload) async {
   }
 }
 
+final Lock _nonceLock = Lock();
 String? _nonce;
 
 class NotificationService {
@@ -84,20 +98,23 @@ class NotificationService {
   factory NotificationService() => _instance;
 
   Future<void> _ensureNoncePersisted() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      var persistedNonce = prefs.getString(_nonceKey);
-      if (persistedNonce == null || persistedNonce.isEmpty) {
-        final rand = Random.secure();
-        persistedNonce = base64Encode(
-          List<int>.generate(16, (_) => rand.nextInt(256)),
-        );
-        await prefs.setString(_nonceKey, persistedNonce);
+    await _nonceLock.synchronized(() async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.reload();
+        var persistedNonce = prefs.getString(_nonceKey);
+        if (persistedNonce == null || persistedNonce.isEmpty) {
+          final rand = Random.secure();
+          persistedNonce = base64Encode(
+            List<int>.generate(16, (_) => rand.nextInt(256)),
+          );
+          await prefs.setString(_nonceKey, persistedNonce);
+        }
+        _nonce = persistedNonce;
+      } catch (e) {
+        debugPrint('[NotificationService] Failed to ensure nonce: $e');
       }
-      _nonce = persistedNonce;
-    } catch (e) {
-      debugPrint('[NotificationService] Failed to ensure nonce: $e');
-    }
+    });
   }
 
   final FlutterLocalNotificationsPlugin _plugin =
@@ -257,53 +274,60 @@ class NotificationService {
     }
   }
 
+  final Lock _actionsLock = Lock();
+
   Future<void> processPendingBackgroundActions() async {
     if (!isSupported) return;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final rawList = prefs.getStringList(_pendingActionsKey);
-      if (rawList == null || rawList.isEmpty) return;
+    await _actionsLock.synchronized(() async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.reload();
+        final rawList = prefs.getStringList(_pendingActionsKey);
+        if (rawList == null || rawList.isEmpty) return;
 
-      for (final rawJson in rawList) {
-        try {
-          final map = jsonDecode(rawJson) as Map<String, dynamic>;
-          final action = map['action'] as String?;
-          final taskId = map['taskId'] as String?;
-          final receivedNonce = map['nonce'] as String?;
-          if (_nonce != null &&
-              receivedNonce != null &&
-              receivedNonce != _nonce) {
-            debugPrint(
-              '[NotificationService] Invalid nonce in pending action - ignoring',
-            );
-            continue;
-          }
-          if (action != null) {
-            if (_groupActions.contains(action)) {
-              _addAction({'action': action});
-            } else if (taskId != null && _isValidTaskId(taskId)) {
-              _addAction({'action': action, 'taskId': taskId});
+        for (final rawJson in rawList) {
+          try {
+            final map = jsonDecode(rawJson) as Map<String, dynamic>;
+            final action = map['action'] as String?;
+            final taskId = map['taskId'] as String?;
+            final receivedNonce = map['nonce'] as String?;
+            if (_nonce != null &&
+                receivedNonce != null &&
+                receivedNonce != _nonce) {
+              debugPrint(
+                '[NotificationService] Invalid nonce in pending action - ignoring',
+              );
+              continue;
             }
+            if (action != null) {
+              if (_groupActions.contains(action)) {
+                _addAction({'action': action});
+              } else if (taskId != null && _isValidTaskId(taskId)) {
+                _addAction({'action': action, 'taskId': taskId});
+              }
+            }
+          } catch (e) {
+            debugPrint(
+              '[NotificationService] Error decoding pending action: $e',
+            );
           }
-        } catch (e) {
-          debugPrint(
-            '[NotificationService] Error decoding pending action: $e',
-          );
         }
-      }
 
-      final latestList = prefs.getStringList(_pendingActionsKey) ?? <String>[];
-      latestList.removeWhere((item) => rawList.contains(item));
-      if (latestList.isEmpty) {
-        await _clearPendingActions();
-      } else {
-        await prefs.setStringList(_pendingActionsKey, latestList);
+        await prefs.reload();
+        final latestList =
+            prefs.getStringList(_pendingActionsKey) ?? <String>[];
+        latestList.removeWhere((item) => rawList.contains(item));
+        if (latestList.isEmpty) {
+          await _clearPendingActions();
+        } else {
+          await prefs.setStringList(_pendingActionsKey, latestList);
+        }
+      } catch (e) {
+        debugPrint(
+          '[NotificationService] Failed to process pending background actions: $e',
+        );
       }
-    } catch (e) {
-      debugPrint(
-        '[NotificationService] Failed to process pending background actions: $e',
-      );
-    }
+    });
   }
 
   void startPollingPendingActions() {

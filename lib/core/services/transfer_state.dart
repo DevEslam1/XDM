@@ -172,17 +172,18 @@ class TransferState {
           (json['v'] as num?)?.toInt() ?? (json['version'] as num?)?.toInt();
       if (v != null && v != currentVersion) return null;
       final rawChunks = json['chunks'];
-      if (rawChunks is! List || rawChunks.isEmpty) return null;
+      if (rawChunks is! List) return null;
       final chunks = rawChunks
           .whereType<Map>()
           .map((c) => ChunkState.fromJson(Map<String, dynamic>.from(c)))
           .toList();
-      if (chunks.isEmpty) return null;
+      if (rawChunks.isNotEmpty && chunks.isEmpty) return null;
       final statusName = json['status'] as String? ?? 'active';
       return TransferState(
         totalSize:
             ((json['totalSize'] as num?)?.toInt() ?? 0).clamp(0, 1 << 62),
-        threadCount: ((json['threadCount'] as num?)?.toInt() ?? chunks.length)
+        threadCount: ((json['threadCount'] as num?)?.toInt() ??
+                (chunks.isEmpty ? 1 : chunks.length))
             .clamp(1, 64),
         chunks: chunks,
         url: json['url'] as String?,
@@ -327,10 +328,11 @@ class IncrementalStateEncoder {
 
   /// Applies a binary [diff] onto [base] to produce an updated [TransferState].
   static TransferState applyDiff(TransferState base, Uint8List diff) {
-    if (diff.isEmpty || diff[0] != diffVersion) return base;
+    if (diff.length < 2 || diff[0] != diffVersion) return base;
 
-    int offset = 1;
-    final mask = diff[offset++];
+    try {
+      int offset = 1;
+      final mask = diff[offset++];
 
     int totalSize = base.totalSize;
     int threadCount = base.threadCount;
@@ -403,7 +405,10 @@ class IncrementalStateEncoder {
       pauseReason: base.pauseReason,
       updatedAt: DateTime.now(),
     );
+  } catch (_) {
+    return base;
   }
+}
 
   static void _writeVarint(BytesBuilder bytes, int value) {
     var v = value;

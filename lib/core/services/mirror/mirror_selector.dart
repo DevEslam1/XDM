@@ -4,6 +4,7 @@ import 'dart:math' show max;
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
+import 'package:synchronized/synchronized.dart';
 import '../circuit_breaker.dart';
 import '../protocol_cache.dart';
 import '../retry_engine.dart';
@@ -439,12 +440,20 @@ class MirrorFailover {
   ProtocolSupport? _protocolHint;
 
   final Map<String, CircuitBreaker> _circuits = {};
+  final Lock _advanceLock = Lock();
+  bool _isAdvancing = false;
+  String? _lastAdvancedFromUrl;
+  DateTime? _lastAdvanceTime;
 
   String get activeUrl => _urls.isEmpty ? '' : _urls[_index];
   bool get hasAlternatives => _urls.length > 1;
   int get remainingAlternatives => _urls.length - 1 - _index;
   int get mirrorSwitches => _switches;
   ProtocolSupport? get protocolHint => _protocolHint;
+
+  Future<String?> advanceAsync([String? failedUrl]) async {
+    return _advanceLock.synchronized(() => advance(failedUrl));
+  }
 
   int _compareCandidates(String urlA, String urlB) {
     final speedA = MirrorHealthStore.instance.getPersistedSpeed(urlA);
@@ -476,14 +485,58 @@ class MirrorFailover {
         .recordSuccess(_urls[_index], speedBps: speedBps);
   }
 
-  String? advance() {
+  String? advance([String? failedUrl]) {
     if (_urls.isEmpty) return null;
+    if (_isAdvancing) return activeUrl;
+    _isAdvancing = true;
 
-    final validUrls = _urls
+    try {
+      final now = DateTime.now();
+      // C1: If the caller failed on a specific URL, and activeUrl has ALREADY
+      // advanced past failedUrl (due to another concurrent worker failing and advancing),
+      // OR if we just advanced away from failedUrl within the last 5 seconds,
+      // do not advance again! Return the current activeUrl directly so concurrent workers
+      // don't stomp each other and prematurely exhaust the mirror list.
+      if (failedUrl != null &&
+          (failedUrl != activeUrl ||
+              (failedUrl == _lastAdvancedFromUrl &&
+                  _lastAdvanceTime != null &&
+                  now.difference(_lastAdvanceTime!) <
+                      const Duration(seconds: 5)))) {
+        debugPrint(
+          '[MirrorFailover] De-raced failover: active mirror is already $activeUrl (caller failed on $failedUrl)',
+        );
+        return activeUrl;
+      }
+      if (failedUrl == null &&
+          _lastAdvanceTime != null &&
+          now.difference(_lastAdvanceTime!) < const Duration(seconds: 1)) {
+        debugPrint(
+          '[MirrorFailover] De-raced rapid failover: mirror recently advanced to $activeUrl',
+        );
+        return activeUrl;
+      }
+
+      final failTarget = failedUrl ?? activeUrl;
+      _lastAdvancedFromUrl = failTarget;
+      _lastAdvanceTime = now;
+    final circuit = _circuits.putIfAbsent(
+      failTarget,
+      () => CircuitBreaker(
+        failureThreshold: 3,
+        openTimeout: const Duration(minutes: 30),
+      ),
+    );
+    circuit.recordFailure();
+
+    // Rotate candidates starting from (_index + 1) so round-robin cycles forward
+    final rotated = <String>[
+      for (var i = 1; i < _urls.length; i++) _urls[(_index + i) % _urls.length],
+    ];
+    final validUrls = rotated
         .where((u) => !MirrorHealthStore.instance.isBlacklisted(u))
         .toList();
-    final candidates =
-        validUrls.isNotEmpty ? validUrls : List<String>.from(_urls);
+    final candidates = validUrls.isNotEmpty ? validUrls : rotated;
 
     var available = candidates.where((u) {
       final cb = _circuits.putIfAbsent(
@@ -523,7 +576,10 @@ class MirrorFailover {
     _switches++;
     _protocolHint = ProtocolCache.get(_urls[_index]);
     return _urls[_index];
+  } finally {
+    _isAdvancing = false;
   }
+}
 
   void reportSlowMirror(String slowUrl, String fastUrl) {
     debugPrint(

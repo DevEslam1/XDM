@@ -60,7 +60,7 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
       _inactiveTimer = null;
       isAppForegrounded = true;
       PowerMonitor.isAppForegrounded = true;
-      PowerMonitor.setScreenOn(true);
+      unawaited(PowerMonitor.updateScreenStateFromPlatform());
       DownloadEngine.markForeground();
       // Task 2.3: use explicit markForeground() instead of inverted isInBackground setter
 
@@ -100,14 +100,14 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
         state == AppLifecycleState.detached) {
       _inactiveTimer?.cancel();
       _inactiveTimer = null;
-      _suspendAmbientWork();
+      unawaited(_suspendAmbientWork());
     }
   }
 
-  void _suspendAmbientWork() {
+  Future<void> _suspendAmbientWork() async {
     isAppForegrounded = false;
     PowerMonitor.isAppForegrounded = false;
-    PowerMonitor.setScreenOn(false);
+    unawaited(PowerMonitor.updateScreenStateFromPlatform());
     DownloadEngine.markBackground();
     // Task 2.3: use explicit markBackground() instead of inverted isInBackground setter
 
@@ -138,14 +138,26 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
 
     // Torrent & Worker Isolate Hard Deadline on Pause
     try {
-      unawaited(Future(() async {
-        try {
-          await TorrentService.saveAllResumeData()
-              .timeout(const Duration(milliseconds: 500));
-        } catch (_) {
-          DownloadEngine.forceKillAllIsolates();
+      try {
+        await TorrentService.saveAllResumeData()
+            .timeout(const Duration(milliseconds: 1000));
+      } catch (_) {
+        // F29: previously this hard-killed EVERY worker isolate — including
+        // actively-transferring HTTP downloads — the moment the torrent
+        // resume-save deadline elapsed. On this build torrent resume is
+        // unsupported, so `saveAllResumeData` always times out, which meant
+        // every backgrounding killed in-flight downloads mid-write and lost
+        // their progress. Never kill isolates while any download is active;
+        // HTTP workers persist their own state as they go.
+        if (DownloadEngine.hasActiveDownloads) {
+          LoggingService.logger('AppLifecycleCoordinator').info(
+            'Skipping force-kill of download isolates on background: '
+            '${DownloadEngine.activeDownloadsCount} download(s) still active',
+          );
+          return;
         }
-      }));
+        DownloadEngine.forceKillAllIsolates();
+      }
     } catch (_) {}
   }
 }

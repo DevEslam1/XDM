@@ -193,5 +193,43 @@ void main() {
 
       handler.dispose();
     });
+
+    test('chunk fingerprint is order-sensitive (M-5)', () async {
+      final handler = DownloadProgressHandler(
+        taskId: 'chunk_order_1',
+        onProgress: (_) {},
+        cancelToken: CancelToken(),
+        resolvedFileName: 'test.mp4',
+        resolvedSupportsResume: true,
+        ytStreamKind: null,
+        ytCounterpartSize: null,
+        ytCounterpartDownloadedBytes: null,
+        isTorrent: false,
+        getEffectiveIntervalMs: () => 100,
+        lastDownloadedBytes: 0,
+        lastFileSize: 1000,
+      );
+
+      final a = {'start': 0, 'end': 99, 'size': 100, 'downloaded': 50};
+      final b = {'start': 100, 'end': 199, 'size': 100, 'downloaded': 20};
+
+      await handler.handleProgress({
+        'downloadedBytes': 70,
+        'fileSize': 1000,
+        'chunkDetails': [a, b],
+      });
+      final orderedFingerprint = handler.chunkFingerprint;
+
+      await handler.handleProgress({
+        'downloadedBytes': 70,
+        'fileSize': 1000,
+        'chunkDetails': [b, a],
+      });
+      final swappedFingerprint = handler.chunkFingerprint;
+
+      expect(orderedFingerprint, isNot(swappedFingerprint));
+
+      handler.dispose();
+    });
   });
 }

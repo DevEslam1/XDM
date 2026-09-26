@@ -60,7 +60,7 @@ class BackgroundScheduler {
     final isBackground =
         DownloadEngine.isInBackground || PowerMonitor.screenOff;
 
-    Duration minDelay = const Duration(seconds: 60);
+    Duration minDelay = const Duration(hours: 24);
 
     for (final task in _tasks.values) {
       final effectiveInterval =
@@ -68,7 +68,7 @@ class BackgroundScheduler {
       final elapsed = now.difference(task.lastRun);
       final remaining = effectiveInterval - elapsed;
       if (remaining <= Duration.zero) {
-        minDelay = const Duration(seconds: 1);
+        minDelay = const Duration(milliseconds: 50);
         break;
       }
       if (remaining < minDelay) {
@@ -76,8 +76,10 @@ class BackgroundScheduler {
       }
     }
 
-    final delaySeconds = minDelay.inSeconds.clamp(1, 60);
-    _masterTimer = Timer(Duration(seconds: delaySeconds), () => _tick());
+    if (minDelay < const Duration(milliseconds: 50)) {
+      minDelay = const Duration(milliseconds: 50);
+    }
+    _masterTimer = Timer(minDelay, () => _tick());
   }
 
   /// Stops the master tick timer.

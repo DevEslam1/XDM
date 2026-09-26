@@ -165,13 +165,19 @@ class DioClientPool implements DisposableService, MemoryPressureListener {
     );
   }
 
+  bool _isDisposed = false;
+  bool get isDisposed => _isDisposed;
+
   void _performCleanup() {
+    if (_isDisposed) return;
     // FIX-P1-06: Debounce — coalesce bursts of releaseClient() calls into a
     // single cleanup pass 1s after the last one.
     _cleanupDebounceTimer?.cancel();
     _cleanupDebounceTimer = Timer(_cleanupDebounce, () {
       _cleanupDebounceTimer = null;
-      _runCleanup();
+      if (!_isDisposed) {
+        _runCleanup();
+      }
     });
   }
 
@@ -386,6 +392,7 @@ class DioClientPool implements DisposableService, MemoryPressureListener {
 
   @override
   Future<void> dispose() async {
+    _isDisposed = true;
     ServiceRegistry.unregister(this);
     ServiceRegistry.unregisterMemoryPressureListener(this);
     _cleanupDebounceTimer?.cancel();

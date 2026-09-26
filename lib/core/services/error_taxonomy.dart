@@ -167,6 +167,21 @@ class ErrorTaxonomy {
       );
     }
 
+    if (error is StatePersistenceException) {
+      // F26: resume-state cannot be written (folder not writable / permission
+      // revoked under scoped storage). Actionable and non-retryable until the
+      // destination changes.
+      return ErrorClassification(
+        family: ErrorFamily.disk,
+        message: error.directory.isEmpty
+            ? error.message
+            : 'Cannot write to the download folder (${error.directory}). '
+                'Pick a different folder or grant storage access.',
+        severe: true,
+        recoveryAction: RecoveryAction.showSettings,
+      );
+    }
+
     if (error is DownloadIntegrityException) {
       return const ErrorClassification(
         family: ErrorFamily.integrity,
@@ -411,9 +426,13 @@ class ErrorTaxonomy {
       final isFull = _isDiskFull(error);
       // FIX(false-storage): only a real disk-full condition is a storage
       // error; permission/IO failures must not surface as "no storage".
+      // Include the OS errno so "File system error" is diagnosable in logs
+      // (EACCES/EPERM = permission, EIO = media/transport, ENOSPC = full).
+      final os = error.osError;
+      final detail = os != null ? ' (errno ${os.errorCode}: ${os.message})' : '';
       return ErrorClassification(
         family: isFull ? ErrorFamily.disk : ErrorFamily.unknown,
-        message: isFull ? 'Storage full' : 'File system error',
+        message: isFull ? 'Storage full' : 'File system error$detail',
         severe: true,
         recoveryAction: RecoveryAction.showSettings,
       );
@@ -469,6 +488,60 @@ class ErrorTaxonomy {
         message: 'Storage full',
         severe: true,
         recoveryAction: RecoveryAction.showSettings,
+      );
+    }
+
+    if (error is FormatException) {
+      return ErrorClassification(
+        family: ErrorFamily.integrity,
+        message: 'Invalid data format: ${error.message}',
+        severe: true,
+        recoveryAction: RecoveryAction.restartDownload,
+      );
+    }
+
+    if (error is RangeError) {
+      return ErrorClassification(
+        family: ErrorFamily.integrity,
+        message: 'Data range out of bounds: ${error.message}',
+        severe: true,
+        recoveryAction: RecoveryAction.restartDownload,
+      );
+    }
+
+    if (error is StateError) {
+      return ErrorClassification(
+        family: ErrorFamily.unknown,
+        message: 'Invalid application state: ${error.message}',
+        retryable: true,
+        recoveryAction: RecoveryAction.retryWithDelay,
+      );
+    }
+
+    if (error is ArgumentError) {
+      return ErrorClassification(
+        family: ErrorFamily.unknown,
+        message: 'Invalid parameter: ${error.message}',
+        severe: true,
+        recoveryAction: RecoveryAction.retryWithDelay,
+      );
+    }
+
+    if (error is TypeError) {
+      return const ErrorClassification(
+        family: ErrorFamily.unknown,
+        message: 'Type conversion error during download processing',
+        retryable: true,
+        recoveryAction: RecoveryAction.retryWithDelay,
+      );
+    }
+
+    if (error is AssertionError) {
+      return ErrorClassification(
+        family: ErrorFamily.unknown,
+        message: 'Internal assertion failure: ${error.message ?? ''}',
+        retryable: true,
+        recoveryAction: RecoveryAction.retryWithDelay,
       );
     }
 

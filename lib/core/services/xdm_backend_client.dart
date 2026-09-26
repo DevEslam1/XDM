@@ -831,13 +831,16 @@ class _ApiRateLimiter {
     final limit = _limits[key] ?? 30;
     final now = DateTime.now();
 
-    _endpoints.putIfAbsent(key, () => []);
-    _endpoints[key]!.removeWhere((t) => now.difference(t).inSeconds >= 60);
+    final timestamps = _endpoints.putIfAbsent(key, () => []);
+    timestamps.removeWhere((t) => now.difference(t).inSeconds >= 60);
+    if (timestamps.length > limit + 10) {
+      timestamps.removeRange(0, timestamps.length - (limit + 10));
+    }
 
-    if (_endpoints[key]!.length >= limit) {
+    if (timestamps.length >= limit) {
       final retryAfter = max(
         1,
-        60 - now.difference(_endpoints[key]!.first).inSeconds,
+        60 - now.difference(timestamps.first).inSeconds,
       );
       throw BackendRateLimitException(
         retryAfterSeconds: retryAfter,
@@ -845,7 +848,10 @@ class _ApiRateLimiter {
       );
     }
 
-    _endpoints[key]!.add(now);
+    timestamps.add(now);
+    if (timestamps.length > limit + 10) {
+      timestamps.removeAt(0);
+    }
 
     // ERR-RESILIENCE-2.1: Wrap every backend API request in the centralized
     // retry engine. The inner request already fails over across backends and

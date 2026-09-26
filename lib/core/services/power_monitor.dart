@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:battery_plus/battery_plus.dart';
 import 'package:dmx/core/services/background_gate.dart';
+import 'package:dmx/core/services/device_tier.dart';
 import 'package:dmx/core/services/download_journal.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -73,9 +74,14 @@ class PowerMonitor {
     if (_isLowEndDeviceCache != null) return _isLowEndDeviceCache!;
     try {
       if (kIsWeb) return false;
-      return _isLowEndDeviceCache = (Platform.numberOfProcessors <= 2);
+      // FIX(M-21): Consult DeviceTierService which accounts for both RAM and CPU cores.
+      return _isLowEndDeviceCache = DeviceTierService.current.isLowEnd;
     } catch (_) {
-      return false;
+      try {
+        return _isLowEndDeviceCache = (Platform.numberOfProcessors <= 2);
+      } catch (_) {
+        return false;
+      }
     }
   }
 
@@ -216,6 +222,17 @@ class PowerMonitor {
 
   static Future<void> init() async {
     try {
+      _powerChannel.setMethodCallHandler((call) async {
+        if (call.method == 'screenStateChanged') {
+          final on = call.arguments as bool? ?? true;
+          setScreenOn(on);
+        }
+      });
+      await updateScreenStateFromPlatform();
+    } catch (e) {
+      _log.warning('[Power] Screen state listener init failed: $e');
+    }
+    try {
       _sub = _battery.onBatteryStateChanged.listen((s) {
         _state = s;
         _notifyThrottleFactor();
@@ -313,6 +330,16 @@ class PowerMonitor {
     } catch (e) {
       _log.info('[Power] ignore-battery-optimizations prompt skipped: $e');
     }
+  }
+
+  static Future<void> updateScreenStateFromPlatform() async {
+    if (kIsWeb) return;
+    try {
+      final res = await _powerChannel.invokeMethod<bool>('isScreenOn');
+      if (res != null) {
+        setScreenOn(res);
+      }
+    } catch (_) {}
   }
 
   // FIX-1.3: Close StreamControllers and cancel timers on dispose

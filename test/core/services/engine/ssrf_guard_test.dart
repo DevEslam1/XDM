@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:dmx/core/services/engine/ssrf_guard.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -125,6 +126,19 @@ void main() {
           reason: '017700000001 (octal) == 127.0.0.1');
     });
 
+    test('shorthand BSD dotted forms (127.1, 127.0.1, 0x7f.1) map to dotted quad', () {
+      expect(SsrfGuard.isBlockedHost('127.1'), isTrue,
+          reason: '127.1 == 127.0.0.1');
+      expect(SsrfGuard.isBlockedHost('127.0.1'), isTrue,
+          reason: '127.0.1 == 127.0.0.1');
+      expect(SsrfGuard.isBlockedHost('0x7f.1'), isTrue,
+          reason: '0x7f.1 == 127.0.0.1');
+      expect(SsrfGuard.isBlockedHost('0177.1'), isTrue,
+          reason: '0177.1 == 127.0.0.1');
+      expect(SsrfGuard.isBlockedHost('8.1'), isFalse,
+          reason: '8.1 == 8.0.0.1 (public)');
+    });
+
     test('out-of-range integers are treated as hostnames, not blocked', () {
       expect(SsrfGuard.isBlockedHost('4294967296'), isFalse,
           reason: '> 0xFFFFFFFF');
@@ -212,6 +226,39 @@ void main() {
           reason: 'IPv4-mapped metadata endpoint');
       expect(SsrfGuard.isBlockedHost('0xA9FEA9FE', allowPrivate: true), isTrue,
           reason: 'hex-encoded 169.254.169.254');
+    });
+  });
+
+  group('SsrfGuard.validateAsync — DNS rebinding protection', () {
+    test('blocks hostname resolving to cloud metadata IP (169.254.169.254)', () async {
+      expect(
+        () => SsrfGuard.validateAsync(
+          Uri.parse('http://rebind.attacker.com/secret'),
+          lookupFn: (host) async => [InternetAddress('169.254.169.254')],
+        ),
+        throwsA(isA<SsrfBlockedException>()),
+      );
+    });
+
+    test('blocks hostname resolving to 127.0.0.1 when allowPrivate is false', () async {
+      expect(
+        () => SsrfGuard.validateAsync(
+          Uri.parse('http://local.attacker.com/secret'),
+          allowPrivate: false,
+          lookupFn: (host) async => [InternetAddress('127.0.0.1')],
+        ),
+        throwsA(isA<SsrfBlockedException>()),
+      );
+    });
+
+    test('allows hostname resolving to legitimate public IP', () async {
+      await expectLater(
+        SsrfGuard.validateAsync(
+          Uri.parse('https://cdn.example.com/file.zip'),
+          lookupFn: (host) async => [InternetAddress('93.184.216.34')],
+        ),
+        completes,
+      );
     });
   });
 }

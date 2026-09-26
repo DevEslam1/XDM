@@ -377,7 +377,11 @@ class DownloadOrchestrator {
   static const int _cookieCacheMaxSize = 50;
 
   @visibleForTesting
-  Future<DownloadTask> validateResumeState(DownloadTask task) async {
+  Future<DownloadTask> validateResumeState(
+    DownloadTask task, {
+    int? threadCount,
+    int? knownFileSize,
+  }) async {
     final live = _host.findTaskById(task.id);
     if (live != null) {
       task = live;
@@ -422,17 +426,31 @@ class DownloadOrchestrator {
     int? validatedBytes;
     try {
       if (task.downloadedBytes > 0 || task.tempFilePath.isNotEmpty) {
+        final effectiveThreads = threadCount ?? task.threadCount;
+        final effectiveFileSize = (knownFileSize != null && knownFileSize > 0)
+            ? knownFileSize
+            : task.fileSize;
         final result = await StateStore.loadOrCreate(
           task.tempFilePath,
           url: task.url,
-          threadCount: task.threadCount,
-          knownFileSize: task.fileSize,
+          threadCount: effectiveThreads,
+          knownFileSize: effectiveFileSize,
+          // F28: the engine persists resume state to the TASK-SCOPED sidecar
+          // (`<temp>.<taskId>.dmxstate`). Loading without the taskId read the
+          // legacy un-suffixed file instead, which is usually absent or stale —
+          // so a pause/resume showed 0 progress and re-downloaded. Pass the id
+          // so validation reads the same file the engine wrote (it still falls
+          // back to the legacy path when the scoped file is missing).
+          taskId: task.id,
         );
 
         final state = result.state;
         validatedBytes = state.downloadedBytes;
-        if (state.downloadedBytes != task.downloadedBytes ||
-            result.diskAdjusted ||
+        // BUG-3: Only downgrade progress if disk explicitly adjusted downwards AND state claims progress,
+        // or if state has MORE data. Never wipe task to 0 simply because result.created is true
+        // when task already claims progress.
+        if (state.downloadedBytes > task.downloadedBytes ||
+            (result.diskAdjusted && state.downloadedBytes > 0) ||
             result.migratedFrom != null) {
           task = task.copyWith(
             downloadedBytes: state.downloadedBytes,
@@ -441,22 +459,24 @@ class DownloadOrchestrator {
                 ? 'Resumed from legacy state'
                 : null,
           );
-          // FIX-TESTS: Delete a stale/unusable state file when progress was
-          // recovered as 0 (corrupt, unparseable, or mismatched legacy state).
-          // Without this, the unusable file lingers and every later resume
-          // re-collapses to the same zero-progress fallback.
-          final staleStateFile = (result.created ||
-                  result.diskAdjusted ||
-                  (result.migratedFrom != null)) &&
-              state.downloadedBytes == 0;
+          // FIX-TESTS: Only delete stale state file when BOTH task and state have 0 progress
+          // and state was explicitly adjusted or migrated. Never delete when task claims progress!
+          final staleStateFile = task.downloadedBytes == 0 &&
+              state.downloadedBytes == 0 &&
+              !result.created &&
+              (result.diskAdjusted || (result.migratedFrom != null));
           if (staleStateFile) {
-            final stateFile = File('${task.tempFilePath}.dmxstate');
-            if (await stateFile.exists()) {
-              try {
-                await stateFile.delete();
-              } catch (e, st) {
-                LoggingService.logger('DownloadOrchestrator')
-                    .warning('Operation failed', e, st);
+            for (final f in [
+              File(StateStore.pathFor(task.tempFilePath, taskId: task.id)),
+              File('${task.tempFilePath}.dmxstate'),
+            ]) {
+              if (await f.exists()) {
+                try {
+                  await f.delete();
+                } catch (e, st) {
+                  LoggingService.logger('DownloadOrchestrator')
+                      .warning('Operation failed', e, st);
+                }
               }
             }
           }
@@ -467,28 +487,51 @@ class DownloadOrchestrator {
       // FIX-H5: Independently check main video/payload file existence on disk
       if (task.tempFilePath.isNotEmpty &&
           !await File(task.tempFilePath).exists()) {
-        if (task.downloadedBytes > 0 ||
-            (task.statusMessage != null && task.statusMessage!.isNotEmpty)) {
-          task = task.copyWith(
-            downloadedBytes: 0,
-            chunks:
-                List.filled(task.threadCount > 0 ? task.threadCount : 1, 0.0),
-            clearStatusMessage: true,
-          );
-          await _host.setTaskState(task);
+        final dir = File(task.tempFilePath).parent;
+        final fileName = p.basename(task.tempFilePath);
+        var existsNearby = false;
+        if (await dir.exists()) {
+          try {
+            await dir.list().firstWhere(
+              (e) => e is File && p.basename(e.path) == fileName,
+            );
+            existsNearby = true;
+          } catch (_) {}
+        }
+        if (!existsNearby &&
+            (task.downloadedBytes > 0 ||
+                (task.statusMessage != null && task.statusMessage!.isNotEmpty))) {
+          // BUG-1: Don't blindly zero if state file has valid resume data.
+          // Check if task-scoped or legacy state file exists before resetting.
+          final statePath =
+              StateStore.pathFor(task.tempFilePath, taskId: task.id);
+          final stateExists = await File(statePath).exists() ||
+              await File('${task.tempFilePath}.dmxstate').exists();
+          if (!stateExists) {
+            task = task.copyWith(
+              downloadedBytes: 0,
+              chunks:
+                  List.filled(task.threadCount > 0 ? task.threadCount : 1, 0.0),
+              clearStatusMessage: true,
+            );
+            await _host.setTaskState(task);
+          }
         }
       }
 
       // FIX-C4: YouTube — audio progress validation on resume
       if (task.hasMergedAudio && task.tempFilePath.isNotEmpty) {
         final audioPath = '${task.tempFilePath}.audio';
-        final audioStateFile = File('$audioPath.dmxstate');
-        if (!await audioStateFile.exists()) {
+        final audioScopedPath = StateStore.pathFor(audioPath, taskId: task.id);
+        final hasAudioState = await File(audioScopedPath).exists() ||
+            await File('$audioPath.dmxstate').exists();
+        if (!hasAudioState) {
           task = task.copyWith(audioProgress: 0.0, audioDownloadedBytes: 0);
         } else {
           final audioBytes = await actualDownloadedBytes(
             audioPath,
             threadCount: max(1, task.audioThreadCount),
+            taskId: task.id,
           );
           if (task.audioSize > 0) {
             final frac = (audioBytes / task.audioSize).clamp(0.0, 1.0);
@@ -1110,10 +1153,12 @@ class DownloadOrchestrator {
       final videoLen = await actualDownloadedBytes(
         actualVideoPath,
         threadCount: current.threadCount,
+        taskId: current.id,
       );
       final audioLen = await actualDownloadedBytes(
         actualAudioPath,
         threadCount: max(1, current.audioThreadCount),
+        taskId: current.id,
       );
       debugPrint('[DMX]   Video size: $videoLen bytes');
       debugPrint('[DMX]   Audio size: $audioLen bytes');
@@ -1384,12 +1429,13 @@ class DownloadOrchestrator {
           throw Exception('Merged output file not found after FFmpeg success');
         }
       } else {
-        // FIX-06: Preserve video-only file for merge retry
-        final videoOnlyPath =
-            '${p.withoutExtension(current.localFilePath)}_video_only'
-            '${p.extension(current.localFilePath).isNotEmpty ? p.extension(current.localFilePath) : '.mp4'}';
+        // FIX-06: Preserve video-only file for merge retry without recursing file names
+        final rawBase = current.localFilePath.replaceAll(RegExp(r'(_video_only)+'), '');
+        final ext = p.extension(rawBase).isNotEmpty ? p.extension(rawBase) : '.mp4';
+        final cleanBase = p.withoutExtension(rawBase);
+        final videoOnlyPath = '${cleanBase}_video_only$ext';
         try {
-          if (videoFile.path != videoOnlyPath) {
+          if (videoFile.path != videoOnlyPath && await videoFile.exists()) {
             await videoFile.rename(videoOnlyPath);
           }
         } catch (e) {
@@ -1404,7 +1450,7 @@ class DownloadOrchestrator {
             statusMessage: 'MERGE_FAILED',
             errorMessage:
                 '${DownloadStatusMessages.ffmpegMergeFailed} Audio preserved — retry to re-attempt merge.',
-            localFilePath: videoOnlyPath,
+            localFilePath: '$cleanBase$ext',
             // FIX-F1: Preserve audio progress — audio file still exists on disk
             audioProgress: current.audioProgress,
           ),
@@ -1993,7 +2039,11 @@ class DownloadOrchestrator {
     }
 
     // FIX H-7: Validate state file integrity before retry loop (A-2)
-    final stateFile = File('${task.tempFilePath}.dmxstate');
+    final scopedStatePath =
+        StateStore.pathFor(task.tempFilePath, taskId: task.id);
+    final stateFile = File(scopedStatePath).existsSync()
+        ? File(scopedStatePath)
+        : File('${task.tempFilePath}.dmxstate');
     if (await stateFile.exists()) {
       try {
         final content = await stateFile.readAsString();
@@ -2040,14 +2090,14 @@ class DownloadOrchestrator {
     }
 
     int videoBytesFromDisk;
-    final stateFilePath = '${task.tempFilePath}.dmxstate';
-    final hasStateFile = await File(stateFilePath).exists();
+    final hasStateFile = await File(scopedStatePath).exists() ||
+        await File('${task.tempFilePath}.dmxstate').exists();
 
     if (task.threadCount > 1) {
       // Pre-allocated file length is meaningless without the state file.
       videoBytesFromDisk = hasStateFile
           ? await _readDmxStateBytes(task.tempFilePath,
-              threadCount: task.threadCount)
+              threadCount: task.threadCount, taskId: task.id)
           : 0;
     } else {
       final tempFile = File(task.tempFilePath);
@@ -2065,11 +2115,13 @@ class DownloadOrchestrator {
         url: task.mergedAudioUrl!,
         threadCount: audioThreadCount,
         knownFileSize: task.audioSize,
+        taskId: task.id,
       );
       final stateAudioBytes = audioStateResult.state.downloadedBytes;
       final diskAudioBytes = await actualDownloadedBytes(
         effectiveAudioPath,
         threadCount: audioThreadCount,
+        taskId: task.id,
       );
       audioBytesFromDisk = min(stateAudioBytes, diskAudioBytes);
       if (diskAudioBytes == 0 && stateAudioBytes > 0) {
@@ -2360,10 +2412,12 @@ class DownloadOrchestrator {
           final videoLen = await actualDownloadedBytes(
             task.tempFilePath,
             threadCount: task.threadCount,
+            taskId: task.id,
           );
           final audioLen = await actualDownloadedBytes(
             effectiveAudioPath,
             threadCount: max(1, task.audioThreadCount),
+            taskId: task.id,
           );
           // FIX(YT-2): When videoTransferSize is unknown (0), use a minimum threshold
           // to avoid merging incomplete video. Require at least 1KB for video.
@@ -2374,6 +2428,8 @@ class DownloadOrchestrator {
           // must not be trusted alone — a pre-allocated temp file reports its
           // full length. Require a .dmxstate so the byte count is proven.
           final videoSizeProven = videoTransferSize > 0 ||
+              await File(StateStore.pathFor(task.tempFilePath, taskId: task.id))
+                  .exists() ||
               await File('${task.tempFilePath}.dmxstate').exists();
           if (videoSizeProven &&
               videoLen >= expectedVideo &&
@@ -2431,6 +2487,7 @@ class DownloadOrchestrator {
                 ? await actualDownloadedBytes(
                     liveAudioTempPath,
                     threadCount: max(1, liveAudioTask.audioThreadCount),
+                    taskId: liveAudioTask.id,
                   )
                 : 0;
 
@@ -2453,7 +2510,8 @@ class DownloadOrchestrator {
                     (audioExists &&
                         audioLen > 0 &&
                         liveAudioSize <= 0 &&
-                        (await File('$liveAudioTempPath.dmxstate').exists() ||
+                        (await File(StateStore.pathFor(liveAudioTempPath, taskId: liveAudioTask.id)).exists() ||
+                            await File('$liveAudioTempPath.dmxstate').exists() ||
                             liveAudioTask.audioProgress >= 0.99));
             if (isAudioComplete) {
               debugPrint(
@@ -2768,8 +2826,11 @@ class DownloadOrchestrator {
 
             // Explicit audio state flush
             try {
-              final audioStatePath = '$liveAudioTempPath.dmxstate';
-              final audioStateFile = File(audioStatePath);
+              final scopedAudioStatePath =
+                  StateStore.pathFor(liveAudioTempPath, taskId: task.id);
+              final audioStateFile = File(scopedAudioStatePath).existsSync()
+                  ? File(scopedAudioStatePath)
+                  : File('$liveAudioTempPath.dmxstate');
               if (await audioStateFile.exists()) {
                 final content = await audioStateFile.readAsString();
                 final decoded = jsonDecode(content);
@@ -2817,7 +2878,11 @@ class DownloadOrchestrator {
               liveVideoTransferSize =
                   liveVideoTask?.fileSize ?? videoTransferSize;
             }
-            debugPrint('[DMX] Parallel download: starting video stream.');
+            if (liveHasAudio) {
+              debugPrint('[DMX] Parallel download: starting video stream.');
+            } else {
+              debugPrint('[DMX] Starting download transfer.');
+            }
             final videoReferer = analysis.profile?.requiresReferer == true
                 ? (analysis.profile?.refererValue ?? liveVideoTask?.url)
                 : (isYoutube
@@ -2849,7 +2914,7 @@ class DownloadOrchestrator {
                 customHeaders: task.customHeaders,
                 adaptiveThreads: _host.providerSettingsProvider.adaptiveThreads,
                 speedLimitKbps: task.speedLimitKbps,
-                ytStreamKind: YtStreamKind.video,
+                ytStreamKind: liveHasAudio ? YtStreamKind.video : null,
                 ytCounterpartSize: liveAudioSize,
                 ytCounterpartDownloadedBytes: audioBytesSoFar,
                 metadataTimeoutSeconds: _host
@@ -3152,6 +3217,8 @@ class DownloadOrchestrator {
                         '[DMX] BUG2: stream identity changed mid-download for ${task.id}; resetting video progress');
                     for (final path in [
                       task.tempFilePath,
+                      StateStore.pathFor(task.tempFilePath, taskId: task.id),
+                      '${StateStore.pathFor(task.tempFilePath, taskId: task.id)}.tmp',
                       '${task.tempFilePath}.dmxstate',
                       '${task.tempFilePath}.dmxstate.tmp',
                       '${task.tempFilePath}.journal',
@@ -3297,10 +3364,11 @@ class DownloadOrchestrator {
               final audioExists = await audioFile.exists();
               if (videoExists && audioExists) {
                 final vLen = await actualDownloadedBytes(task.tempFilePath,
-                    threadCount: streamThreadCount);
+                    threadCount: streamThreadCount, taskId: task.id);
                 final aLen = await actualDownloadedBytes(
                     '${task.tempFilePath}.audio',
-                    threadCount: max(1, task.audioThreadCount));
+                    threadCount: max(1, task.audioThreadCount),
+                    taskId: task.id);
                 if (vLen > 0 && aLen > 0) {
                   final current = _host.findTaskById(task.id);
                   if (current != null) {
@@ -3317,7 +3385,7 @@ class DownloadOrchestrator {
               // FIX-AUDIO-ONLY: video done, audio missing → keep video, retry audio only
               if (videoExists && !audioExists && hasAudio) {
                 final vLen = await actualDownloadedBytes(task.tempFilePath,
-                    threadCount: streamThreadCount);
+                    threadCount: streamThreadCount, taskId: task.id);
                 if (vLen > 0) {
                   final current = _host.findTaskById(task.id);
                   if (current != null) {
@@ -3525,10 +3593,14 @@ class DownloadOrchestrator {
                       'refresh (${task.id}). Resetting all progress.');
                   for (final path in [
                     task.tempFilePath,
+                    StateStore.pathFor(task.tempFilePath, taskId: task.id),
+                    '${StateStore.pathFor(task.tempFilePath, taskId: task.id)}.tmp',
                     '${task.tempFilePath}.dmxstate',
                     '${task.tempFilePath}.dmxstate.tmp',
                     '${task.tempFilePath}.journal',
                     '${task.tempFilePath}.audio',
+                    StateStore.pathFor('${task.tempFilePath}.audio', taskId: task.id),
+                    '${StateStore.pathFor('${task.tempFilePath}.audio', taskId: task.id)}.tmp',
                     '${task.tempFilePath}.audio.dmxstate',
                     '${task.tempFilePath}.audio.journal',
                     '${task.tempFilePath}.audio.itag',
@@ -3619,9 +3691,11 @@ class DownloadOrchestrator {
             if (identityChanged) {
               for (final path in [
                 task.tempFilePath,
+                StateStore.pathFor(task.tempFilePath, taskId: task.id),
                 '${task.tempFilePath}.dmxstate',
                 '${task.tempFilePath}.journal',
                 '${task.tempFilePath}.audio',
+                StateStore.pathFor('${task.tempFilePath}.audio', taskId: task.id),
                 '${task.tempFilePath}.audio.dmxstate',
                 '${task.tempFilePath}.audio.journal',
               ]) {
@@ -3790,7 +3864,8 @@ class DownloadOrchestrator {
       }
 
       // Validate resume state before starting any torrent or engine calls
-      task = await validateResumeState(latestBeforeStart);
+      task = await validateResumeState(latestBeforeStart,
+          threadCount: runtimeThreadCount);
 
       if (task.hasMergedAudio && task.tempFilePath.isNotEmpty) {
         final audioPath = '${task.tempFilePath}.audio';
@@ -3799,6 +3874,7 @@ class DownloadOrchestrator {
           final actualAudioBytes = await actualDownloadedBytes(
             audioPath,
             threadCount: max(1, task.audioThreadCount),
+            taskId: task.id,
           );
           final recordedAudioBytes = task.audioSize > 0
               ? (task.audioProgress * task.audioSize).round()
@@ -3815,6 +3891,8 @@ class DownloadOrchestrator {
             );
             for (final path in [
               audioPath,
+              StateStore.pathFor(audioPath, taskId: task.id),
+              '${StateStore.pathFor(audioPath, taskId: task.id)}.tmp',
               '$audioPath.dmxstate',
               '$audioPath.dmxstate.tmp',
               '$audioPath.journal',
@@ -3835,6 +3913,46 @@ class DownloadOrchestrator {
         }
       }
 
+      // BUG-20: Recover from interrupted merge checkpoint
+      if (task.hasMergedAudio && task.tempFilePath.isNotEmpty) {
+        final mergeCheckpoint = File('${task.tempFilePath}.merge_checkpoint');
+        if (await mergeCheckpoint.exists()) {
+          try {
+            final content = await mergeCheckpoint.readAsString();
+            final data = jsonDecode(content) as Map<String, dynamic>;
+            final mergedPath = data['merged'] as String?;
+            if (mergedPath != null) {
+              final mergedFile = File(mergedPath);
+              if (await mergedFile.exists()) {
+                final len = await mergedFile.length();
+                if (task.fileSize > 0 && len >= (task.fileSize * 0.9).round()) {
+                  // Merged file was completed right before crash/interruption
+                  debugPrint(
+                      '[DMX] BUG-20: Found complete merged output from checkpoint, finalizing.');
+                  await mergedFile.rename(task.localFilePath);
+                  await mergeCheckpoint.delete();
+                  await _finalizeDownload(
+                      task.id, _host.notifications.idFor(task.id));
+                  earlyReturnCompleter.complete();
+                  return;
+                } else {
+                  // Incomplete/corrupt merge output, clean it up before re-merging
+                  await mergedFile.delete();
+                }
+              }
+            }
+          } catch (e) {
+            debugPrint('[DMX] BUG-20: Error recovering merge checkpoint: $e');
+          } finally {
+            try {
+              if (await mergeCheckpoint.exists()) {
+                await mergeCheckpoint.delete();
+              }
+            } catch (_) {}
+          }
+        }
+      }
+
       // FIX(04): Skip re-download if both streams complete — jump straight to merge
       if (task.hasMergedAudio && task.tempFilePath.isNotEmpty) {
         final videoFile = File(task.tempFilePath);
@@ -3843,10 +3961,12 @@ class DownloadOrchestrator {
           final vLen = await actualDownloadedBytes(
             task.tempFilePath,
             threadCount: task.threadCount,
+            taskId: task.id,
           );
           final aLen = await actualDownloadedBytes(
             audioFile.path,
             threadCount: max(1, task.audioThreadCount),
+            taskId: task.id,
           );
           final expectedV = task.fileSize - task.audioSize;
           final expectedA = task.audioSize;
@@ -4374,6 +4494,13 @@ class DownloadOrchestrator {
             debugPrint(
               '[DMX] Resolved video transfer size via HEAD probe: $videoTransferSize bytes',
             );
+            if (task.fileSize == 0) {
+              final newTotal = hasAudio && task.audioSize > 0
+                  ? videoTransferSize + task.audioSize
+                  : videoTransferSize;
+              task = task.copyWith(fileSize: newTotal);
+              await _host.setTaskState(task);
+            }
           }
         } catch (e) {
           debugPrint('[DMX] Failed to resolve video transfer size: $e');
@@ -4410,6 +4537,8 @@ class DownloadOrchestrator {
           await _host.setTaskState(task);
           // Also delete stale state sidecars so old ETag cannot corrupt resume
           for (final p in [
+            StateStore.pathFor(task.tempFilePath, taskId: task.id),
+            '${StateStore.pathFor(task.tempFilePath, taskId: task.id)}.tmp',
             '${task.tempFilePath}.dmxstate',
             '${task.tempFilePath}.dmxstate.tmp',
           ]) {
@@ -4425,7 +4554,11 @@ class DownloadOrchestrator {
       }
 
       // Validate resume state before starting
-      task = await validateResumeState(task);
+      task = await validateResumeState(
+        task,
+        threadCount: runtimeThreadCount,
+        knownFileSize: videoTransferSize > 0 ? videoTransferSize : null,
+      );
 
       // ═══ FIX YT-2/YT-6: Detect interrupted merge and resume merge-only ═══
       if (!task.isTorrent &&
@@ -4438,10 +4571,12 @@ class DownloadOrchestrator {
           final videoLen = await actualDownloadedBytes(
             task.tempFilePath,
             threadCount: task.threadCount,
+            taskId: task.id,
           );
           final audioLen = await actualDownloadedBytes(
             audioFile.path,
             threadCount: max(1, task.audioThreadCount),
+            taskId: task.id,
           );
 
           if (videoLen > 1024 && audioLen > 1024) {
@@ -4525,6 +4660,8 @@ class DownloadOrchestrator {
         // engine starts fresh instead of reconciling against old bytes.
         for (final p in [
           task.tempFilePath,
+          StateStore.pathFor(task.tempFilePath, taskId: task.id),
+          '${StateStore.pathFor(task.tempFilePath, taskId: task.id)}.tmp',
           '${task.tempFilePath}.dmxstate',
           '${task.tempFilePath}.dmxstate.tmp',
           '${task.tempFilePath}.journal',
@@ -4605,6 +4742,21 @@ class DownloadOrchestrator {
           debugPrint(
             'DioException Status: ${realError.response?.statusCode}',
           );
+          // A DioExceptionType.unknown carries the real cause in `.error`
+          // (often a SocketException / HandshakeException / FileSystemException).
+          // Without this, "DioException [unknown]: null" is undiagnosable.
+          final underlying = realError.error;
+          if (underlying != null) {
+            debugPrint('DioException Cause: ${underlying.runtimeType}: $underlying');
+            if (underlying is FileSystemException) {
+              debugPrint(
+                  'DioException Cause OSError: ${underlying.osError} path=${underlying.path}');
+            }
+          }
+        }
+        if (realError is FileSystemException) {
+          debugPrint(
+              'FileSystemException OSError: ${realError.osError} path=${realError.path}');
         }
         debugPrint('Stacktrace: $stackTrace');
         debugPrint('==================================================');
@@ -4782,28 +4934,44 @@ class DownloadOrchestrator {
         // FIX-INTEL: Record failure outcome
         SiteIntelligenceService().recordOutcome(task.url, false);
 
-        // FIX-B5: Delete state sidecars on permanent failure but preserve .dmxpart data
-        for (final path in [
-          '${current.tempFilePath}.dmxstate',
-          '${current.tempFilePath}.journal',
-          '${current.tempFilePath}.audio.dmxstate',
-        ]) {
-          try {
-            final f = File(path);
-            if (await f.exists()) await f.delete();
-          } catch (e, st) {
-            LoggingService.logger('DownloadOrchestrator')
-                .warning('Operation failed', e, st);
+        final isIntegrityMismatch = realError is DownloadIntegrityException ||
+            realError is FileChangedOnServerException ||
+            realError.toString().toLowerCase().contains('file changed on server') ||
+            realError.toString().toLowerCase().contains('filechangedonserver');
+
+        // Preserve partial data and .dmxstate for expired links, exhausted retries,
+        // and recoverable errors so manual retry or link update can resume without data loss.
+        // Only wipe files if server content changed (integrity failure).
+        final shouldPreserveParts = !isIntegrityMismatch;
+
+        if (!shouldPreserveParts) {
+          for (final path in [
+            current.tempFilePath,
+            StateStore.pathFor(current.tempFilePath, taskId: current.id),
+            '${current.tempFilePath}.dmxstate',
+            '${current.tempFilePath}.journal',
+            '${current.tempFilePath}.audio',
+            StateStore.pathFor('${current.tempFilePath}.audio', taskId: current.id),
+            '${current.tempFilePath}.audio.dmxstate',
+            '${current.tempFilePath}.audio.journal',
+          ]) {
+            try {
+              final f = File(path);
+              if (await f.exists()) await f.delete();
+            } catch (e, st) {
+              LoggingService.logger('DownloadOrchestrator')
+                  .warning('Operation failed', e, st);
+            }
           }
         }
 
-        // FIX F6: Preserve partial temp files if failure is retryable so manual retry can resume
+        // Preserve partial temp files if failure is retryable or link expired so manual retry can resume
         try {
-          await _host.cleanupPartFiles(current, preserveParts: isRetryable);
-          await cleanupTempFiles(current, preserveParts: isRetryable);
+          await _host.cleanupPartFiles(current, preserveParts: shouldPreserveParts);
+          await cleanupTempFiles(current, preserveParts: shouldPreserveParts);
         } catch (e) {
           debugPrint(
-            'Failed to clean up temp files on non-retryable error: $e',
+            'Failed to clean up temp files on error: $e',
           );
         }
         // BUG5: a non-refreshable expired link must tell the user what to do
@@ -5301,9 +5469,11 @@ class DownloadOrchestrator {
 
     if (!preserveParts) {
       sidecars.add(File(task.tempFilePath));
+      sidecars.add(File(StateStore.pathFor(task.tempFilePath, taskId: task.id)));
       sidecars.add(File('${task.tempFilePath}.dmxstate'));
       if (task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty) {
         sidecars.add(File('${task.tempFilePath}.audio'));
+        sidecars.add(File(StateStore.pathFor('${task.tempFilePath}.audio', taskId: task.id)));
         sidecars.add(File('${task.tempFilePath}.audio.dmxstate'));
       }
     }
@@ -5350,8 +5520,10 @@ class DownloadOrchestrator {
 
       if (!preserveParts) {
         sidecars.addAll([
+          File(StateStore.pathFor(task.tempFilePath, taskId: task.id)),
           File('${task.tempFilePath}.dmxstate'),
           File('${task.tempFilePath}.audio'),
+          File(StateStore.pathFor('${task.tempFilePath}.audio', taskId: task.id)),
           File('${task.tempFilePath}.audio.dmxstate'),
           File('${task.tempFilePath}.merged'),
         ]);
@@ -5384,6 +5556,7 @@ class DownloadOrchestrator {
     if (task.tempFilePath.trim().isEmpty) return;
     try {
       final sidecars = [
+        File(StateStore.pathFor(task.tempFilePath, taskId: task.id)),
         File('${task.tempFilePath}.dmxstate'),
         File('${task.tempFilePath}.journal'),
         File('${task.tempFilePath}.torrent'),
@@ -5410,8 +5583,10 @@ class DownloadOrchestrator {
   static Future<int> _readDmxStateBytes(
     String tempFilePath, {
     int threadCount = 1,
+    String? taskId,
   }) async {
-    return actualDownloadedBytes(tempFilePath, threadCount: threadCount);
+    return actualDownloadedBytes(tempFilePath,
+        threadCount: threadCount, taskId: taskId);
   }
 
   /// FIX-9: Normalizes a chunk list so its sum equals `downloadedBytes /

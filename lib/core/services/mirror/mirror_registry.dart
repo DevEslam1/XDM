@@ -14,6 +14,7 @@ import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../constants/thresholds.dart';
 import '../power_monitor.dart';
 import '../service_registry.dart';
 import '../shared_prefs_batcher.dart';
@@ -76,9 +77,9 @@ class MirrorHealthStore implements DisposableService {
   static const String _storeKey = 'mirror_health_data';
   static const String _urlsIndexKey = 'mirror_health_urls_index';
   static String _urlKey(String url) => 'mirror_health_url_$url';
-  static const Duration _blacklistTtl = Duration(hours: 6);
-  static const int maxEntries = 200;
-  static const Duration minFlushInterval = Duration(minutes: 5);
+  static const Duration _blacklistTtl = kMirrorBlacklistTtl;
+  static const int maxEntries = kMirrorMaxEntries;
+  static const Duration minFlushInterval = kMirrorMinFlushInterval;
 
   /// Access-ordered cache: reads/writes move the entry to the tail, so the
   /// head is always the least-recently-used entry to evict.
@@ -152,7 +153,9 @@ class MirrorHealthStore implements DisposableService {
               final list = jsonDecode(row.speedSamples!) as List<dynamic>;
               state.speedSamples =
                   list.map((e) => (e as num).toDouble()).toList();
-            } catch (_) {}
+            } catch (e, st) {
+              _log.warning('Failed to parse speedSamples for ${row.url}', e, st);
+            }
           }
           _cache![row.url] = state;
         }
@@ -175,7 +178,9 @@ class MirrorHealthStore implements DisposableService {
             try {
               final map = jsonDecode(raw) as Map<String, dynamic>;
               migratedStates[url] = PersistedMirrorState.fromJson(map);
-            } catch (_) {}
+            } catch (e, st) {
+              _log.warning('Failed to parse legacy mirror url key for $url', e, st);
+            }
             await prefs.remove(_urlKey(url));
           }
         }
@@ -192,7 +197,9 @@ class MirrorHealthStore implements DisposableService {
               );
             }
           }
-        } catch (_) {}
+        } catch (e, st) {
+          _log.warning('Failed to parse legacy store blob', e, st);
+        }
         if (repo != null) {
           await prefs.remove(_storeKey);
         }
@@ -488,7 +495,9 @@ class MirrorHealthStore implements DisposableService {
       await prefs.remove(_urlsIndexKey);
       await prefs.remove(_rankingCacheKey);
       await prefs.remove(_rankingTtlKey);
-    } catch (_) {}
+    } catch (e, st) {
+      _log.warning('Failed to clear legacy prefs keys', e, st);
+    }
   }
 
   @override

@@ -177,5 +177,28 @@ void main() {
         WidgetDataBridge.testSink = null;
       }
     });
+
+    test('identical state with a fresh timestamp is deduplicated', () async {
+      final pushes = <WidgetDashboard>[];
+      WidgetDataBridge.testSink = (d) async => pushes.add(d);
+
+      try {
+        final bridge = WidgetDataBridge.instance;
+
+        // Establish a baseline payload. `dispose()` clears the throttle
+        // timestamp (but not the dedup key) so the next non-forced push runs
+        // immediately instead of being scheduled 10s out.
+        await bridge.pushDashboard(dashboard([task('a', speed: 100)]),
+            force: true);
+        expect(pushes.length, 1);
+
+        bridge.dispose();
+        // Same task state, new DateTime.now() timestamp from fromTasks().
+        await bridge.pushDashboard(dashboard([task('a', speed: 100)]));
+        expect(pushes.length, 1);
+      } finally {
+        WidgetDataBridge.testSink = null;
+      }
+    });
   });
 }

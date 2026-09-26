@@ -2074,9 +2074,9 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
     final settings = context.read<SettingsProvider>();
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
-    // FIX-1.4: Use context.watch to rebuild on task state updates
-    final provider = context.watch<DownloadProvider>();
-    final currentTask = provider.findTaskById(widget.task.id) ?? widget.task;
+    final provider = context.read<DownloadProvider>();
+    final currentTask = context.select<DownloadProvider, DownloadTask>(
+        (p) => p.findTaskById(widget.task.id) ?? widget.task);
     final statusColor = getEffectiveCardAccent(currentTask, provider, isDark);
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
     final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
@@ -2084,10 +2084,13 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
     final isMagnet = currentTask.url.startsWith('magnet:');
     final seeding = _isSeeding(currentTask);
 
-    final stats = (
-      seeds: provider.getTorrentSeeds(currentTask.id),
-      peers: provider.getTorrentPeers(currentTask.id),
-      uploadSpeed: provider.getTorrentUploadSpeed(currentTask.id),
+    final stats = context.select<DownloadProvider,
+        ({int seeds, int peers, double uploadSpeed})>(
+      (p) => (
+        seeds: p.getTorrentSeeds(currentTask.id),
+        peers: p.getTorrentPeers(currentTask.id),
+        uploadSpeed: p.getTorrentUploadSpeed(currentTask.id),
+      ),
     );
 
     final fileCount = currentTask.torrentFiles?.length ?? 0;
@@ -3635,8 +3638,11 @@ Widget _propRow(
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(
-          width: 120,
+        ConstrainedBox(
+          constraints: BoxConstraints(
+            minWidth: 100,
+            maxWidth: isRtl ? 155 : 130,
+          ),
           child: Text(label, style: TextStyle(color: secClr, fontSize: 12)),
         ),
         const SizedBox(width: 8),

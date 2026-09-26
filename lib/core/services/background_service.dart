@@ -77,10 +77,13 @@ class BackgroundService {
   }
 
   static Future<int> _checkActiveDownloadCount() async {
-    if (_activeDownloadCountQuery != null) {
-      return _activeDownloadCountQuery!();
-    }
-    return _activeDownloadCount;
+    return _activeLock.synchronized(() {
+      if (_activeDownloadCountQuery != null) {
+        final queryVal = _activeDownloadCountQuery!();
+        if (queryVal > 0) return queryVal;
+      }
+      return _activeDownloadCount;
+    });
   }
 
   /// Callback invoked when background execution is requested on iOS where it is unsupported.
@@ -127,14 +130,13 @@ class BackgroundService {
   /// Shared post-update logic: maintain the heartbeat timer and wake lock
   /// based on the (possibly task-tracked) active download count.
   static Future<void> _afterActiveCountChanged() async {
-    if (_activeDownloadCount <= 0) {
-      final queryCount = _activeDownloadCountQuery?.call() ?? 0;
-      if (queryCount <= 0) {
-        TickManager.instance.unregisterTick('bg_heartbeat');
-        _heartbeatTimer?.cancel();
-        _heartbeatTimer = null;
-        await releaseWakeLock();
-      }
+    final queryCount = _activeDownloadCountQuery?.call() ?? 0;
+    final effectiveCount = queryCount > 0 ? queryCount : _activeDownloadCount;
+    if (effectiveCount <= 0) {
+      TickManager.instance.unregisterTick('bg_heartbeat');
+      _heartbeatTimer?.cancel();
+      _heartbeatTimer = null;
+      await releaseWakeLock();
     } else {
       if (!kIsWeb && Platform.isAndroid) {
         final isRunning =
@@ -615,7 +617,8 @@ class BackgroundService {
                 }).toList(),
                 status: DmxStateStatus.paused,
               );
-              await StateStore.save(t.tempFilePath, state, durable: true);
+              await StateStore.save(t.tempFilePath, state,
+                  durable: true, taskId: t.id);
             } catch (_) {}
           }
           await DatabaseService.instance.saveTask(t.copyWith(
@@ -786,10 +789,8 @@ class BackgroundService {
   /// to prevent the native 30-minute timeout from expiring.
   static Future<void> acquireWakeLock() async {
     if (!isSupported || _wakeLockHeld) return;
-    if (_activeDownloadCount <= 0) {
-      final queryCount = _activeDownloadCountQuery?.call() ?? 0;
-      if (queryCount <= 0) return;
-    }
+    final activeCount = await _checkActiveDownloadCount();
+    if (activeCount <= 0) return;
     // Battery gate: if battery is <20% and not charging, do not hold wake lock to avoid rapid battery drain
     try {
       final mode = PowerMonitor.batterySaverMode;

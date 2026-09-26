@@ -75,32 +75,54 @@ class ChecksumService {
   static MapEntry<String, String>? parseDigestHeader(String? header) {
     if (header == null || header.trim().isEmpty) return null;
 
+    final candidates = <String, String>{};
     final parts = header.split(',');
-    for (final algo in ['sha-256', 'sha-1', 'md5']) {
-      for (final part in parts) {
-        final trimmed = part.trim();
-        final eqIndex = trimmed.indexOf('=');
-        if (eqIndex <= 0) continue;
-        final partAlgo = trimmed.substring(0, eqIndex).trim().toLowerCase();
-        final partValue = trimmed.substring(eqIndex + 1).trim();
-        if (partAlgo == algo || partAlgo == algo.replaceFirst('-', '')) {
-          String hexValue = partValue;
-          if (!_isHex(partValue)) {
-            try {
-              final bytes = base64Decode(partValue);
-              hexValue =
-                  bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-            } catch (e, st) {
-              _log.warning('[checksum_service] operation failed', e, st);
-            }
-          }
-          final normalizedAlgo = algo.replaceFirst('-', '');
-          if (hexValue.isNotEmpty) {
-            return MapEntry(normalizedAlgo, hexValue);
-          }
+
+    for (final part in parts) {
+      final trimmed = part.trim();
+      final eqIndex = trimmed.indexOf('=');
+      if (eqIndex <= 0) continue;
+
+      final rawAlgo = trimmed.substring(0, eqIndex).trim().toLowerCase();
+      final normalizedAlgo = rawAlgo.replaceAll(RegExp(r'[-_]'), '');
+
+      var partValue = trimmed.substring(eqIndex + 1).trim();
+      if (partValue.startsWith('"') &&
+          partValue.endsWith('"') &&
+          partValue.length >= 2) {
+        partValue = partValue.substring(1, partValue.length - 1).trim();
+      }
+
+      String? hexValue;
+      if (_isHex(partValue)) {
+        hexValue = partValue.toLowerCase();
+      } else {
+        try {
+          final bytes = base64Decode(partValue);
+          hexValue = bytes
+              .map((b) => b.toRadixString(16).padLeft(2, '0'))
+              .join()
+              .toLowerCase();
+        } catch (e, st) {
+          _log.warning(
+              '[checksum_service] failed to decode digest token: $partValue',
+              e,
+              st);
         }
       }
+
+      if (hexValue != null && hexValue.isNotEmpty) {
+        candidates[normalizedAlgo] = hexValue;
+      }
     }
+
+    const priority = ['sha256', 'sha1', 'md5'];
+    for (final algo in priority) {
+      if (candidates.containsKey(algo)) {
+        return MapEntry(algo, candidates[algo]!);
+      }
+    }
+
     return null;
   }
 

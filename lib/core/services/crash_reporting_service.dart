@@ -191,8 +191,13 @@ class CrashReportingService {
   /// Captures unhandled Flutter errors.
   /// Call this from main.dart before runApp().
   static void captureFlutterErrors() {
+    final originalOnError = FlutterError.onError;
     FlutterError.onError = (details) {
-      FlutterError.presentError(details);
+      if (originalOnError != null) {
+        originalOnError(details);
+      } else {
+        FlutterError.presentError(details);
+      }
       unawaited(
         recordError(
           details.exception,

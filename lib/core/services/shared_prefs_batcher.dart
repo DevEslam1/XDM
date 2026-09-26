@@ -93,7 +93,7 @@ class SharedPrefsBatcher {
     }
   }
 
-  void dispose() {
-    flush();
+  Future<void> dispose() async {
+    await flush();
   }
 }
