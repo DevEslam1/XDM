@@ -9,10 +9,20 @@ String formatLocalizedNumber(BuildContext context, num value) {
 }
 
 String formatLocalizedDateTime(BuildContext context, DateTime value) {
-  final locale = _locale(context);
-  return DateFormat.yMMMd(locale).add_jm().format(value.toLocal());
+  try {
+    if (value.millisecondsSinceEpoch <= 0) return '—';
+    final locale = _locale(context);
+    return DateFormat.yMMMd(locale).add_jm().format(value.toLocal());
+  } catch (_) {
+    return '—';
+  }
 }
 
 String formatLocalizedTime(BuildContext context, DateTime value) {
-  return DateFormat.jm(_locale(context)).format(value.toLocal());
+  try {
+    if (value.millisecondsSinceEpoch <= 0) return '—';
+    return DateFormat.jm(_locale(context)).format(value.toLocal());
+  } catch (_) {
+    return '—';
+  }
 }

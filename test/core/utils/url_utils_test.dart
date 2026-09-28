@@ -29,6 +29,24 @@ void main() {
       expect(isMagnetUrl(invalid), false);
     });
 
+    test('parseMagnetUrl handles a real multi-tracker magnet with encoded name',
+        () {
+      const magnet = 'magnet:?xt=urn:btih:'
+          'E933E2AFD654F2CBFB9C3A322BC4FFBA13CBA978'
+          '&dn=AI+Grammar+Studio+v1.4.0+Pre-Cracked+%7BCracksHash%7D'
+          '&tr=https%3A%2F%2Fedge-team.cc%2Fannounce'
+          '&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce';
+
+      expect(isMagnetUrl(magnet), isTrue);
+      final parsed = parseMagnetUrl(magnet);
+      expect(parsed['infoHashV1'],
+          equals('E933E2AFD654F2CBFB9C3A322BC4FFBA13CBA978'));
+      expect(parsed['infoHash'],
+          equals('E933E2AFD654F2CBFB9C3A322BC4FFBA13CBA978'));
+      expect(parsed['name'],
+          equals('AI Grammar Studio v1.4.0 Pre-Cracked {CracksHash}'));
+    });
+
     test('isTorrentFileUrl identifies .torrent files and schemes', () {
       expect(
           isTorrentFileUrl(

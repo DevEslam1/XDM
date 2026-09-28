@@ -316,6 +316,8 @@ class PositionalFileWriter
         if (end > existing) _flushedHighWater[bufferKey] = end;
       }
     } on FileSystemException catch (e) {
+      buffer.add(pos, bytes);
+      _pendingBytes += bytes.length;
       // Detect disk-full specifically
       final osError = e.osError;
       if (osError != null &&
@@ -328,6 +330,8 @@ class PositionalFileWriter
       }
       throw PositionalFileWriterException('write failed: $e');
     } catch (e) {
+      buffer.add(pos, bytes);
+      _pendingBytes += bytes.length;
       throw PositionalFileWriterException('write failed: $e');
     }
   }
@@ -353,6 +357,7 @@ class PositionalFileWriter
   }
 
   Future<void> flushAll() async {
+    if (_closed) return;
     _checkOpen();
     // FIX(C-1): Take _metaLock while iterating _handles/_buffers. _getHandle
     // can structurally mutate both maps while we await inside per-handle
@@ -477,6 +482,8 @@ class PositionalFileWriter
 
   @override
   Future<void> dispose() => close();
+
+  bool get isClosed => _closed;
 
   Future<void> close() async {
     ServiceRegistry.unregisterMemoryPressureListener(this);

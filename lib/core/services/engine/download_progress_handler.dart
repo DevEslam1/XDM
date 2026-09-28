@@ -112,6 +112,7 @@ class DownloadProgressHandler {
       _urlExpireCount++;
     }
     if (_urlExpireCount >= 3) {
+      _urlExpireCount = 0;
       emit(DownloadProgress(
         downloadedBytes: lastDownloadedBytes,
         fileSize: lastFileSize,

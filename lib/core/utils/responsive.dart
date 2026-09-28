@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 
 enum ScreenType { phone, tablet, desktop }
@@ -54,13 +56,17 @@ const double kGridTileGap = 24.0;
 
 double gridChildAspectRatio(BuildContext context,
     {int columns = 2, double horizontalPadding = 32.0}) {
-  final w = MediaQuery.of(context).size.width;
-  final availableWidth = w - horizontalPadding * 2;
+  final w = MediaQuery.sizeOf(context).width;
+  final effectiveColumns = max(1, columns);
+  final effectivePadding = w < 320 ? 8.0 : horizontalPadding;
+  final availableWidth = max(40.0, w - effectivePadding * 2);
   // There are (columns - 1) gaps between `columns` tiles in a row, not one
   // gap per tile — subtracting a full gap per column (the previous formula)
   // made every tile narrower than intended, increasingly so as columns grew.
-  final tileWidth = (availableWidth - kGridTileGap * (columns - 1)) / columns;
-  final ratio = tileWidth / kGridTileHeight;
+  final tileWidth =
+      (availableWidth - kGridTileGap * (effectiveColumns - 1)) / effectiveColumns;
+  final safeTileWidth = tileWidth <= 0 ? availableWidth : tileWidth;
+  final ratio = safeTileWidth / kGridTileHeight;
   return ratio.clamp(0.3, 3.0);
 }
 
@@ -90,6 +96,7 @@ bool isMultiColumnLayout(BuildContext context) {
   final size = MediaQuery.sizeOf(context);
   final isLand = size.width > size.height;
   if (size.width >= 850) return true;
+  if (isTabletLandscape(context)) return true;
   if (isLand && size.width >= 640) return true;
   return false;
 }

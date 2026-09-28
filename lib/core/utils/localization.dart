@@ -32,8 +32,14 @@ class L10n {
   }
 
   static Map<String, String> _getTranslations(String lang) {
+    if (_cache.length >= 20 && !_cache.containsKey(lang)) {
+      _cache.remove(_cache.keys.first);
+    }
     return _cache.putIfAbsent(lang, () => _loadLocale(lang));
   }
+
+  @visibleForTesting
+  static void clearCacheForTesting() => _cache.clear();
 
   static String translate(
     String lang,

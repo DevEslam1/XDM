@@ -11,6 +11,16 @@ import 'package:permission_handler/permission_handler.dart';
 class PermissionService {
   static int? _cachedSdkLevel;
 
+  @visibleForTesting
+  static void resetCachedSdkLevel() {
+    _cachedSdkLevel = null;
+  }
+
+  @visibleForTesting
+  static void setCachedSdkLevelForTesting(int? level) {
+    _cachedSdkLevel = level;
+  }
+
   Future<int> _androidSdkLevel() async {
     if (_cachedSdkLevel != null && _cachedSdkLevel! > 0) {
       return _cachedSdkLevel!;

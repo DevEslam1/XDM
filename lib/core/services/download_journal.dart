@@ -203,8 +203,13 @@ class StateStoreInstance {
       }
     }
 
-    // FIX-C1: Multi-stage parse trying V3, then V2, before falling back to journal recovery
-    if (await File(effectivePath).exists()) {
+    // FIX-C1: Multi-stage parse trying V3, then V2, before falling back to journal recovery.
+    // A snapshot file that exists but cannot be decoded is a mismatched/stale
+    // resume context; its bytes must NOT be recovered from the orphan temp file
+    // (the file may belong to a different download). Only a completely absent
+    // snapshot is safe to reconstruct from the raw file length below.
+    final hadSnapshotFile = await File(effectivePath).exists();
+    if (hadSnapshotFile) {
       try {
         final decoded = jsonDecode(await File(effectivePath).readAsString());
         if (decoded is Map) {
@@ -391,17 +396,29 @@ class StateStoreInstance {
       }
     }
 
-    // BUG-1 fix: NEVER delete downloaded bytes if state is null or missing for single-thread downloads.
-    // Multi-threaded downloads cannot safely reconstruct from raw file length because chunks are non-contiguous.
-    if (state == null && threadCount <= 1) {
+    // BUG-1 fix: NEVER delete downloaded bytes if state is null or missing.
+    // Recover contiguous progress from the raw file length. For multi-thread
+    // downloads the file is pre-allocated to the full size and written into
+    // non-contiguous ranges, so a file already at `knownFileSize` says nothing
+    // about progress — crediting it marks a zero-filled file "complete" and
+    // ships corruption. Only credit the length when it is provably short of the
+    // full size (a contiguous single-stream write) or the size is unknown
+    // (single-stream only, since multi-thread requires a known size). A snapshot
+    // that existed but was invalid forces a clean restart instead.
+    if (state == null && !hadSnapshotFile) {
       final tmp = File(tempFilePath);
       if (await tmp.exists()) {
         final len = await tmp.length();
-        if (len > 0) {
-          final effectiveTotal = knownFileSize > 0 ? knownFileSize : len;
+        final bool sizeKnown = knownFileSize > 0;
+        final bool canCredit = len > 0 && (!sizeKnown || len < knownFileSize);
+        if (canCredit) {
+          final effectiveTotal = sizeKnown ? knownFileSize : len;
           state = TransferState(
             totalSize: effectiveTotal,
-            threadCount: 1,
+            threadCount: threadCount.clamp(
+              kMinTransferThreads,
+              kMaxTransferThreads,
+            ),
             chunks: [
               ChunkState(
                 start: 0,
@@ -530,8 +547,8 @@ class StateStoreInstance {
       if (await dir.exists()) {
         try {
           await dir.list().firstWhere(
-            (e) => e is File && p.basename(e.path) == fileName,
-          );
+                (e) => e is File && p.basename(e.path) == fileName,
+              );
           existsNearby = true;
         } catch (_) {}
       }
@@ -672,8 +689,7 @@ class StateStoreInstance {
 
           final bytesSinceLastWrite =
               (snap.downloadedBytes - (lastWrittenByte ?? 0)).abs();
-          final statusChanged =
-              lastStatus != null && lastStatus != snap.status;
+          final statusChanged = lastStatus != null && lastStatus != snap.status;
           final isTerminalOrPaused = snap.status == DmxStateStatus.paused ||
               snap.status == DmxStateStatus.complete ||
               snap.status == DmxStateStatus.failed;
@@ -703,8 +719,10 @@ class StateStoreInstance {
           } else if (isScreenOff) {
             // FIX(M-24): Allow periodic timed flushes (>= 15s) even with < 2MB delta,
             // so background downloads on slow connections don't remain unsaved for minutes.
-            final elapsed = now.difference(lastSave ?? DateTime.fromMillisecondsSinceEpoch(0));
-            if (bytesSinceLastWrite < 2 * 1024 * 1024 && elapsed < const Duration(seconds: 15)) {
+            final elapsed = now
+                .difference(lastSave ?? DateTime.fromMillisecondsSinceEpoch(0));
+            if (bytesSinceLastWrite < 2 * 1024 * 1024 &&
+                elapsed < const Duration(seconds: 15)) {
               return;
             }
           }
@@ -1035,8 +1053,7 @@ abstract class StateStore {
   /// instead of retrying forever. Mirrors the errno/message checks used by the
   /// HTTP engine.
   static bool isPermanentWriteFailure(Object? error) {
-    final FileSystemException? fs =
-        error is FileSystemException ? error : null;
+    final FileSystemException? fs = error is FileSystemException ? error : null;
     if (fs == null) return false;
     final code = fs.osError?.errorCode;
     if (code == 13 || code == 1 || code == 30) return true;
@@ -1275,8 +1292,9 @@ class DownloadJournal {
   Future<void> recordChunkProgress(int index, int bytes,
       {String? hash, bool force = false}) async {
     final isScreenOff = PowerMonitor.screenOff;
-    final isBg =
-        !DownloadEngine.appInForeground || DownloadEngine.isInBackground || isScreenOff;
+    final isBg = !DownloadEngine.appInForeground ||
+        DownloadEngine.isInBackground ||
+        isScreenOff;
 
     final threshold = isScreenOff
         ? (kJournalBackgroundWriteDelta * 2)
@@ -1543,7 +1561,9 @@ class DownloadJournal {
       {String? taskId}) async {
     final paths = <String>[
       if (taskId != null && taskId.isNotEmpty) '$tempFilePath.$taskId.journal',
-      tempFilePath.endsWith('.journal') ? tempFilePath : '$tempFilePath.journal',
+      tempFilePath.endsWith('.journal')
+          ? tempFilePath
+          : '$tempFilePath.journal',
     ];
     for (final journalPath in paths) {
       final active =
@@ -1567,7 +1587,9 @@ class DownloadJournal {
         }
       } catch (e, st) {
         LoggingService.logger('DownloadJournal').warning(
-            '[Journal-J1] Failed to delete journal file $journalPath: $e', e, st);
+            '[Journal-J1] Failed to delete journal file $journalPath: $e',
+            e,
+            st);
       }
     }
   }
@@ -1577,7 +1599,9 @@ class DownloadJournal {
       {String? taskId}) async {
     final paths = <String>[
       if (taskId != null && taskId.isNotEmpty) '$tempFilePath.$taskId.journal',
-      tempFilePath.endsWith('.journal') ? tempFilePath : '$tempFilePath.journal',
+      tempFilePath.endsWith('.journal')
+          ? tempFilePath
+          : '$tempFilePath.journal',
     ];
     for (final journalPath in paths) {
       final active =

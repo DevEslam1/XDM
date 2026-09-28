@@ -20,7 +20,9 @@ bool isSafeWebUrl(String value) {
   if (clean.startsWith('javascript:') ||
       clean.startsWith('data:') ||
       clean.startsWith('vbscript:') ||
-      clean.startsWith('about:')) {
+      clean.startsWith('about:') ||
+      clean.startsWith('ftp:') ||
+      clean.startsWith('ftps:')) {
     return false;
   }
   final uri = Uri.tryParse(clean);
@@ -478,6 +480,7 @@ String _punycodeEncode(String input) {
 }
 
 int _punycodeDigit(int d) {
+  if (d < 0 || d >= 36) throw FormatException('Invalid punycode digit: $d');
   if (d < 26) return d + 97; // a-z
   return d + 22; // 0-9
 }

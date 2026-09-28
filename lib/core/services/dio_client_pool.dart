@@ -105,6 +105,7 @@ class DioClientPool implements DisposableService, MemoryPressureListener {
   final LinkedHashMap<String, Dio> _idleClientsByHost =
       LinkedHashMap<String, Dio>();
   final Map<Dio, String> _clientHosts = {};
+  final Set<Dio> _closedClients = {};
 
   /// FIX-P1-06: Debounce timer for stale-idle cleanup. Multiple releases in a
   /// burst coalesce into a single run 1s after the last one.
@@ -334,6 +335,10 @@ class DioClientPool implements DisposableService, MemoryPressureListener {
   Map<String, Dio> get idleClientsByHostForTesting => _idleClientsByHost;
 
   void releaseClient(Dio client) {
+    if (_closedClients.contains(client)) {
+      _closeClient(client);
+      return;
+    }
     final activeDownloads = _activeDownloadsPerClient[client];
     if (activeDownloads != null && activeDownloads.isNotEmpty) {
       _log.warning(
@@ -369,6 +374,7 @@ class DioClientPool implements DisposableService, MemoryPressureListener {
   }
 
   void _closeClient(Dio client) {
+    _closedClients.add(client);
     _clientHosts.remove(client);
     _activeDownloadsPerClient.remove(client);
     _reservedClients.remove(client);

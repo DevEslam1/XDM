@@ -235,10 +235,10 @@ class NotificationCoordinator {
 
     // Retry resolving the handle in case the task provider hasn't finished loading
     String? taskId;
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 3; i++) {
       taskId = await _resolveOpaqueHandle(rawHandle);
       if (taskId != null) break;
-      await Future.delayed(const Duration(milliseconds: 500));
+      await Future.delayed(const Duration(milliseconds: 200));
     }
 
     // If still null, but rawHandle is a valid task ID, proceed anyway.

@@ -5,6 +5,7 @@ import 'dart:math';
 
 import 'package:dmx/core/services/logging_service.dart';
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:synchronized/synchronized.dart';
 
@@ -47,14 +48,14 @@ class RemoteApiService {
     if (Platform.isWindows) {
       final appData = Platform.environment['APPDATA'];
       if (appData != null) {
-        dir = '$appData/xdm';
+        dir = p.join(appData, 'xdm');
       } else {
         dir = (await getApplicationSupportDirectory()).path;
       }
     } else if (Platform.isLinux || Platform.isMacOS) {
       final home = Platform.environment['HOME'];
       if (home != null) {
-        dir = '$home/.config/xdm';
+        dir = p.join(home, '.config', 'xdm');
       } else {
         dir = (await getApplicationSupportDirectory()).path;
       }
@@ -81,8 +82,7 @@ class RemoteApiService {
       );
     }
 
-    _cachedTokenFilePath =
-        dir.endsWith('/') ? '$dir$_tokenFileName' : '$dir/$_tokenFileName';
+    _cachedTokenFilePath = p.join(dir, _tokenFileName);
     return _cachedTokenFilePath!;
   }
 

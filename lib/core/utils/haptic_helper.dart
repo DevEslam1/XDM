@@ -1,13 +1,19 @@
+import 'dart:io';
+
 import 'package:dmx/core/services/logging_service.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../features/settings/provider/settings_provider.dart';
 
 mixin HapticHelper {
+  static bool get isSupported =>
+      !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+
   /// Standardized haptic trigger across all browser widgets (static).
   static void triggerHaptic(SettingsProvider settings) {
-    if (settings.vibration) {
+    if (isSupported && settings.vibration) {
       HapticFeedback.lightImpact();
     }
   }
@@ -18,19 +24,19 @@ mixin HapticHelper {
   }
 
   void mediumPulse(SettingsProvider settings) {
-    if (settings.vibration) {
+    if (isSupported && settings.vibration) {
       HapticFeedback.mediumImpact();
     }
   }
 
   void heavyPulse(SettingsProvider settings) {
-    if (settings.vibration) {
+    if (isSupported && settings.vibration) {
       HapticFeedback.heavyImpact();
     }
   }
 
   void errorPulse(SettingsProvider settings) {
-    if (settings.vibration) {
+    if (isSupported && settings.vibration) {
       _runErrorPulse().catchError((e) {
         LoggingService.logger('HapticHelper').info(
           '[HapticHelper] error pulse skipped: $e',

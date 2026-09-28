@@ -120,6 +120,15 @@ class HttpTransferJob {
   CancelToken _multiThreadCancelToken = CancelToken();
   int _seq = 0;
   bool _cancelRequested = false;
+  bool _disposed = false;
+
+  bool get isDisposed => _disposed;
+
+  void dispose() {
+    _disposed = true;
+    _abortAllDelays();
+    cancelWatchdogs();
+  }
 
   static const int maxPendingDelays = 16;
   static const Duration _maxChunkWallClock = Duration(minutes: 10);
@@ -349,7 +358,7 @@ class HttpTransferJob {
       // the raw live state could record counters beyond the flushed bytes.
       // Flush first, then save the durability-clamped snapshot.
       final writer = _activeWriter;
-      if (writer != null) {
+      if (writer != null && !writer.isClosed) {
         try {
           await writer.flushAll();
         } catch (e, stLog) {
@@ -679,6 +688,7 @@ class HttpTransferJob {
       }
       _cachedChunkDetails = null;
       _lastChunkDetailsHash = 0;
+      _disposed = true;
       dio.close(force: true);
     }
   }
@@ -2632,6 +2642,7 @@ class HttpTransferJob {
             } catch (_) {}
           }
           raf = null;
+          _singleStreamRaf = null;
           // FIX 15: Only save if not already saved in catch
           if (!_stateSavedInCatch) {
             try {
@@ -2915,12 +2926,15 @@ class HttpTransferJob {
       _stateSavePending = true;
       unawaited(_stateSaveLock.synchronized(() async {
         try {
+          if (_disposed) return;
           if (preSaveFlush != null) await preSaveFlush();
+          if (_disposed) return;
           // C-1: fsync buffered data to disk before persisting progress, so the
           // saved state can never claim more bytes than are durably on disk.
           // flushAll() issues a real fsync barrier (handle.flush()); flushBuffers()
           // only drains to the OS page cache and is lost on power failure.
-          if (writer != null) await writer.flushAll();
+          if (writer != null && !writer.isClosed) await writer.flushAll();
+          if (_disposed) return;
           // FIX(C-2): serialize a durability-clamped clone. The live state
           // keeps mutating during the flush awaits; saving it directly could
           // record offsets beyond what was actually written to disk.

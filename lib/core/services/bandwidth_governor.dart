@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:synchronized/synchronized.dart';
 
 import 'power_monitor.dart';
+import 'torrent_service.dart';
 
 /// A token-bucket bandwidth governor.
 ///
@@ -49,7 +50,11 @@ class BandwidthGovernor {
   @visibleForTesting
   Timer? get domainCleanupTimerForTesting => _domainCleanupTimer;
 
+  bool _disposed = false;
+  bool get isDisposed => _disposed;
+
   void _startDomainCleanup() {
+    if (_disposed) return;
     _domainCleanupTimer?.cancel();
     _domainCleanupTimer = Timer.periodic(
       const Duration(minutes: 5),
@@ -61,13 +66,14 @@ class BandwidthGovernor {
   }
 
   void _cleanupStaleDomainStates() {
-    if (_domainStates.isEmpty) return;
+    if (_disposed || _domainStates.isEmpty) return;
     final cutoff = DateTime.now().subtract(const Duration(minutes: 10));
     _domainStates.removeWhere((_, state) => state.lastUpdated.isBefore(cutoff));
   }
 
   /// Releases all per-task and per-domain tracking state and cancels timers.
   void dispose() {
+    _disposed = true;
     PowerMonitor.throttleFactorNotifier.removeListener(onPowerStateChanged);
     _domainCleanupTimer?.cancel();
     _domainCleanupTimer = null;
@@ -116,6 +122,7 @@ class BandwidthGovernor {
 
   /// Registers a consumer.
   void registerConsumer() {
+    if (_disposed) return;
     _activeConsumers++;
     if (_activeConsumers == 1) {
       _startDomainCleanup();
@@ -305,10 +312,14 @@ class BandwidthArbiter {
   }) {
     if (totalLimitBps <= 0) {
       _httpGovernor.setGlobalLimit(0);
+      TorrentService.setDownloadLimit(0);
+      TorrentService.setUploadLimit(0);
       return (0, 0); // Unlimited
     }
 
     if (httpActiveCount <= 0 && torrentActiveCount <= 0) {
+      TorrentService.setDownloadLimit(0);
+      TorrentService.setUploadLimit(0);
       return (0, 0);
     }
 
@@ -329,6 +340,8 @@ class BandwidthArbiter {
 
     // Apply HTTP share to HTTP governor
     _httpGovernor.setGlobalLimit(httpShare);
+    TorrentService.setDownloadLimit(torrentShare);
+    TorrentService.setUploadLimit(torrentShare);
 
     return (httpShare, torrentShare);
   }

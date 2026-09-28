@@ -27,6 +27,24 @@ class TrackerManager extends ChangeNotifier {
 
   void recordAnnounce(String trackerUrl) {
     _lastAnnounceTime[trackerUrl] = DateTime.now();
+    _cleanupStaleAnnounceTimes();
+  }
+
+  void _cleanupStaleAnnounceTimes() {
+    final now = DateTime.now();
+    if (_lastAnnounceTime.length > 500) {
+      _lastAnnounceTime
+          .removeWhere((_, time) => now.difference(time).inMinutes > 30);
+      while (_lastAnnounceTime.length > 300) {
+        _lastAnnounceTime.remove(_lastAnnounceTime.keys.first);
+      }
+    }
+  }
+
+  void removeTorrent(int torrentId) {
+    _trackersByTorrent.remove(torrentId);
+    _cleanupStaleAnnounceTimes();
+    notifyListeners();
   }
 
   List<TorrentTrackerInfo> getTrackers(int torrentId) {

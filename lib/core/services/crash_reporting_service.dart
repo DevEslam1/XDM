@@ -116,7 +116,7 @@ class CrashReportingService {
   }
 
   static final RegExp _sensitiveKeyPattern = RegExp(
-    r'(token|key|auth|sig|secret|password|pwd|pass|credential|api[_-]?key|access[_-]?token|refresh[_-]?token|bearer)',
+    r'(token|key|auth|sig|secret|password|pwd|pass|credential|api[_-]?key|access[_-]?(?:token|key)|refresh[_-]?token|secret[_-]?key|x-amz-[a-z0-9_-]*|bearer)',
     caseSensitive: false,
   );
 
@@ -128,7 +128,7 @@ class CrashReportingService {
       RegExp(r'bearer\s+[^\s]+', caseSensitive: false);
 
   static final RegExp _sensitiveKeyValuePattern = RegExp(
-    r'''(?<key>token|key|auth|sig|secret|password|pwd|pass|credential|api[_-]?key|access[_-]?token|refresh[_-]?token)(?<sep>[:=]\s*)(?<val>[^\s,&"']+)''',
+    r'''(?<key>token|key|auth|sig|secret|password|pwd|pass|credential|api[_-]?key|access[_-]?(?:token|key)|refresh[_-]?token|secret[_-]?key|x-amz-[a-z0-9_-]*)(?<sep>[:=]\s*)(?<val>[^\s,&"']+)''',
     caseSensitive: false,
   );
 

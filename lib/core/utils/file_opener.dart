@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:open_filex/open_filex.dart';
 
@@ -9,6 +11,18 @@ import 'localization.dart';
 Future<void> openFile(
     BuildContext context, String path, SettingsProvider settings) async {
   final isDark = settings.isDarkMode;
+  if (path.isEmpty || (!File(path).existsSync() && !Directory(path).existsSync())) {
+    if (context.mounted) {
+      ThemedSnackbar.show(
+        context,
+        message: L10n.isRtl(context) ? 'الملف غير موجود' : 'File does not exist',
+        color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+        icon: Icons.error_outline,
+        isDarkMode: isDark,
+      );
+    }
+    return;
+  }
   try {
     final result = await OpenFilex.open(path);
     if (result.type != ResultType.done && context.mounted) {

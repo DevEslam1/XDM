@@ -294,14 +294,14 @@ bool _isSeeding(DownloadTask task) =>
 
 class _CardShell extends StatelessWidget {
   final Widget child;
-  final Color accent;
+  final Color? accent;
   final bool isDark;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
 
   const _CardShell({
     required this.child,
-    required this.accent,
+    this.accent,
     required this.isDark,
     this.onTap,
     this.onLongPress,
@@ -309,12 +309,13 @@ class _CardShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final effectiveAccent = accent ?? AppTheme.accent(isDark);
     return RepaintBoundary(
       child: Semantics(
         container: true,
         hint: 'Double tap to view details',
         child: DmxCardShell(
-          accent: accent,
+          accent: effectiveAccent,
           radius: 16,
           showRail: true,
           onTap: onTap,
@@ -586,6 +587,18 @@ class _StatusChipState extends State<_StatusChip> {
     } else if (task.cycleState == CycleState.resuming) {
       color = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
       label = 'Resuming…';
+    } else if (task.cycleState == CycleState.allocating) {
+      color = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+      label = 'Allocating disk space…';
+    } else if (task.cycleState == CycleState.starting) {
+      color = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+      label = 'Starting…';
+    } else if (task.cycleState == CycleState.stalled) {
+      color = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
+      label = 'Stalled';
+    } else if (task.cycleState == CycleState.retrying) {
+      color = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
+      label = 'Retrying…';
     } else if (task.cycleState == CycleState.updatingLinks) {
       color = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
       label = 'Refreshing link…';
@@ -727,13 +740,14 @@ class _QueuedSubtext extends StatelessWidget {
         context.select((DownloadProvider p) => p.downloadingTasksCount);
     // FIX-P3: select() the single setting instead of watching the whole provider.
     final maxCount = context.select((SettingsProvider s) => s.maxDownloads);
+    final effectiveMax = maxCount <= 0 ? 1 : maxCount;
 
     final text = L10n.of(
       context,
       'waiting_for_slot',
       args: {
         'active': activeCount,
-        'max': maxCount,
+        'max': effectiveMax,
       },
     );
 
@@ -1715,9 +1729,13 @@ class _FileCard extends StatelessWidget with HapticHelper {
                             children: [
                               Expanded(
                                 child: Tooltip(
-                                  message: task.fileName,
+                                  message: task.fileName.trim().isEmpty
+                                      ? 'Untitled'
+                                      : task.fileName,
                                   child: Text(
-                                    task.fileName,
+                                    task.fileName.trim().isEmpty
+                                        ? 'Untitled'
+                                        : task.fileName,
                                     textDirection: TextDirection.ltr,
                                     style: AppTheme.dataStyle(
                                       isDark: isDark,
@@ -1892,12 +1910,12 @@ class _MediaCard extends StatelessWidget with HapticHelper {
                           width: 0.8,
                         ),
                         image: task.thumbnailUrl != null &&
-                                task.thumbnailUrl!.isNotEmpty
+                                task.thumbnailUrl!.trim().isNotEmpty
                             ? DecorationImage(
                                 image: CachedNetworkImageProvider(
-                                  task.thumbnailUrl!.startsWith('//')
-                                      ? 'https:${task.thumbnailUrl}'
-                                      : task.thumbnailUrl!,
+                                  task.thumbnailUrl!.trim().startsWith('//')
+                                      ? 'https:${task.thumbnailUrl!.trim()}'
+                                      : task.thumbnailUrl!.trim(),
                                   maxWidth: 144,
                                   maxHeight: 144,
                                 ),
@@ -1909,7 +1927,7 @@ class _MediaCard extends StatelessWidget with HapticHelper {
                             : null,
                       ),
                       child: task.thumbnailUrl != null &&
-                              task.thumbnailUrl!.isNotEmpty
+                              task.thumbnailUrl!.trim().isNotEmpty
                           ? null
                           : Icon(
                               _isAudioOnly
@@ -1928,9 +1946,13 @@ class _MediaCard extends StatelessWidget with HapticHelper {
                             children: [
                               Expanded(
                                 child: Tooltip(
-                                  message: task.fileName,
+                                  message: task.fileName.trim().isEmpty
+                                      ? 'Untitled Media'
+                                      : task.fileName,
                                   child: Text(
-                                    task.fileName,
+                                    task.fileName.trim().isEmpty
+                                        ? 'Untitled Media'
+                                        : task.fileName,
                                     textDirection: TextDirection.ltr,
                                     style: AppTheme.dataStyle(
                                       isDark: isDark,
@@ -2947,10 +2969,12 @@ class _PlaylistGroupCardState extends State<PlaylistGroupCard>
   bool get _anyDownloading =>
       widget.items.any((t) => t.status == DownloadStatus.downloading);
 
-  bool get _allDone => _completedCount == widget.items.length;
+  bool get _allDone =>
+      widget.items.isNotEmpty && _completedCount == widget.items.length;
 
   @override
   Widget build(BuildContext context) {
+    if (widget.items.isEmpty) return const SizedBox.shrink();
     final settings = context.read<SettingsProvider>();
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);

@@ -2167,6 +2167,7 @@ class DownloadOrchestrator {
       if (_pushScheduled[task.id] == true) return;
       _pushScheduled[task.id] = true;
       scheduleMicrotask(() {
+        if (_host.providerDisposed) return;
         try {
           final index = _host.providerTasks.indexWhere((t) => t.id == task.id);
           if (index == -1) return;
@@ -2385,7 +2386,8 @@ class DownloadOrchestrator {
     CancelToken? activeAudioCancelToken;
 
     cancelSub = cancelToken.whenCancel
-        .then((_) {
+        .asStream()
+        .listen((_) {
           final v = activeVideoCancelToken;
           final a = activeAudioCancelToken;
           final reason = cancelToken.cancelError?.message ?? 'cancelled';
@@ -2399,9 +2401,7 @@ class DownloadOrchestrator {
               a.cancel(reason);
             } catch (_) {}
           }
-        })
-        .asStream()
-        .listen(null);
+        });
 
     // FIX A-3: Early-exit merge path before retry loop when both streams exist and are complete
     if (hasAudio) {
@@ -2441,6 +2441,7 @@ class DownloadOrchestrator {
               cycleState: CycleState.merging,
             ));
             final merged = await _mergeAudioVideo(task.id, effectiveAudioPath);
+            if (cancelToken.isCancelled) return;
             if (merged) {
               await _finalizeDownload(task.id, notificationId);
               return;
@@ -3240,6 +3241,8 @@ class DownloadOrchestrator {
                       videoStreamSize: 0,
                     );
                   } else {
+                    videoBytesSoFar = 0;
+                    videoSizeSoFar = 0;
                     task = task.copyWith(url: freshUrl);
                   }
                   await _host.setTaskState(task);
@@ -3995,6 +3998,7 @@ class DownloadOrchestrator {
               initialState: DownloadStateMachine.fromStatus(task.status),
             ).transition(DomainDownloadState.downloading);
             final merged = await _mergeAudioVideo(task.id, audioFile.path);
+            if (_host.cancelTokens[task.id]?.isCancelled == true) return;
             if (merged) {
               await _finalizeDownload(task.id, notificationId);
             } else {
@@ -4606,6 +4610,7 @@ class DownloadOrchestrator {
                 ));
 
                 final merged = await _mergeAudioVideo(task.id, audioFile.path);
+                if (_host.cancelTokens[task.id]?.isCancelled == true) return;
                 if (merged) {
                   await _finalizeDownload(
                       task.id, _host.notifications.idFor(task.id));

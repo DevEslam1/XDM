@@ -74,6 +74,13 @@ class TorrentSubscriptionRegistry {
       int torrentId, TorrentDownloadHandler handler, StreamSubscription sub) {
     _TorrentSubEntry? existing;
     _lock.synchronized(() {
+      while (_registry.length >= 100) {
+        final oldestKey = _registry.keys.first;
+        final evicted = _registry.remove(oldestKey);
+        try {
+          evicted?.subscription.cancel();
+        } catch (_) {}
+      }
       existing = _registry.remove(torrentId);
       _registry[torrentId] = _TorrentSubEntry(
         handler: handler,
@@ -160,6 +167,20 @@ class TorrentSubscriptionRegistry {
       }
     }
     return map;
+  }
+
+  void cleanupStale([Set<int>? activeIds]) {
+    _lock.synchronized(() {
+      final active = activeIds ?? TorrentService.activeTorrentIds;
+      final staleKeys =
+          _registry.keys.where((id) => !active.contains(id)).toList();
+      for (final key in staleKeys) {
+        final entry = _registry.remove(key);
+        try {
+          entry?.subscription.cancel();
+        } catch (_) {}
+      }
+    });
   }
 
   Future<void> disposeAsync(int torrentId) async {
@@ -949,10 +970,10 @@ class TorrentDownloadHandler {
               saveDir,
               resumeData: preloadedResume?.toList(),
               // B1: forward the user-configured metadata timeout.
-              timeout: metadataTimeoutSeconds != null &&
-                      metadataTimeoutSeconds > 0
-                  ? Duration(seconds: metadataTimeoutSeconds)
-                  : const Duration(seconds: 300),
+              timeout:
+                  metadataTimeoutSeconds != null && metadataTimeoutSeconds > 0
+                      ? Duration(seconds: metadataTimeoutSeconds)
+                      : const Duration(seconds: 300),
               onStatusUpdate: (message) {
                 onProgress(_torrentProgress(
                   cycleState: CycleState.fetchingMetadata,
@@ -1017,8 +1038,9 @@ class TorrentDownloadHandler {
               summary: initSummary,
               files: initFiles,
               // B3: emit the resolved id once known, not the stale param.
-              torrentId:
-                  id >= 0 ? id : (_torrentService.idForSource(url) ?? torrentId),
+              torrentId: id >= 0
+                  ? id
+                  : (_torrentService.idForSource(url) ?? torrentId),
               knownFileSize: knownFileSize,
             ));
             rethrow;
@@ -1363,18 +1385,18 @@ class TorrentDownloadHandler {
           try {
             final accurateFiles = await _torrentService
                 .getAccurateFileProgress(
-                  id,
-                  saveDir,
-                  knownSizes: previousLengthByIndex,
-                )
+              id,
+              saveDir,
+              knownSizes: previousLengthByIndex,
+            )
                 .timeout(
-                  const Duration(seconds: 2),
-                  onTimeout: () {
-                    _log.warning(
-                        'Accurate file progress fetch on pause timed out for torrent $id');
-                    return const [];
-                  },
-                );
+              const Duration(seconds: 2),
+              onTimeout: () {
+                _log.warning(
+                    'Accurate file progress fetch on pause timed out for torrent $id');
+                return const [];
+              },
+            );
             if (accurateFiles.isNotEmpty) {
               pauseFiles = [
                 for (var i = 0; i < accurateFiles.length; i++)
@@ -1506,13 +1528,13 @@ class TorrentDownloadHandler {
           var resumeConfirmed = true;
           try {
             await _torrentService.resumeTorrent(id).timeout(
-                  const Duration(seconds: 3),
-                  onTimeout: () {
-                    resumeConfirmed = false;
-                    _log.warning(
-                        'resumeTorrent confirmation timed out for torrent $id — continuing');
-                  },
-                );
+              const Duration(seconds: 3),
+              onTimeout: () {
+                resumeConfirmed = false;
+                _log.warning(
+                    'resumeTorrent confirmation timed out for torrent $id — continuing');
+              },
+            );
           } catch (e, st) {
             resumeConfirmed = false;
             _log.warning('resumeTorrent failed: $e', e, st);
@@ -1679,6 +1701,11 @@ class TorrentDownloadHandler {
     List<Map<String, dynamic>>? Function()? getTorrentFiles,
     int knownFileSize = 0,
   }) {
+    // Mirror the production path (handleTorrentDownload) so the completion
+    // guard in _handleUpdate does not early-return: the torrent must be marked
+    // active before the update subscription starts processing ticks.
+    _removedTorrentIds.remove(id);
+    _activeTorrentIds.add(id);
     return _listenForCompletion(
       id,
       url,
@@ -2427,10 +2454,9 @@ class TorrentDownloadHandler {
     // B16: with deselected files, `totalDone` counts bytes of unwanted files.
     // When the engine reports no wanted-only progress, it must never stand in
     // for wanted progress — the correct reading is zero.
-    final bool hasDeselectedFiles = effectiveFiles
-            ?.any((f) =>
-                (f['selected'] as bool?) == false ||
-                (f['priority'] as int? ?? 4) == 0) ??
+    final bool hasDeselectedFiles = effectiveFiles?.any((f) =>
+            (f['selected'] as bool?) == false ||
+            (f['priority'] as int? ?? 4) == 0) ??
         false;
     final rawDownloaded = torrent.totalWantedDone > 0
         ? torrent.totalWantedDone
@@ -2469,8 +2495,7 @@ class TorrentDownloadHandler {
         // lt_add_magnet_resume export) or a partial shortfall. Recover the
         // on-disk data with a one-shot recheck rather than re-downloading
         // from scratch.
-        if (!rt.resumeRecheckIssued &&
-            rawDownloaded < rt.resumeExpectedBytes) {
+        if (!rt.resumeRecheckIssued && rawDownloaded < rt.resumeExpectedBytes) {
           rt.resumeRecheckIssued = true;
           // B14: when the store holds a piece bitfield, cross-check the
           // stored piece count against the engine's actual before paying for
@@ -2676,7 +2701,9 @@ class TorrentDownloadHandler {
 
       if (!pieceMapped) {
         // B24: same copy-on-write for the estimator path.
-        final copy = [for (final f in filesToUpdate) Map<String, dynamic>.of(f)];
+        final copy = [
+          for (final f in filesToUpdate) Map<String, dynamic>.of(f)
+        ];
         TorrentFileProgressEstimator.updateFilesWithNativeProgress(
           copy,
           safeProgress,

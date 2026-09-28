@@ -237,6 +237,9 @@ class WidgetDataBridge {
     _isPaused = false;
   }
 
+  bool _disposed = false;
+  bool get isDisposed => _disposed;
+
   /// Pushes [dashboard] to the native widgets.
   ///
   /// Regular pushes are throttled to one per [minPushInterval]. Pass
@@ -244,7 +247,7 @@ class WidgetDataBridge {
   /// that must appear on the widget immediately.
   Future<void> pushDashboard(WidgetDashboard dashboard,
       {bool force = false}) async {
-    if (kIsWeb) return;
+    if (_disposed || kIsWeb) return;
     if (_isPaused && !force) return;
     if (PowerMonitor.screenOff && dashboard.totalActiveCount == 0) return;
     _pendingTimer?.cancel();
@@ -378,8 +381,19 @@ class WidgetDataBridge {
       availableBytes >= 0 && availableBytes < 100 * 1024 * 1024;
 
   void dispose() {
+    _disposed = true;
     _pendingTimer?.cancel();
     _pendingTimer = null;
     _lastPush = null;
+  }
+
+  @visibleForTesting
+  static void resetForTesting() {
+    instance._disposed = false;
+    instance._pendingTimer?.cancel();
+    instance._pendingTimer = null;
+    instance._lastPush = null;
+    instance._isPaused = false;
+    instance._isPushing = false;
   }
 }

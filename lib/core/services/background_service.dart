@@ -50,12 +50,12 @@ class BackgroundService {
   static DateTime? _lastHeartbeatTime;
   static final Lock _activeLock = Lock();
   static final Set<String> _activeTaskIds = <String>{};
-  static int _activeDownloadCount = 0;
+  static int get _activeDownloadCount => _activeTaskIds.length;
   static int Function()? _activeDownloadCountQuery;
   static bool _isStarting = false;
 
   @visibleForTesting
-  static int get activeDownloadCountForTesting => _activeDownloadCount;
+  static int get activeDownloadCountForTesting => _activeTaskIds.length;
 
   @visibleForTesting
   static Set<String> get activeTaskIdsForTesting =>
@@ -63,7 +63,6 @@ class BackgroundService {
 
   @visibleForTesting
   static void resetActiveDownloadCountForTesting() {
-    _activeDownloadCount = 0;
     _activeTaskIds.clear();
   }
 
@@ -92,19 +91,10 @@ class BackgroundService {
   static Future<void> setDownloadActive(bool active, String taskId) async {
     await _activeLock.synchronized(() async {
       if (active) {
-        if (_activeTaskIds.add(taskId)) {
-          _activeDownloadCount = _activeTaskIds.length;
-        }
+        _activeTaskIds.add(taskId);
       } else {
-        if (_activeTaskIds.remove(taskId)) {
-          _activeDownloadCount = _activeTaskIds.length;
-        }
+        _activeTaskIds.remove(taskId);
       }
-      assert(
-        _activeTaskIds.length == _activeDownloadCount,
-        'activeTaskIds ($_activeTaskIds) out of sync with count '
-        '($_activeDownloadCount) after setDownloadActive($active, $taskId)',
-      );
       await _afterActiveCountChanged();
     });
   }
@@ -117,12 +107,6 @@ class BackgroundService {
       _activeTaskIds
         ..removeWhere((id) => !activeTaskIds.contains(id))
         ..addAll(activeTaskIds);
-      _activeDownloadCount = _activeTaskIds.length;
-      assert(
-        _activeTaskIds.length == _activeDownloadCount,
-        'activeTaskIds ($_activeTaskIds) out of sync with count '
-        '($_activeDownloadCount) after reconcileActiveTaskIds',
-      );
       await _afterActiveCountChanged();
     });
   }
@@ -789,6 +773,10 @@ class BackgroundService {
   /// to prevent the native 30-minute timeout from expiring.
   static Future<void> acquireWakeLock() async {
     if (!isSupported || _wakeLockHeld) return;
+    if (_testMode) {
+      _wakeLockHeld = true;
+      return;
+    }
     final activeCount = await _checkActiveDownloadCount();
     if (activeCount <= 0) return;
     // Battery gate: if battery is <20% and not charging, do not hold wake lock to avoid rapid battery drain
@@ -912,6 +900,10 @@ class BackgroundService {
   /// Releases the partial wake lock. Safe to call even if no lock is held.
   static Future<void> releaseWakeLock() async {
     if (!isSupported) return;
+    if (_testMode) {
+      _wakeLockHeld = false;
+      return;
+    }
     try {
       _wakeLockRenewalTimer?.cancel();
       _wakeLockRenewalTimer = null;

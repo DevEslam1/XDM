@@ -193,9 +193,9 @@ class ScheduleManager {
       }
     }
 
-    _schedulingTimer = Timer(delay, () {
+    _schedulingTimer = Timer(delay, () async {
       if (_isDisposed()) return;
-      checkScheduledDownloads();
+      await checkScheduledDownloads();
       scheduleNextDynamicTick();
     });
   }
@@ -250,12 +250,16 @@ class ScheduleManager {
               wasScheduledAt: task.scheduledAt,
               clearError: true,
             );
-            currentTasks[idx] = promoted;
+            try {
+              currentTasks[idx] = promoted;
+            } catch (_) {}
             try {
               await _databaseService.saveTask(promoted);
               anyPromoted = true;
             } catch (_) {
-              currentTasks[idx] = task;
+              try {
+                currentTasks[idx] = task;
+              } catch (_) {}
               _notifyListeners();
             }
           }

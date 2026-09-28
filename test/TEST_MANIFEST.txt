@@ -103,6 +103,7 @@ test/features/downloads/download_task_core_progress_test.dart
 test/features/downloads/drift_task_repository_test.dart
 test/features/downloads/engine_models_test.dart
 test/features/downloads/http_transfer_job_test.dart
+test/features/downloads/live_notepad_pause_resume_test.dart
 test/features/downloads/matrix/download_lifecycle_matrix_test.dart
 test/features/downloads/matrix/kill_crash_matrix_test.dart
 test/features/downloads/models/download_task_test.dart
@@ -336,6 +337,7 @@ test/unit/services/protocol_cache_test.dart
 test/unit/services/redirect_guard_test.dart
 test/unit/services/regression_fixes_phase_test.dart
 test/unit/services/resilience_test.dart
+test/unit/services/resume_orphan_multithread_test.dart
 test/unit/services/retry_engine_cancel_test.dart
 test/unit/services/retry_interceptor_test.dart
 test/unit/services/security_hardening_test.dart

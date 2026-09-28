@@ -158,6 +158,8 @@ class MirrorParallelEngine implements DisposableService {
   Future<void> dispose() async {
     _cacheInvalidateDebounce?.cancel();
     _cacheInvalidateDebounce = null;
+    _mirrorStates.clear();
+    _invalidateThreadDistributionCache();
     ServiceRegistry.unregister(this);
   }
 
@@ -173,11 +175,12 @@ class MirrorParallelEngine implements DisposableService {
 
     if (urls.length == 1) {
       final token = CancelToken();
-      void onParentCancel() {
-        if (!token.isCancelled) token.cancel('parent_cancelled');
+      StreamSubscription<void>? cancelSub;
+      if (parentCancelToken != null) {
+        cancelSub = parentCancelToken.whenCancel.asStream().listen((_) {
+          if (!token.isCancelled) token.cancel('parent_cancelled');
+        });
       }
-
-      parentCancelToken?.whenCancel.then((_) => onParentCancel());
 
       try {
         Future<T> future;
@@ -198,7 +201,7 @@ class MirrorParallelEngine implements DisposableService {
         }
         return await future;
       } finally {
-        // ensure no leaked listener
+        await cancelSub?.cancel();
       }
     }
 
@@ -218,6 +221,7 @@ class MirrorParallelEngine implements DisposableService {
       }
     }
 
+    StreamSubscription<void>? cancelSub;
     if (parentCancelToken != null) {
       if (parentCancelToken.isCancelled) {
         throw parentCancelToken.cancelError ??
@@ -227,7 +231,7 @@ class MirrorParallelEngine implements DisposableService {
               message: 'Mirror race cancelled',
             );
       }
-      parentCancelToken.whenCancel.then((_) {
+      cancelSub = parentCancelToken.whenCancel.asStream().listen((_) {
         if (!completer.isCompleted) {
           cancelAllTokens('parent_cancelled');
           completer.completeError(
@@ -283,7 +287,10 @@ class MirrorParallelEngine implements DisposableService {
       });
     }
 
-    return completer.future;
+    return completer.future.whenComplete(() {
+      timeoutTimer?.cancel();
+      cancelSub?.cancel();
+    });
   }
 
   List<String> get mirrorUrls => List.unmodifiable(_mirrorUrls);
@@ -701,4 +708,6 @@ class MirrorSelector {
         timeout: timeout,
         parentCancelToken: parentCancelToken,
       );
+
+  Future<void> dispose() => parallelEngine.dispose();
 }

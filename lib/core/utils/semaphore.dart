@@ -43,18 +43,24 @@ class Semaphore {
         throw TimeoutException(
             'Semaphore acquisition timed out after $timeout');
       }
+    } catch (_) {
+      _waiters.remove(completer);
+      rethrow;
     }
   }
 
   void release() {
-    if (_waiters.isNotEmpty) {
-      _waiters.removeFirst().complete();
-    } else {
-      if (_currentCount <= 0) {
-        assert(false, 'Semaphore.release() called when count is already 0');
+    while (_waiters.isNotEmpty) {
+      final waiter = _waiters.removeFirst();
+      if (!waiter.isCompleted) {
+        waiter.complete();
         return;
       }
-      _currentCount--;
     }
+    if (_currentCount <= 0) {
+      assert(false, 'Semaphore.release() called when count is already 0');
+      return;
+    }
+    _currentCount--;
   }
 }

@@ -18,6 +18,8 @@ import 'youtube_service.dart';
 final _log = LoggingService.logger('ShareUrlHandler');
 
 class ShareUrlHandler {
+  static final Map<String, DateTime> _recentlyHandledUrls = {};
+
   static Future<void> handle(
     BuildContext context,
     String url, {
@@ -26,6 +28,18 @@ class ShareUrlHandler {
   }) async {
     // Validate URL scheme to reject malicious URLs (e.g., unauthorized file://)
     final trimmedUrl = url.trim();
+    final now = DateTime.now();
+    _recentlyHandledUrls
+        .removeWhere((_, time) => now.difference(time).inSeconds > 5);
+    final lastHandled = _recentlyHandledUrls[trimmedUrl];
+    if (lastHandled != null &&
+        now.difference(lastHandled).inMilliseconds < 1500) {
+      _log.info(
+          '[ShareUrlHandler] Dropped duplicate handle invocation for URL: $trimmedUrl');
+      return;
+    }
+    _recentlyHandledUrls[trimmedUrl] = now;
+
     final uri = Uri.tryParse(trimmedUrl);
     final scheme = uri?.scheme.toLowerCase() ?? '';
     final allowedSchemes = {'http', 'https', 'magnet', 'file'};

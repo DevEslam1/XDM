@@ -1556,8 +1556,12 @@ class DownloadProvider extends ChangeNotifier
           duo?.audio.cancel('deleted');
           _cancelTokens.remove(id)?.cancel('deleted');
           _retryTimers.remove(id)?.cancel();
-          _retryCounts.remove(id);
-          _activeFutures.remove(id);
+          final activeFuture = _activeFutures.remove(id);
+          if (activeFuture != null) {
+            try {
+              await activeFuture.timeout(const Duration(seconds: 3));
+            } catch (_) {}
+          }
           _notifications.cancelForTask(id);
           // BG-09: drop any pending OS schedule alarm for the deleted task.
           unawaited(ScheduleManager.cancelAlarm(id));
@@ -1823,6 +1827,7 @@ class DownloadProvider extends ChangeNotifier
 
   @override
   void updateProgressTask(DownloadTask updated) {
+    if (_executor.isTombstoned(updated.id)) return;
     final idx = _tasks.indexWhere((t) => t.id == updated.id);
     if (idx != -1) {
       _tasks[idx] = updated;

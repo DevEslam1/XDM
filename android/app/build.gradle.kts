@@ -34,13 +34,6 @@ android {
         versionName = flutter.versionName
     }
 
-    flavorDimensions += "default"
-    productFlavors {
-        create("ytm") {
-            dimension = "default"
-        }
-    }
-
     val keystorePropertiesFile = rootProject.file("keystore.properties")
     val keyPropertiesFile = rootProject.file("key.properties")
     val propFile = if (keystorePropertiesFile.exists()) keystorePropertiesFile else if (keyPropertiesFile.exists()) keyPropertiesFile else null

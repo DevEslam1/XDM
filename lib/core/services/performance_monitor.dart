@@ -179,7 +179,7 @@ class PerformanceMonitor {
       onSustainedJank?.call(true);
     }
     _trim();
-    if (_metricsController.hasListener) {
+    if (_metricsController.hasListener && !_metricsController.isClosed) {
       _metricsController.add(FrameMetrics(
         fps: currentFps,
         jankRatio: jankRatio,
@@ -221,5 +221,13 @@ class PerformanceMonitor {
     _rasterSamples.clear();
     _totalFrames = 0;
     _jankyFrames = 0;
+  }
+
+  void dispose() {
+    _listening = false;
+    if (!_metricsController.isClosed) {
+      _metricsController.close();
+    }
+    reset();
   }
 }

@@ -655,6 +655,8 @@ class _AppLifecycleObserver with WidgetsBindingObserver {
   static const _iosTorrentChannel = MethodChannel(
     'com.dmx.app/torrent_background',
   );
+  bool _transitionInProgress = false;
+
   @override
   void didChangeMetrics() {
     unawaited(PowerMonitor.updateScreenStateFromPlatform());

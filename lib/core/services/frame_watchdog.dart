@@ -209,5 +209,15 @@ class FrameWatchdog {
     if (!_isRunning) return;
     _isRunning = false;
     SchedulerBinding.instance.removeTimingsCallback(_onTimings);
+    _metricsListenerRegistered = false;
+  }
+
+  @visibleForTesting
+  static void resetForTesting() {
+    stop();
+    _metricsListenerRegistered = false;
+    _cachedRefreshRate = null;
+    _dropped = 0;
+    _total = 0;
   }
 }
