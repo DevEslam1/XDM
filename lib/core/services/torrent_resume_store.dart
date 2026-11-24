@@ -839,10 +839,14 @@ class TorrentResumeStore {
         return Uint8List.fromList(blob);
       }
       return null;
-    } catch (e) {
-      debugPrint('[TorrentResumeStore] load failed: $e');
-      // FIX-M12: Delete corrupt resume data on load error
+    } on FormatException catch (e) {
+      debugPrint('[TorrentResumeStore] corrupt metadata format: $e');
+      // Only delete resume data when the file itself is demonstrably corrupt,
+      // not on transient Windows file-lock / I/O errors.
       await deleteResumeDataForSource(sourceUrl, infoHash: infoHash);
+      return null;
+    } catch (e) {
+      debugPrint('[TorrentResumeStore] transient load failure (preserving files): $e');
       return null;
     }
   }

@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/app_theme.dart';
@@ -310,7 +310,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                   )
                                 : Builder(
                                     builder: (context) {
-                                      final isWide = isMultiColumnLayout(context);
+                                      final isWide =
+                                          isMultiColumnLayout(context);
                                       if (isWide) {
                                         return GridView.builder(
                                           padding: const EdgeInsets.symmetric(

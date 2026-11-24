@@ -219,7 +219,9 @@ class TorrentSeedingManager {
     required ThermalStatus thermalStatus,
   }) {
     if (batteryMode == BatterySaverMode.aggressive) {
-      return 0; // Disable uploading during aggressive battery saver
+      // In libtorrent, 0 means unlimited; 1 B/s effectively disables uploading
+      // (matching LibtorrentNativeImpl.configureSession disableUpload).
+      return 1;
     }
     if (batteryMode == BatterySaverMode.moderate) {
       return 50 * 1024; // Limit to 50 KB/s in moderate battery saver

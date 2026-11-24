@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/app_theme.dart';
@@ -7,6 +7,8 @@ import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
 import '../../../shared/design/dmx_design.dart';
+import '../../../shared/design/dmx_tokens.dart';
+import '../../../shared/widgets/dmx_bottom_sheet.dart';
 import '../../settings/provider/settings_provider.dart';
 
 class MediaQualitySheet extends StatefulWidget {
@@ -31,14 +33,8 @@ class MediaQualitySheet extends StatefulWidget {
       final settings = Provider.of<SettingsProvider>(context, listen: false);
       runHaptic(settings);
       if (!context.mounted) return null;
-      return await showModalBottomSheet<Map<String, dynamic>>(
+      return await showDmxModalBottomSheet<Map<String, dynamic>>(
         context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        barrierColor: Colors.black.withValues(alpha: 0.1),
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        ),
         builder: (_) => MediaQualitySheet(
           videoUrl: videoUrl,
           preloadedStreams: preloadedStreams,
@@ -98,7 +94,6 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
   }
 
   void _processAndMemoizeStreams() {
-    // Process audio streams
     final audio = _streams.where((s) => s['type'] == 'audio').toList()
       ..sort((a, b) {
         final aSize = (a['size'] as num? ?? 0).toInt();
@@ -106,7 +101,6 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
         return bSize.compareTo(aSize);
       });
 
-    // Process video streams and combine with audio if needed
     final rawVideos = _streams
         .where((s) =>
             s['type'] == 'video_only' ||
@@ -252,6 +246,17 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
     }
   }
 
+  void _refreshStreams() {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+      _streams = [];
+      _memoizedVideos = [];
+      _memoizedAudios = [];
+    });
+    _fetchStreams();
+  }
+
   IconData _iconForType(String type) {
     switch (type) {
       case 'muxed':
@@ -305,453 +310,386 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
     final isDark = settings.isDarkMode;
+    final isAmoled = settings.isAmoledMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final green = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
-    final secClr =
-        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
-    final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
-    final glassBorder =
-        isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
-    final panelBg = isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9);
+    final amber = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
+    final red = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
+    final secClr = AppTheme.textSecondaryOf(isDark);
+    final hairline = AppTheme.hairlineBorder(isDark, isAmoled: isAmoled);
+    final panelBg = AppTheme.panelBg(isDark, isAmoled: isAmoled);
 
     final videoList = _memoizedVideos;
     final audio = _memoizedAudios;
     final videoTitle = _streams.isNotEmpty
         ? (_streams.first['title'] as String? ?? 'Media')
-        : 'Media';
+        : null;
 
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.7,
-      maxChildSize: 0.9,
-      minChildSize: 0.4,
-      builder: (context, scrollController) {
-        return ClipRRect(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-          child: Container(
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF13141F) : const Color(0xFFFAFBFD),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(28),
-              ),
-              border: Border(
-                top: BorderSide(
-                  color: accent.withValues(alpha: 0.4),
-                  width: 1.2,
+    return DmxSheetContainer(
+      scrollable: false,
+      maxHeightFraction: 0.88,
+      isDark: isDark,
+      isAmoled: isAmoled,
+      accentColor: accent,
+      padding: EdgeInsets.zero,
+      header: DmxSheetHeader(
+        title: L10n.of(context, 'yt_video_quality'),
+        subtitle: (!_isLoading && videoTitle != null) ? videoTitle : null,
+        icon: Icons.play_circle_filled_rounded,
+        accentColor: accent,
+        isDark: isDark,
+        trailing: IconButton(
+          icon: _isLoading
+              ? SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: accent,
+                  ),
+                )
+              : Icon(
+                  Icons.refresh_rounded,
+                  color: accent,
+                  size: 20,
+                ),
+          tooltip: L10n.of(context, 'retry_btn'),
+          onPressed: _isLoading ? null : _refreshStreams,
+        ),
+      ),
+      child: Column(
+        children: [
+          // Legal notice
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              DmxTokens.sheetHorizontalPadding,
+              12,
+              DmxTokens.sheetHorizontalPadding,
+              8,
+            ),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: amber.withValues(alpha: isDark ? 0.10 : 0.08),
+                borderRadius: BorderRadius.circular(DmxTokens.radiusSm),
+                border: Border.all(
+                  color: amber.withValues(alpha: 0.28),
+                  width: 0.8,
                 ),
               ),
-            ),
-            child: Column(
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    margin: const EdgeInsets.only(top: 12, bottom: 8),
-                    decoration: BoxDecoration(
-                      color: mutedClr.withValues(alpha: 0.4),
-                      borderRadius: BorderRadius.circular(2),
+              child: Row(
+                children: [
+                  Icon(Icons.gavel_rounded, size: 14, color: amber),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      L10n.of(context, 'yt_legal_warning'),
+                      style: TextStyle(
+                        fontFamily: AppTheme.fontBody,
+                        color: secClr,
+                        fontSize: 11,
+                        height: 1.35,
+                      ),
                     ),
                   ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 6,
+                ],
+              ),
+            ),
+          ),
+
+          // Video / Audio segmented control
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: DmxTokens.sheetHorizontalPadding,
+              vertical: 4,
+            ),
+            child: Container(
+              height: 44,
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                color: panelBg,
+                borderRadius: BorderRadius.circular(DmxTokens.radiusMd),
+                border: Border.all(color: hairline, width: 0.8),
+              ),
+              child: Row(
+                children: [
+                  _buildTabChip(
+                    index: 0,
+                    icon: Icons.videocam_rounded,
+                    label: L10n.of(context, 'video_label'),
+                    count: videoList.length,
+                    color: accent,
+                    isDark: isDark,
                   ),
-                  child: Row(
+                  _buildTabChip(
+                    index: 1,
+                    icon: Icons.audiotrack_rounded,
+                    label: L10n.of(context, 'audio_label'),
+                    count: audio.length,
+                    color: green,
+                    isDark: isDark,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Body
+          if (_isLoading)
+            Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: accent,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      L10n.of(context, 'fetching_streams'),
+                      style: TextStyle(
+                        fontFamily: AppTheme.fontBody,
+                        fontSize: 12.5,
+                        color: secClr,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else if (_errorMessage != null)
+            Expanded(
+              child: Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(28),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(10),
+                        width: 52,
+                        height: 52,
                         decoration: BoxDecoration(
-                          color: accent.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: accent.withValues(alpha: 0.3),
-                          ),
+                          color: red.withValues(alpha: 0.12),
+                          shape: BoxShape.circle,
                         ),
                         child: Icon(
-                          Icons.play_circle_filled,
-                          color: accent,
-                          size: 22,
+                          Icons.error_outline_rounded,
+                          color: red,
+                          size: 28,
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              L10n.of(context, 'yt_video_quality'),
-                              style: TextStyle(
-                                color: accent,
-                                fontFamily: 'Space Grotesk',
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 1.0,
-                                fontSize: 14,
-                              ),
-                            ),
-                            if (!_isLoading && _streams.isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 3),
-                                child: Text(
-                                  videoTitle,
-                                  style: TextStyle(
-                                    color: secClr,
-                                    fontSize: 11,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                          ],
+                      const SizedBox(height: 14),
+                      Text(
+                        _errorMessage!,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontFamily: AppTheme.fontBody,
+                          color: secClr,
+                          fontSize: 12.5,
+                          height: 1.45,
                         ),
                       ),
-                      IconButton(
-                        icon: _isLoading
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : Icon(
-                                Icons.refresh_rounded,
-                                color: accent,
-                                size: 20,
-                              ),
-                        tooltip: L10n.of(context, 'retry_btn'),
-                        onPressed: _isLoading
-                            ? null
-                            : () {
-                                setState(() {
-                                  _isLoading = true;
-                                  _errorMessage = null;
-                                  _streams = [];
-                                  _memoizedVideos = [];
-                                  _memoizedAudios = [];
-                                });
-                                _fetchStreams();
-                              },
+                      const SizedBox(height: 18),
+                      FilledButton.icon(
+                        onPressed: _refreshStreams,
+                        icon: const Icon(Icons.refresh_rounded, size: 17),
+                        label: Text(
+                          L10n.of(context, 'retry_btn'),
+                          style: const TextStyle(
+                            fontFamily: AppTheme.fontDisplay,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.6,
+                          ),
+                        ),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: accent,
+                          foregroundColor: AppTheme.inkOn(accent),
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(DmxTokens.radiusMd),
+                          ),
+                        ),
                       ),
                     ],
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 6,
-                  ),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
+              ),
+            )
+          else
+            Expanded(
+              child: NotificationListener<ScrollNotification>(
+                onNotification: (notification) {
+                  _onScrollNotification(notification);
+                  return false;
+                },
+                child: AnimatedSwitcher(
+                  duration: AppTheme.motionFast,
+                  transitionBuilder: (child, animation) =>
+                      FadeTransition(opacity: animation, child: child),
+                  child: ListView(
+                    key: ValueKey<int>(_selectedTabIndex),
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(
+                      DmxTokens.sheetHorizontalPadding,
+                      4,
+                      DmxTokens.sheetHorizontalPadding,
+                      20,
                     ),
-                    decoration: BoxDecoration(
-                      color: Colors.amber.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: Colors.amber.withValues(alpha: 0.3),
-                        width: 0.8,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.gavel_rounded,
-                          size: 14,
-                          color: Colors.amber,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            L10n.of(context, 'yt_legal_warning'),
-                            style: TextStyle(color: secClr, fontSize: 10),
+                    children: [
+                      if (_selectedTabIndex == 0) ...[
+                        if (videoList.isNotEmpty) ...[
+                          _sectionHeader(
+                            context,
+                            L10n.of(context, 'video_label'),
+                            Icons.video_file_outlined,
+                            accent,
+                            isDark,
+                            trailing: _recommendBadge(isDark),
                           ),
-                        ),
+                          ...videoList.take(_displayedVideoCount).map(
+                                (s) => _streamTile(
+                                  context,
+                                  s,
+                                  isDark,
+                                  isAmoled,
+                                  settings,
+                                ),
+                              ),
+                          const SizedBox(height: 8),
+                        ] else
+                          _emptyNotice('No video streams found.', secClr),
+                      ] else ...[
+                        if (audio.isNotEmpty) ...[
+                          _sectionHeader(
+                            context,
+                            L10n.of(context, 'audio_label'),
+                            Icons.audiotrack_outlined,
+                            green,
+                            isDark,
+                          ),
+                          ...audio.take(_displayedAudioCount).map(
+                                (s) => _streamTile(
+                                  context,
+                                  s,
+                                  isDark,
+                                  isAmoled,
+                                  settings,
+                                ),
+                              ),
+                          const SizedBox(height: 8),
+                        ] else
+                          _emptyNotice('No audio streams found.', secClr),
                       ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabChip({
+    required int index,
+    required IconData icon,
+    required String label,
+    required int count,
+    required Color color,
+    required bool isDark,
+  }) {
+    final isSelected = _selectedTabIndex == index;
+    final secClr = AppTheme.textSecondaryOf(isDark);
+
+    return Expanded(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => setState(() => _selectedTabIndex = index),
+        child: AnimatedContainer(
+          duration: AppTheme.motionFast,
+          curve: AppTheme.motionCurve,
+          decoration: BoxDecoration(
+            color: isSelected
+                ? color.withValues(alpha: isDark ? 0.16 : 0.12)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(9),
+            border: isSelected
+                ? Border.all(color: color.withValues(alpha: 0.35), width: 0.8)
+                : null,
+          ),
+          child: Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 15, color: isSelected ? color : secClr),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: AppTheme.fontDisplay,
+                      color: isSelected ? color : secClr,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                      letterSpacing: 0.4,
                     ),
                   ),
                 ),
-                const SizedBox(height: 6),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 4,
-                  ),
-                  child: Container(
-                    height: 42,
-                    padding: const EdgeInsets.all(3),
+                if (!_isLoading && count > 0) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                     decoration: BoxDecoration(
-                      color: panelBg,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: glassBorder, width: 0.8),
+                      color: (isSelected ? color : secClr)
+                          .withValues(alpha: isSelected ? 0.2 : 0.12),
+                      borderRadius: BorderRadius.circular(DmxTokens.radiusFull),
                     ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: () => setState(() => _selectedTabIndex = 0),
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 180),
-                              curve: Curves.easeOut,
-                              decoration: BoxDecoration(
-                                color: _selectedTabIndex == 0
-                                    ? accent.withValues(alpha: 0.14)
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(9),
-                                border: _selectedTabIndex == 0
-                                    ? Border.all(
-                                        color: accent.withValues(alpha: 0.4),
-                                      )
-                                    : null,
-                              ),
-                              child: Center(
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.videocam_rounded,
-                                      size: 14,
-                                      color: _selectedTabIndex == 0
-                                          ? accent
-                                          : secClr,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      L10n.of(context, 'video_label'),
-                                      style: TextStyle(
-                                        color: _selectedTabIndex == 0
-                                            ? accent
-                                            : secClr,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 11,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: () => setState(() => _selectedTabIndex = 1),
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 180),
-                              curve: Curves.easeOut,
-                              decoration: BoxDecoration(
-                                color: _selectedTabIndex == 1
-                                    ? green.withValues(alpha: 0.14)
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(9),
-                                border: _selectedTabIndex == 1
-                                    ? Border.all(
-                                        color: green.withValues(alpha: 0.4),
-                                      )
-                                    : null,
-                              ),
-                              child: Center(
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.audiotrack_rounded,
-                                      size: 14,
-                                      color: _selectedTabIndex == 1
-                                          ? green
-                                          : secClr,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      L10n.of(context, 'audio_label'),
-                                      style: TextStyle(
-                                        color: _selectedTabIndex == 1
-                                            ? green
-                                            : secClr,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 11,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                if (_isLoading)
-                  Expanded(
-                    child: Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const SizedBox(
-                            width: 28,
-                            height: 28,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            L10n.of(context, 'fetching_streams'),
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                else if (_errorMessage != null)
-                  Expanded(
-                    child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(32),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.error_outline,
-                              color: isDark
-                                  ? AppTheme.neonRed
-                                  : AppTheme.lightNeonRed,
-                              size: 40,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              _errorMessage!,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: secClr, fontSize: 12),
-                            ),
-                            const SizedBox(height: 20),
-                            TextButton.icon(
-                              onPressed: () {
-                                setState(() {
-                                  _isLoading = true;
-                                  _errorMessage = null;
-                                  _streams = [];
-                                  _memoizedVideos = [];
-                                  _memoizedAudios = [];
-                                });
-                                _fetchStreams();
-                              },
-                              icon: Icon(
-                                Icons.refresh_rounded,
-                                size: 16,
-                                color: accent,
-                              ),
-                              label: Text(
-                                L10n.of(context, 'retry_btn'),
-                                style: TextStyle(
-                                  color: accent,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1.0,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  )
-                else
-                  Expanded(
-                    child: NotificationListener<ScrollNotification>(
-                      onNotification: (notification) {
-                        _onScrollNotification(notification);
-                        return false;
-                      },
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 200),
-                        transitionBuilder: (child, animation) =>
-                            FadeTransition(opacity: animation, child: child),
-                        child: ListView(
-                          key: ValueKey<int>(_selectedTabIndex),
-                          controller: scrollController,
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          children: [
-                            if (_selectedTabIndex == 0) ...[
-                              if (videoList.isNotEmpty) ...[
-                                _sectionHeader(
-                                  context,
-                                  L10n.of(context, 'video_label'),
-                                  Icons.video_file_outlined,
-                                  isDark
-                                      ? AppTheme.neonBlue
-                                      : AppTheme.lightNeonBlue,
-                                  isDark,
-                                  trailing: _recommendBadge(isDark),
-                                ),
-                                ...videoList.take(_displayedVideoCount).map(
-                                      (s) => _streamTile(
-                                          context, s, isDark, settings),
-                                    ),
-                                const SizedBox(height: 12),
-                              ],
-                              if (videoList.isEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.all(32),
-                                  child: Center(
-                                    child: Text(
-                                      'No video streams found.',
-                                      style: TextStyle(
-                                        color: secClr,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                            ] else ...[
-                              if (audio.isNotEmpty) ...[
-                                _sectionHeader(
-                                  context,
-                                  L10n.of(context, 'audio_label'),
-                                  Icons.audiotrack_outlined,
-                                  green,
-                                  isDark,
-                                ),
-                                ...audio.take(_displayedAudioCount).map(
-                                      (s) => _streamTile(
-                                          context, s, isDark, settings),
-                                    ),
-                                const SizedBox(height: 12),
-                              ],
-                              if (audio.isEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.all(32),
-                                  child: Center(
-                                    child: Text(
-                                      'No audio streams found.',
-                                      style: TextStyle(
-                                        color: secClr,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                            const SizedBox(height: 24),
-                          ],
-                        ),
+                    child: Text(
+                      '$count',
+                      style: AppTheme.dataStyle(
+                        isDark: isDark,
+                        size: 11,
+                        color: isSelected ? color : secClr,
                       ),
                     ),
                   ),
+                ],
               ],
             ),
           ),
-        );
-      },
+        ),
+      ),
+    );
+  }
+
+  Widget _emptyNotice(String message, Color secClr) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 16),
+      child: Center(
+        child: Text(
+          message,
+          style: TextStyle(
+            fontFamily: AppTheme.fontBody,
+            color: secClr,
+            fontSize: 13,
+          ),
+        ),
+      ),
     );
   }
 
@@ -764,19 +702,14 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
     Widget? trailing,
   }) {
     return Padding(
-      padding: const EdgeInsetsDirectional.only(top: 8, bottom: 8, start: 4),
+      padding: const EdgeInsetsDirectional.only(top: 6, bottom: 10, start: 2),
       child: Row(
         children: [
           Icon(icon, size: 14, color: color),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
           Text(
             title,
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.8,
-              fontSize: 10,
-            ),
+            style: AppTheme.microLabel(isDark: isDark, color: color),
           ),
           if (trailing != null) ...[const SizedBox(width: 8), trailing],
         ],
@@ -787,23 +720,24 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
   Widget _recommendBadge(bool isDark) {
     final amber = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
-        color: amber.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: amber.withValues(alpha: 0.5), width: 0.6),
+        color: amber.withValues(alpha: isDark ? 0.18 : 0.14),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: amber.withValues(alpha: 0.4), width: 0.6),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.star, size: 9, color: amber),
+          Icon(Icons.star_rounded, size: 10, color: amber),
           const SizedBox(width: 3),
           Text(
             'RECOMMENDED',
             style: TextStyle(
+              fontFamily: AppTheme.fontDisplay,
               color: amber,
-              fontSize: 8,
-              fontWeight: FontWeight.bold,
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
               letterSpacing: 0.5,
             ),
           ),
@@ -832,6 +766,7 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
     BuildContext context,
     Map<String, dynamic> stream,
     bool isDark,
+    bool isAmoled,
     SettingsProvider settings,
   ) {
     final type = stream['type'] as String? ?? 'muxed';
@@ -840,10 +775,12 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
     final ext = stream['ext'] as String? ?? '';
     final quality = stream['quality'] as String? ?? '';
     final color = _colorForType(type, isDark);
-    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-    final secClr =
-        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
-    final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+    final textClr = AppTheme.textPrimaryOf(isDark);
+    final secClr = AppTheme.textSecondaryOf(isDark);
+    final mutedClr = AppTheme.textMutedOf(isDark);
+    final surfaceClr =
+        AppTheme.surfaceColor(isDark, isAmoled: isAmoled, elevated: false);
+
     String sizeLabel;
     if (size > 0) {
       if (type == 'combined' &&
@@ -857,14 +794,15 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
     } else {
       sizeLabel = '—';
     }
+
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(13),
+        color: surfaceClr,
+        borderRadius: BorderRadius.circular(DmxTokens.radiusMd),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          borderRadius: BorderRadius.circular(13),
+          borderRadius: BorderRadius.circular(DmxTokens.radiusMd),
           onTap: () async {
             runHaptic(settings);
             final hasAudio = stream['audioSrc'] != null &&
@@ -890,27 +828,25 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
               Navigator.pop(context, stream);
             }
           },
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(13),
+              borderRadius: BorderRadius.circular(DmxTokens.radiusMd),
               border: Border.all(
-                color: color.withValues(alpha: 0.22),
+                color: color.withValues(alpha: isDark ? 0.24 : 0.20),
                 width: 0.8,
               ),
             ),
             child: Row(
               children: [
                 Container(
-                  width: 36,
-                  height: 36,
+                  width: 38,
+                  height: 38,
                   decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
+                    color: color.withValues(alpha: isDark ? 0.14 : 0.10),
+                    borderRadius: BorderRadius.circular(DmxTokens.badgeRadius),
                   ),
-                  child: Icon(_iconForType(type), color: color, size: 18),
+                  child: Icon(_iconForType(type), color: color, size: 19),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -919,57 +855,66 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
                     children: [
                       Text(
                         label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
+                          fontFamily: AppTheme.fontDisplay,
                           color: textClr,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         sizeLabel,
-                        style: TextStyle(
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTheme.dataStyle(
+                          isDark: isDark,
+                          size: 11,
                           color: mutedClr,
-                          fontSize: 10,
-                          fontFamily: 'monospace',
                         ),
                       ),
                     ],
                   ),
                 ),
+                const SizedBox(width: 8),
                 if (quality.isNotEmpty)
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 7,
-                      vertical: 4,
+                      vertical: 3,
                     ),
                     decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(7),
-                      border: Border.all(color: color.withValues(alpha: 0.35)),
+                      color: color.withValues(alpha: isDark ? 0.14 : 0.10),
+                      borderRadius: BorderRadius.circular(DmxTokens.radiusSm),
+                      border: Border.all(
+                        color: color.withValues(alpha: 0.32),
+                        width: 0.8,
+                      ),
                     ),
                     child: Text(
                       quality.toUpperCase(),
-                      style: TextStyle(
+                      style: AppTheme.dataStyle(
+                        isDark: isDark,
+                        size: 11,
                         color: color,
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.6,
-                        fontFamily: 'monospace',
                       ),
                     ),
                   ),
-                const SizedBox(width: 8),
-                Text(
-                  '.$ext',
-                  style: TextStyle(
-                    color: secClr,
-                    fontSize: 10,
-                    fontFamily: 'monospace',
+                if (ext.isNotEmpty) ...[
+                  const SizedBox(width: 6),
+                  Text(
+                    '.$ext',
+                    style: AppTheme.dataStyle(
+                      isDark: isDark,
+                      size: 11,
+                      color: secClr,
+                    ),
                   ),
-                ),
+                ],
                 const SizedBox(width: 8),
-                Icon(Icons.download_rounded, color: color, size: 18),
+                Icon(Icons.download_rounded, color: color, size: 19),
               ],
             ),
           ),

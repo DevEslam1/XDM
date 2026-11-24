@@ -3,8 +3,8 @@ import 'package:dmx/core/services/torrent/fake_torrent_native.dart';
 import 'package:dmx/core/services/torrent_service_ffi.dart';
 import 'package:dmx/features/torrent_create/screens/create_torrent_screen.dart';
 import 'package:dmx/shared/widgets/neon_glow_button.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../helpers/test_helpers.dart';
 

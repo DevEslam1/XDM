@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Detects platform high-contrast setting and exposes it to downstream builders.
 class HighContrastDetector extends StatelessWidget {

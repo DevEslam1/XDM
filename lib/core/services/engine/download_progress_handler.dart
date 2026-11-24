@@ -50,6 +50,7 @@ class DownloadProgressHandler {
   bool _disposed = false;
   int _lastChunkDetailsHash = 0;
   int _emittedChunkDetailsHash = -1;
+  int _lastEmittedTorrentFileCount = -1;
 
   int get chunkFingerprint => _lastChunkDetailsHash;
 
@@ -575,8 +576,7 @@ class DownloadProgressHandler {
           ((p['numPeers'] as num?)?.toInt() ?? 0) != _lastEmittedPeerCount ||
           ((p['numSeeds'] as num?)?.toInt() ?? 0) != _lastEmittedSeedCount ||
           (progress.torrentFiles != null &&
-              progress.torrentFiles!.length !=
-                  (lastTorrentFiles?.length ?? -1));
+              progress.torrentFiles!.length != _lastEmittedTorrentFileCount);
     }
 
     if (canEmitNow ||
@@ -592,6 +592,9 @@ class DownloadProgressHandler {
       _lastEmittedStatusMessage = sm ?? '';
       _lastEmittedPeerCount = (p['numPeers'] as num?)?.toInt() ?? 0;
       _lastEmittedSeedCount = (p['numSeeds'] as num?)?.toInt() ?? 0;
+      if (progress.torrentFiles != null) {
+        _lastEmittedTorrentFileCount = progress.torrentFiles!.length;
+      }
       emit(progress);
     } else {
       _pendingProgress = progress;

@@ -1,5 +1,7 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
+
 import '../../../core/app_theme.dart';
+import '../../../shared/design/dmx_tokens.dart';
 
 enum HealthLevel {
   dead(Color(0xFFEF4444), Icons.signal_cellular_off_rounded,
@@ -80,36 +82,60 @@ class TorrentHealthIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final level = _level;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: level.color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: level.color.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(level.icon, size: 14, color: level.color),
-          const SizedBox(width: 6),
-          Text(
-            level.name.toUpperCase(),
-            style: TextStyle(
-                color: level.color, fontSize: 10, fontWeight: FontWeight.w800),
+    final secondaryColor = AppTheme.textSecondaryOf(isDark);
+
+    return Semantics(
+      container: true,
+      label: 'Swarm health: ${level.name}, ${level.label}',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: level.color.withValues(alpha: isDark ? 0.13 : 0.09),
+          borderRadius: BorderRadius.circular(DmxTokens.radiusFull),
+          border: Border.all(
+            color: level.color.withValues(alpha: isDark ? 0.34 : 0.28),
+            width: DmxTokens.borderThin,
           ),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(
-              level.label,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(level.icon, size: 14, color: level.color),
+            const SizedBox(width: 6),
+            Text(
+              level.name.toUpperCase(),
               style: TextStyle(
-                color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-                fontSize: 9,
+                fontFamily: AppTheme.fontDisplay,
+                color: level.color,
+                fontSize: DmxTokens.textXs,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.5,
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
             ),
-          ),
-        ],
+            Container(
+              width: 3,
+              height: 3,
+              margin: const EdgeInsets.symmetric(horizontal: 7),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: level.color.withValues(alpha: 0.55),
+              ),
+            ),
+            Flexible(
+              child: Text(
+                level.label,
+                style: TextStyle(
+                  fontFamily: AppTheme.fontBody,
+                  color: secondaryColor,
+                  fontSize: DmxTokens.textXs,
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

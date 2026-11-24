@@ -13,9 +13,9 @@ import 'package:dmx/core/services/engine/download_progress_handler.dart';
 import 'package:dmx/core/services/engine/engine_models.dart';
 import 'package:dmx/core/services/service_registry.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 

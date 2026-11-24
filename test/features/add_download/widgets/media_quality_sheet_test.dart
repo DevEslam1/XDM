@@ -1,6 +1,6 @@
 import 'package:dmx/features/add_download/widgets/media_quality_sheet.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../helpers/test_helpers.dart';
 

@@ -4,9 +4,9 @@ import 'package:dmx/features/browser/widgets/bookmark_manager_screen.dart';
 import 'package:dmx/features/browser/widgets/browser_history_sheet.dart';
 import 'package:dmx/features/browser/widgets/smart_url_bar.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../helpers/test_helpers.dart';
 

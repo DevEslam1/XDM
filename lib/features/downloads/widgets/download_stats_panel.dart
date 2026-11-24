@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/app_theme.dart';
@@ -33,7 +33,8 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
               isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
           final secClr =
               isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
-          final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+          final mutedClr =
+              isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
           final dividerClr =
               isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle;
 
@@ -145,22 +146,22 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
                                     Flexible(
                                       child: FittedBox(
                                         fit: BoxFit.scaleDown,
-                                        alignment: AlignmentDirectional
-                                            .centerStart,
+                                        alignment:
+                                            AlignmentDirectional.centerStart,
                                         child: Text(
                                           data.speed,
                                           style: Theme.of(context)
                                               .textTheme
                                               .displayMedium
                                               ?.copyWith(
-                                                fontSize: 24,
-                                                fontWeight: FontWeight.w800,
-                                                color: accentClr,
-                                                letterSpacing: -0.5,
-                                                fontFeatures: const [
-                                                  FontFeature.tabularFigures(),
-                                                ],
-                                              ),
+                                            fontSize: 24,
+                                            fontWeight: FontWeight.w800,
+                                            color: accentClr,
+                                            letterSpacing: -0.5,
+                                            fontFeatures: const [
+                                              FontFeature.tabularFigures(),
+                                            ],
+                                          ),
                                         ),
                                       ),
                                     ),

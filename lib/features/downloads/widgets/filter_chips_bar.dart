@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/app_theme.dart';
@@ -293,7 +293,8 @@ class _StatusFilterPills extends StatelessWidget {
         children: [
           for (int i = 0; i < filters.length; i++) ...[
             Expanded(child: _buildPill(context, filters[i], expand: true)),
-            if (i < filters.length - 1) const SizedBox(width: DmxTokens.spaceSm),
+            if (i < filters.length - 1)
+              const SizedBox(width: DmxTokens.spaceSm),
           ],
         ],
       ),

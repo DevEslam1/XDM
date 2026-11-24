@@ -1,6 +1,6 @@
 import 'package:dmx/core/utils/responsive.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 void main() {
   group('Responsive Layout Helpers', () {
@@ -66,7 +66,8 @@ void main() {
       );
     });
 
-    testWidgets('Desktop (1440x900) activates multi-column and two-pane details',
+    testWidgets(
+        'Desktop (1440x900) activates multi-column and two-pane details',
         (tester) async {
       tester.view.physicalSize = const Size(1440, 900);
       tester.view.devicePixelRatio = 1.0;

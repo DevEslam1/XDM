@@ -5,8 +5,8 @@ import 'dart:math' as math;
 import 'package:dmx/core/services/logging_service.dart';
 import 'package:dmx/core/services/site_intelligence/site_intelligence_service.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
@@ -313,206 +313,211 @@ class _DetailsScreenState extends State<DetailsScreen>
                       ),
                       child: isTwoColumn
                           ? Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              flex: 5,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  _stagger(
-                                    0.0,
-                                    Hero(
-                                      tag: 'download_card_${widget.taskId}',
-                                      createRectTween: (begin, end) =>
-                                          RectTween(begin: begin, end: end),
-                                      child: _TelemetryHero(
-                                        task: task,
-                                        statusColor: statusColor,
-                                        speedText: speedTextInsideCircle,
-                                        etaText: isSeeding
-                                            ? provider
-                                                .getSeedingSummary(task.id)
-                                            : (task.status ==
-                                                    DownloadStatus.downloading)
-                                                ? L10n.translateStatus(
-                                                    context,
-                                                    task.status,
-                                                    task.etaFormatted,
-                                                  )
-                                                : L10n.of(context,
-                                                    'details_inactive_eta'),
-                                        pulse: _pulse,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  flex: 5,
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      _stagger(
+                                        0.0,
+                                        Hero(
+                                          tag: 'download_card_${widget.taskId}',
+                                          createRectTween: (begin, end) =>
+                                              RectTween(begin: begin, end: end),
+                                          child: _TelemetryHero(
+                                            task: task,
+                                            statusColor: statusColor,
+                                            speedText: speedTextInsideCircle,
+                                            etaText: isSeeding
+                                                ? provider
+                                                    .getSeedingSummary(task.id)
+                                                : (task.status ==
+                                                        DownloadStatus
+                                                            .downloading)
+                                                    ? L10n.translateStatus(
+                                                        context,
+                                                        task.status,
+                                                        task.etaFormatted,
+                                                      )
+                                                    : L10n.of(context,
+                                                        'details_inactive_eta'),
+                                            pulse: _pulse,
+                                          ),
+                                        ),
                                       ),
+                                      const SizedBox(height: 14),
+                                      _stagger(
+                                        0.1,
+                                        _ActionRail(
+                                          task: task,
+                                          provider: provider,
+                                          settings: settings,
+                                          statusColor: statusColor,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 14),
+                                      if (task.isTorrent) ...[
+                                        _stagger(
+                                          0.2,
+                                          _TorrentStatsPanel(
+                                              task: task, provider: provider),
+                                        ),
+                                      ] else ...[
+                                        _stagger(
+                                          0.2,
+                                          _ChannelsPanel(
+                                            task: task,
+                                            provider: provider,
+                                            statusColor: statusColor,
+                                          ),
+                                        ),
+                                      ],
+                                      const SizedBox(height: 14),
+                                      _stagger(
+                                        0.3,
+                                        _BandwidthPanel(
+                                            task: task, provider: provider),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  flex: 6,
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      _stagger(
+                                        0.4,
+                                        Visibility(
+                                          visible: _graphExpanded,
+                                          maintainState: false,
+                                          child: _SpeedGraphPanel(
+                                            task: task,
+                                            provider: provider,
+                                          ),
+                                        ),
+                                      ),
+                                      if (_graphExpanded)
+                                        const SizedBox(height: 14),
+                                      if (task.isTorrent) ...[
+                                        _stagger(
+                                          0.5,
+                                          _TorrentFilesPanel(
+                                            task: task,
+                                            provider: provider,
+                                            settings: settings,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 14),
+                                      ],
+                                      _stagger(
+                                        0.6,
+                                        _MetadataPanel(
+                                            task: task, provider: provider),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _stagger(
+                                  0.0,
+                                  Hero(
+                                    tag: 'download_card_${widget.taskId}',
+                                    createRectTween: (begin, end) =>
+                                        RectTween(begin: begin, end: end),
+                                    child: _TelemetryHero(
+                                      task: task,
+                                      statusColor: statusColor,
+                                      speedText: speedTextInsideCircle,
+                                      etaText: isSeeding
+                                          ? provider.getSeedingSummary(task.id)
+                                          : (task.status ==
+                                                  DownloadStatus.downloading)
+                                              ? L10n.translateStatus(
+                                                  context,
+                                                  task.status,
+                                                  task.etaFormatted,
+                                                )
+                                              : L10n.of(context,
+                                                  'details_inactive_eta'),
+                                      pulse: _pulse,
                                     ),
                                   ),
-                                  const SizedBox(height: 14),
+                                ),
+                                const SizedBox(height: 14),
+                                _stagger(
+                                  0.1,
+                                  _ActionRail(
+                                    task: task,
+                                    provider: provider,
+                                    settings: settings,
+                                    statusColor: statusColor,
+                                  ),
+                                ),
+                                const SizedBox(height: 14),
+                                if (task.isTorrent) ...[
                                   _stagger(
-                                    0.1,
-                                    _ActionRail(
+                                    0.2,
+                                    _TorrentStatsPanel(
+                                        task: task, provider: provider),
+                                  ),
+                                ] else ...[
+                                  _stagger(
+                                    0.2,
+                                    _ChannelsPanel(
                                       task: task,
                                       provider: provider,
-                                      settings: settings,
                                       statusColor: statusColor,
                                     ),
                                   ),
-                                  const SizedBox(height: 14),
-                                  if (task.isTorrent) ...[
-                                    _stagger(
-                                      0.2,
-                                      _TorrentStatsPanel(
-                                          task: task, provider: provider),
-                                    ),
-                                  ] else ...[
-                                    _stagger(
-                                      0.2,
-                                      _ChannelsPanel(
-                                        task: task,
-                                        provider: provider,
-                                        statusColor: statusColor,
-                                      ),
-                                    ),
-                                  ],
-                                  const SizedBox(height: 14),
-                                  _stagger(
-                                    0.3,
-                                    _BandwidthPanel(
-                                        task: task, provider: provider),
-                                  ),
                                 ],
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              flex: 6,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  _stagger(
-                                    0.4,
-                                    Visibility(
-                                      visible: _graphExpanded,
-                                      maintainState: false,
-                                      child: _SpeedGraphPanel(
-                                        task: task,
-                                        provider: provider,
-                                      ),
+                                const SizedBox(height: 14),
+                                _stagger(
+                                  0.3,
+                                  _BandwidthPanel(
+                                      task: task, provider: provider),
+                                ),
+                                const SizedBox(height: 14),
+                                _stagger(
+                                  0.4,
+                                  Visibility(
+                                    visible: _graphExpanded,
+                                    maintainState: false,
+                                    child: _SpeedGraphPanel(
+                                      task: task,
+                                      provider: provider,
                                     ),
                                   ),
-                                  if (_graphExpanded)
-                                    const SizedBox(height: 14),
-                                  if (task.isTorrent) ...[
-                                    _stagger(
-                                      0.5,
-                                      _TorrentFilesPanel(
-                                        task: task,
-                                        provider: provider,
-                                        settings: settings,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 14),
-                                  ],
+                                ),
+                                if (_graphExpanded) const SizedBox(height: 14),
+                                if (task.isTorrent) ...[
                                   _stagger(
-                                    0.6,
-                                    _MetadataPanel(
-                                        task: task, provider: provider),
+                                    0.5,
+                                    _TorrentFilesPanel(
+                                      task: task,
+                                      provider: provider,
+                                      settings: settings,
+                                    ),
                                   ),
+                                  const SizedBox(height: 14),
                                 ],
-                              ),
-                            ),
-                          ],
-                        )
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            _stagger(
-                              0.0,
-                              Hero(
-                                tag: 'download_card_${widget.taskId}',
-                                createRectTween: (begin, end) =>
-                                    RectTween(begin: begin, end: end),
-                                child: _TelemetryHero(
-                                  task: task,
-                                  statusColor: statusColor,
-                                  speedText: speedTextInsideCircle,
-                                  etaText: isSeeding
-                                      ? provider.getSeedingSummary(task.id)
-                                      : (task.status ==
-                                              DownloadStatus.downloading)
-                                          ? L10n.translateStatus(
-                                              context,
-                                              task.status,
-                                              task.etaFormatted,
-                                            )
-                                          : L10n.of(
-                                              context, 'details_inactive_eta'),
-                                  pulse: _pulse,
+                                _stagger(
+                                  0.6,
+                                  _MetadataPanel(
+                                      task: task, provider: provider),
                                 ),
-                              ),
+                                const SizedBox(height: 24),
+                              ],
                             ),
-                            const SizedBox(height: 14),
-                            _stagger(
-                              0.1,
-                              _ActionRail(
-                                task: task,
-                                provider: provider,
-                                settings: settings,
-                                statusColor: statusColor,
-                              ),
-                            ),
-                            const SizedBox(height: 14),
-                            if (task.isTorrent) ...[
-                              _stagger(
-                                0.2,
-                                _TorrentStatsPanel(
-                                    task: task, provider: provider),
-                              ),
-                            ] else ...[
-                              _stagger(
-                                0.2,
-                                _ChannelsPanel(
-                                  task: task,
-                                  provider: provider,
-                                  statusColor: statusColor,
-                                ),
-                              ),
-                            ],
-                            const SizedBox(height: 14),
-                            _stagger(
-                              0.3,
-                              _BandwidthPanel(task: task, provider: provider),
-                            ),
-                            const SizedBox(height: 14),
-                            _stagger(
-                              0.4,
-                              Visibility(
-                                visible: _graphExpanded,
-                                maintainState: false,
-                                child: _SpeedGraphPanel(
-                                  task: task,
-                                  provider: provider,
-                                ),
-                              ),
-                            ),
-                            if (_graphExpanded) const SizedBox(height: 14),
-                            if (task.isTorrent) ...[
-                              _stagger(
-                                0.5,
-                                _TorrentFilesPanel(
-                                  task: task,
-                                  provider: provider,
-                                  settings: settings,
-                                ),
-                              ),
-                              const SizedBox(height: 14),
-                            ],
-                            _stagger(
-                              0.6,
-                              _MetadataPanel(task: task, provider: provider),
-                            ),
-                            const SizedBox(height: 24),
-                          ],
-                        ),
                     ),
                   ),
                 ),
@@ -617,28 +622,174 @@ class _TelemetryHero extends StatelessWidget {
                               );
                             },
                           ),
-                        Column(
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                task.progressPercentString,
+                                style: AppTheme.dataStyle(
+                                  isDark: isDark,
+                                  size: 20,
+                                  weight: FontWeight.w800,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                // FIX: [Audit] Deduplicated files label via TorrentFileNormalizer helper
+                                task.isTorrent
+                                    ? TorrentFileNormalizer
+                                        .formatSummaryFromFiles(
+                                            task.torrentFiles)
+                                    : '${task.threadCount} CH',
+                                style: AppTheme.microLabel(
+                                  isDark: isDark,
+                                  color: statusColor,
+                                  size: 8,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(width: 20),
+
+                  // Readouts
+
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Status chip
+                        Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(
-                              task.progressPercentString,
-                              style: AppTheme.dataStyle(
-                                isDark: isDark,
-                                size: 20,
-                                weight: FontWeight.w800,
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: statusColor.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: statusColor.withValues(alpha: 0.35),
+                                  width: 0.8,
+                                ),
+                              ),
+                              child: Text(
+                                L10n.translateStatusName(
+                                  context,
+                                  task.status,
+                                ).toUpperCase(),
+                                style: AppTheme.microLabel(
+                                  isDark: isDark,
+                                  color: statusColor,
+                                  size: 9,
+                                ),
                               ),
                             ),
-                            const SizedBox(height: 2),
+                            if (task.isTorrent &&
+                                task.status == DownloadStatus.paused &&
+                                task.resumeDataSaved) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: (isDark
+                                          ? AppTheme.neonGreen
+                                          : AppTheme.lightNeonGreen)
+                                      .withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: (isDark
+                                            ? AppTheme.neonGreen
+                                            : AppTheme.lightNeonGreen)
+                                        .withValues(alpha: 0.35),
+                                    width: 0.8,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.check_circle_outline_rounded,
+                                        size: 10,
+                                        color: isDark
+                                            ? AppTheme.neonGreen
+                                            : AppTheme.lightNeonGreen),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Resume data saved',
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w600,
+                                        color: isDark
+                                            ? AppTheme.neonGreen
+                                            : AppTheme.lightNeonGreen,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+
+                        // Big speed readout
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: AlignmentDirectional.centerStart,
+                          child: Text(
+                            speedText,
+                            style: AppTheme.dataStyle(
+                              isDark: isDark,
+                              size: 22,
+                              weight: FontWeight.w800,
+                              color: statusColor,
+                            ),
+                            maxLines: 1,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+
+                        Text(
+                          etaText,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTheme.dataStyle(
+                            isDark: isDark,
+                            size: 12,
+                            weight: FontWeight.w600,
+                            color: mutedClr,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+
+                        // Transferred / size
+
+                        Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
                             Text(
-                              // FIX: [Audit] Deduplicated files label via TorrentFileNormalizer helper
-                              task.isTorrent
-                                  ? TorrentFileNormalizer
-                                      .formatSummaryFromFiles(task.torrentFiles)
-                                  : '${task.threadCount} CH',
-                              style: AppTheme.microLabel(
+                              task.downloadedSizeFormatted,
+                              style: AppTheme.dataStyle(
                                 isDark: isDark,
-                                color: statusColor,
-                                size: 8,
+                                size: 13,
+                                weight: FontWeight.w700,
+                              ),
+                            ),
+                            Text(
+                              ' / ${task.sizeFormatted}',
+                              style: AppTheme.dataStyle(
+                                isDark: isDark,
+                                size: 12,
+                                weight: FontWeight.w500,
+                                color: mutedClr,
                               ),
                             ),
                           ],
@@ -646,155 +797,10 @@ class _TelemetryHero extends StatelessWidget {
                       ],
                     ),
                   ),
-                ),
-
-                const SizedBox(width: 20),
-
-                // Readouts
-
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Status chip
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: statusColor.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: statusColor.withValues(alpha: 0.35),
-                                width: 0.8,
-                              ),
-                            ),
-                            child: Text(
-                              L10n.translateStatusName(
-                                context,
-                                task.status,
-                              ).toUpperCase(),
-                              style: AppTheme.microLabel(
-                                isDark: isDark,
-                                color: statusColor,
-                                size: 9,
-                              ),
-                            ),
-                          ),
-                          if (task.isTorrent &&
-                              task.status == DownloadStatus.paused &&
-                              task.resumeDataSaved) ...[
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: (isDark
-                                        ? AppTheme.neonGreen
-                                        : AppTheme.lightNeonGreen)
-                                    .withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color: (isDark
-                                          ? AppTheme.neonGreen
-                                          : AppTheme.lightNeonGreen)
-                                      .withValues(alpha: 0.35),
-                                  width: 0.8,
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.check_circle_outline_rounded,
-                                      size: 10,
-                                      color: isDark
-                                          ? AppTheme.neonGreen
-                                          : AppTheme.lightNeonGreen),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    'Resume data saved',
-                                    style: TextStyle(
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w600,
-                                      color: isDark
-                                          ? AppTheme.neonGreen
-                                          : AppTheme.lightNeonGreen,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-
-                      // Big speed readout
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: AlignmentDirectional.centerStart,
-                        child: Text(
-                          speedText,
-                          style: AppTheme.dataStyle(
-                            isDark: isDark,
-                            size: 22,
-                            weight: FontWeight.w800,
-                            color: statusColor,
-                          ),
-                          maxLines: 1,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-
-                      Text(
-                        etaText,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTheme.dataStyle(
-                          isDark: isDark,
-                          size: 12,
-                          weight: FontWeight.w600,
-                          color: mutedClr,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-
-                      // Transferred / size
-
-                      Wrap(
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Text(
-                            task.downloadedSizeFormatted,
-                            style: AppTheme.dataStyle(
-                              isDark: isDark,
-                              size: 13,
-                              weight: FontWeight.w700,
-                            ),
-                          ),
-                          Text(
-                            ' / ${task.sizeFormatted}',
-                            style: AppTheme.dataStyle(
-                              isDark: isDark,
-                              size: 12,
-                              weight: FontWeight.w500,
-                              color: mutedClr,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          );
-        }),
+                ],
+              ),
+            );
+          }),
         ],
       ),
     );
@@ -1004,9 +1010,7 @@ class _ActionRail extends StatelessWidget with HapticHelper {
                     ? (isRtl
                         ? 'تم حذف التنزيل بنجاح'
                         : 'Download deleted successfully')
-                    : (isRtl
-                        ? 'فشل حذف التنزيل'
-                        : 'Failed to delete download'),
+                    : (isRtl ? 'فشل حذف التنزيل' : 'Failed to delete download'),
                 color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
                 icon: ok ? Icons.delete : Icons.error_outline,
                 isDarkMode: isDark,
@@ -4076,7 +4080,8 @@ class _ChecksumVerificationDialogState
             Text(
               widget.task.fileName,
               style: TextStyle(
-                color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                color:
+                    isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
                 fontWeight: FontWeight.w600,
                 fontSize: 13,
               ),
@@ -4174,7 +4179,8 @@ class _ChecksumVerificationDialogState
               style: TextStyle(
                 fontFamily: 'monospace',
                 fontSize: 11,
-                color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                color:
+                    isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
               ),
               decoration: InputDecoration(
                 hintText: isRtl
@@ -4185,9 +4191,8 @@ class _ChecksumVerificationDialogState
                   vertical: 10,
                 ),
                 filled: true,
-                fillColor: isDark
-                    ? const Color(0xFF0F0F16)
-                    : const Color(0xFFF1F5F9),
+                fillColor:
+                    isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
@@ -4245,9 +4250,8 @@ class _ChecksumVerificationDialogState
           child: Text(
             isRtl ? 'إغلاق' : 'CLOSE',
             style: TextStyle(
-              color: isDark
-                  ? AppTheme.textSecondary
-                  : AppTheme.lightTextSecondary,
+              color:
+                  isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
             ),
           ),
         ),
@@ -4255,4 +4259,3 @@ class _ChecksumVerificationDialogState
     );
   }
 }
-

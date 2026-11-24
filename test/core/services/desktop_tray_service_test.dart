@@ -1,7 +1,9 @@
+// ignore_for_file: deprecated_member_use
+
 import 'package:dmx/core/services/desktop_tray_service.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tray_manager/tray_manager.dart';
+import 'package:tray_manager/legacy.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

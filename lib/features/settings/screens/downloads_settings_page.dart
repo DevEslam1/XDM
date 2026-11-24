@@ -1,5 +1,5 @@
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/app_theme.dart';
@@ -215,7 +215,12 @@ class DownloadsSettingsPage extends StatelessWidget with HapticHelper {
                         : 'Default (Downloads/XDM)'),
                 onTap: () async {
                   triggerHaptic(settings);
-                  final result = await FilePicker.getDirectoryPath();
+                  final uri = await FilePicker.pickDirectory();
+                  final result = uri == null
+                      ? null
+                      : (uri.scheme == 'file'
+                          ? uri.toFilePath()
+                          : uri.toString());
                   if (result != null && result.isNotEmpty) {
                     await settings.setCustomDownloadPath(result);
                   }

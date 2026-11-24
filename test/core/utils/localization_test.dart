@@ -1,8 +1,8 @@
 import 'package:dmx/core/utils/localization.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 Widget _withSettings(String lang, Widget Function(BuildContext) builder) {

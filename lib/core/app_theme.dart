@@ -1,7 +1,9 @@
 import 'dart:collection';
 import 'dart:math' as math;
-import 'package:flutter/material.dart';
+
 import 'package:flutter/services.dart';
+import 'package:material_ui/material_ui.dart';
+
 import 'services/service_registry.dart';
 
 /// XDM design system — "Signal Deck" (refined)
@@ -203,8 +205,7 @@ class AppTheme {
       isDark ? textPrimary : lightTextPrimary;
   static Color textSecondaryOf(bool isDark) =>
       isDark ? textSecondary : lightTextSecondary;
-  static Color textMutedOf(bool isDark) =>
-      isDark ? textMuted : lightTextMuted;
+  static Color textMutedOf(bool isDark) => isDark ? textMuted : lightTextMuted;
 
   /// Calm, consistent elevation shadows for cards and floating surfaces.
   static List<BoxShadow> cardShadow(

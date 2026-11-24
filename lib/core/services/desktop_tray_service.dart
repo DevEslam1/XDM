@@ -1,9 +1,12 @@
+// ignore_for_file: deprecated_member_use
+
 import 'dart:io';
-import 'package:flutter/material.dart';
+
 import 'package:logging/logging.dart';
-import 'package:tray_manager/tray_manager.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:tray_manager/legacy.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
-import 'package:window_manager/window_manager.dart';
+import 'package:window_manager/legacy.dart';
 
 import 'background_service.dart';
 import 'database_service.dart';

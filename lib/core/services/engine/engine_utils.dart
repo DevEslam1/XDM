@@ -93,18 +93,25 @@ Dio buildTransferDio({
     client.options.sendTimeout = const Duration(seconds: 60);
     client.options.receiveTimeout = const Duration(seconds: 60);
     // M-1: SSRF + cleartext guard. Validate the initial request URL and every
-    // redirect hop dart:io auto-followed, so a link that redirects to
-    // 169.254.169.254 / 127.0.0.1 (or an integer-encoded form) is refused on
-    // the download path. Added only on freshly-built (non-pooled) clients so
-    // the interceptor isn't stacked twice.
+    // redirect hop BEFORE following it so a remote host cannot pivot into
+    // 169.254.169.254 / 127.0.0.1 or receive leaked Cookie/Authorization headers
+    // on cross-origin redirects.
+    client.options.followRedirects = false;
     client.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
+        // Force manual validated redirect handling unless caller explicitly
+        // disabled redirects with maxRedirects == 0.
+        if (options.followRedirects && options.maxRedirects > 0) {
+          options.extra['_dmxManualRedirects'] = true;
+          options.followRedirects = false;
+        }
         try {
           // Initial (and non-redirect) requests allow LAN/loopback/private
           // targets so users can download from their own NAS/router/localhost,
           // while metadata/link-local/0.0.0.0/multicast stay blocked.
+          final isRedirectHop = options.extra['_dmxRedirectHop'] == true;
           await SsrfGuard.validateAsync(options.uri,
-              httpsOnly: httpsOnly, allowPrivate: true);
+              httpsOnly: httpsOnly, allowPrivate: !isRedirectHop);
         } on SsrfBlockedException catch (e) {
           handler.reject(DioException(
             requestOptions: options,
@@ -117,11 +124,106 @@ Dio buildTransferDio({
         handler.next(options);
       },
       onResponse: (response, handler) async {
-        // Only redirect hops need the strict re-check. A no-redirect response
-        // was already validated on the initial request (allowPrivate:true for a
-        // user-typed URL). When the server issued a 3xx, re-validate every hop
-        // and the final URI STRICTLY (allowPrivate:false) so a remote host
-        // cannot pivot the download into the user's private network.
+        // Pre-fetch validated redirect loop: handle 3xx responses manually so
+        // SsrfGuard runs BEFORE dart:io connects to the redirect target, and
+        // strip Cookie/Authorization when crossing origins.
+        final status = response.statusCode ?? 0;
+        final is3xx = status == 301 ||
+            status == 302 ||
+            status == 303 ||
+            status == 307 ||
+            status == 308;
+        final location = response.headers.value('location');
+        final manualEnabled =
+            response.requestOptions.extra['_dmxManualRedirects'] == true ||
+                response.requestOptions.followRedirects == false;
+        final hopsSoFar =
+            (response.requestOptions.extra['_dmxRedirectCount'] as int?) ?? 0;
+        final maxHops = response.requestOptions.maxRedirects > 0
+            ? response.requestOptions.maxRedirects
+            : 5;
+
+        if (is3xx && location != null && location.isNotEmpty && manualEnabled) {
+          if (hopsSoFar >= maxHops) {
+            handler.reject(DioException(
+              requestOptions: response.requestOptions,
+              response: response,
+              type: DioExceptionType.badResponse,
+              message: 'Too many redirects ($maxHops)',
+            ));
+            return;
+          }
+          final prevUri = response.requestOptions.uri;
+          final nextUri = prevUri.resolve(location);
+          try {
+            await SsrfGuard.validateAsync(nextUri,
+                httpsOnly: httpsOnly, allowPrivate: false);
+          } on SsrfBlockedException catch (e) {
+            handler.reject(DioException(
+              requestOptions: response.requestOptions,
+              type: DioExceptionType.badResponse,
+              error: e,
+              message: e.message,
+            ));
+            return;
+          }
+          // Drain/cancel the 3xx response stream before issuing next hop.
+          if (response.data is ResponseBody) {
+            await (response.data as ResponseBody)
+                .stream
+                .listen((_) {})
+                .cancel();
+          }
+          final nextHeaders =
+              Map<String, dynamic>.from(response.requestOptions.headers);
+          final sameOrigin = prevUri.scheme.toLowerCase() ==
+                  nextUri.scheme.toLowerCase() &&
+              prevUri.host.toLowerCase() == nextUri.host.toLowerCase() &&
+              prevUri.port == nextUri.port;
+          if (!sameOrigin) {
+            nextHeaders.removeWhere((k, _) {
+              final lk = k.toLowerCase();
+              return lk == 'cookie' || lk == 'authorization';
+            });
+          }
+          final nextMethod =
+              (status == 303 && response.requestOptions.method != 'HEAD')
+                  ? 'GET'
+                  : response.requestOptions.method;
+          final nextExtra =
+              Map<String, dynamic>.from(response.requestOptions.extra)
+                ..['_dmxRedirectHop'] = true
+                ..['_dmxRedirectCount'] = hopsSoFar + 1
+                ..['_dmxManualRedirects'] = true;
+          try {
+            final redirected = await client.request<dynamic>(
+              nextUri.toString(),
+              data: nextMethod == 'GET' || nextMethod == 'HEAD'
+                  ? null
+                  : response.requestOptions.data,
+              cancelToken: response.requestOptions.cancelToken,
+              options: Options(
+                method: nextMethod,
+                headers: nextHeaders,
+                responseType: response.requestOptions.responseType,
+                followRedirects: false,
+                maxRedirects: maxHops,
+                validateStatus: response.requestOptions.validateStatus,
+                sendTimeout: response.requestOptions.sendTimeout,
+                receiveTimeout: response.requestOptions.receiveTimeout,
+                extra: nextExtra,
+              ),
+            );
+            handler.resolve(redirected);
+            return;
+          } on DioException catch (e) {
+            handler.reject(e);
+            return;
+          }
+        }
+
+        // Defense-in-depth: if an adapter/mock still populated response.redirects,
+        // validate every hop and final URI strictly.
         if (response.redirects.isNotEmpty) {
           try {
             for (final r in response.redirects) {
@@ -181,6 +283,10 @@ Dio buildTransferDio({
     }
   }
 
+  // Request raw wire bytes so Content-Length and byte-range offsets always match
+  // the bytes written to disk (prevents silent truncation on Content-Encoding: gzip).
+  client.options.headers['Accept-Encoding'] = 'identity';
+
   // Apply user-supplied custom headers LAST so they win over any header
   // derived above (including a user-provided Authorization override).
   if (customHeaders != null) {
@@ -202,6 +308,7 @@ Dio buildTransferDio({
     adapter.validateCertificate = null;
     adapter.createHttpClient = () {
       final httpClient = HttpClient();
+      httpClient.autoUncompress = false;
       httpClient.maxConnectionsPerHost = 64;
       httpClient.idleTimeout = const Duration(seconds: 30);
       httpClient.badCertificateCallback = DebugCertOverride.getCallback(url);

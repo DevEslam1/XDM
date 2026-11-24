@@ -1,23 +1,21 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/app_theme.dart';
 import '../../../core/services/share_url_handler.dart';
 import '../../../core/utils/localization.dart';
-import '../../../shared/widgets/dmx_backdrop_filter.dart';
-import '../../../shared/widgets/neon_glow_button.dart';
+import '../../../shared/design/dmx_tokens.dart';
+import '../../../shared/widgets/dmx_bottom_sheet.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
 
 class BrowserExtensionsSheet extends StatefulWidget {
   const BrowserExtensionsSheet({super.key});
 
   static Future<void> show(BuildContext context) {
-    return showModalBottomSheet(
+    return showDmxModalBottomSheet<void>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
       builder: (_) => const BrowserExtensionsSheet(),
     );
   }
@@ -28,16 +26,25 @@ class BrowserExtensionsSheet extends StatefulWidget {
 
 class _BrowserExtensionsSheetState extends State<BrowserExtensionsSheet>
     with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+  late final TabController _tabController;
+  int _selectedIndex = 0;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(_handleTabChange);
+  }
+
+  void _handleTabChange() {
+    if (_tabController.index != _selectedIndex && mounted) {
+      setState(() => _selectedIndex = _tabController.index);
+    }
   }
 
   @override
   void dispose() {
+    _tabController.removeListener(_handleTabChange);
     _tabController.dispose();
     super.dispose();
   }
@@ -50,17 +57,15 @@ class _BrowserExtensionsSheetState extends State<BrowserExtensionsSheet>
         await launchUrl(url);
       } else if (await canLaunchUrl(fallbackUrl)) {
         await launchUrl(fallbackUrl);
-      } else {
-        if (context.mounted) {
-          _showCopiedSnackbar(
-            context,
-            'Open Settings -> Safari -> Extensions on your iOS device.',
-          );
-        }
+      } else if (context.mounted) {
+        _showInfoSnackbar(
+          context,
+          'Open Settings -> Safari -> Extensions on your iOS device.',
+        );
       }
     } catch (_) {
       if (context.mounted) {
-        _showCopiedSnackbar(
+        _showInfoSnackbar(
           context,
           'Open Settings -> Safari -> Extensions on your iOS device.',
         );
@@ -68,13 +73,13 @@ class _BrowserExtensionsSheetState extends State<BrowserExtensionsSheet>
     }
   }
 
-  void _showCopiedSnackbar(BuildContext context, String message) {
+  void _showInfoSnackbar(BuildContext context, String message) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     ThemedSnackbar.show(
       context,
       message: message,
       color: isDark ? AppTheme.neonCyan : AppTheme.lightNeonCyan,
-      icon: Icons.info_outline,
+      icon: Icons.info_outline_rounded,
       isDarkMode: isDark,
     );
   }
@@ -85,8 +90,12 @@ class _BrowserExtensionsSheetState extends State<BrowserExtensionsSheet>
     ShareUrlHandler.handleDeepLink(
       Uri.parse(testUrl),
       onUrl: (url) {
-        ShareUrlHandler.handle(context, url,
-            isShareLaunch: false, prefilledName: 'Sample_Video.mp4');
+        ShareUrlHandler.handle(
+          context,
+          url,
+          isShareLaunch: false,
+          prefilledName: 'Sample_Video.mp4',
+        );
       },
     );
   }
@@ -96,165 +105,178 @@ class _BrowserExtensionsSheetState extends State<BrowserExtensionsSheet>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isRtl = L10n.isRtl(context);
     final accent = isDark ? AppTheme.neonCyan : AppTheme.lightNeonCyan;
-    final surfaceColor = isDark
-        ? AppTheme.surface.withValues(alpha: 0.85)
-        : AppTheme.lightSurface.withValues(alpha: 0.95);
+    final panelBg = AppTheme.panelBg(isDark);
+    final hairline = AppTheme.hairlineBorder(isDark);
 
-    return DraggableScrollableSheet(
-      initialChildSize: 0.8,
-      minChildSize: 0.5,
-      maxChildSize: 0.95,
-      builder: (context, scrollController) {
-        return ClipRRect(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          child: Container(
-            color: surfaceColor,
-            child: DmxBackdropFilter(
-              sigmaX: 16,
-              sigmaY: 16,
-              child: Column(
+    return DmxSheetContainer(
+      scrollable: false,
+      maxHeightFraction: 0.88,
+      isDark: isDark,
+      accentColor: accent,
+      padding: EdgeInsets.zero,
+      header: DmxSheetHeader(
+        title: isRtl
+            ? 'ملحقات المتصفح (Browser Plugins)'
+            : 'Browser Plugins & Interceptor',
+        subtitle: isRtl
+            ? 'إلغاء تنزيلات المتصفح وتحويلها تلقائياً إلى XDM'
+            : 'Auto-intercept & redirect downloads directly to XDM',
+        icon: Icons.extension_rounded,
+        accentColor: accent,
+        isDark: isDark,
+      ),
+      child: Column(
+        children: [
+          // Segmented platform switcher
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              DmxTokens.sheetHorizontalPadding,
+              14,
+              DmxTokens.sheetHorizontalPadding,
+              10,
+            ),
+            child: Container(
+              height: 44,
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                color: panelBg,
+                borderRadius: BorderRadius.circular(DmxTokens.radiusMd),
+                border: Border.all(color: hairline, width: 0.8),
+              ),
+              child: Row(
                 children: [
-                  // Handle indicator
-                  Container(
-                    margin: const EdgeInsets.only(top: 10, bottom: 6),
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? AppTheme.borderSubtle
-                          : AppTheme.lightBorderSubtle,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
+                  _buildPlatformTab(
+                    index: 0,
+                    label: 'Firefox (Android)',
+                    icon: FontAwesomeIcons.firefox,
+                    accent: accent,
+                    isDark: isDark,
                   ),
-
-                  // Header
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 12),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: accent.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: accent.withValues(alpha: 0.3),
-                            ),
-                          ),
-                          child: Icon(Icons.extension_rounded,
-                              color: accent, size: 24),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                isRtl
-                                    ? 'ملحقات المتصفح (Browser Plugins)'
-                                    : 'Browser Plugins & Interceptor',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: isDark
-                                      ? AppTheme.textPrimary
-                                      : AppTheme.lightTextPrimary,
-                                  fontFamily: 'Space Grotesk',
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                isRtl
-                                    ? 'إلغاء تنزيلات المتصفح وتحويلها تلقائياً إلى XDM'
-                                    : 'Auto-intercept & redirect downloads directly to XDM',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: isDark
-                                      ? AppTheme.textMuted
-                                      : AppTheme.lightTextMuted,
-                                  fontFamily: 'Inter',
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close_rounded),
-                          onPressed: () => Navigator.of(context).pop(),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Tab Bar
-                  Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 20),
-                    decoration: BoxDecoration(
-                      color: isDark ? AppTheme.surface : AppTheme.lightSurface,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isDark
-                            ? AppTheme.borderSubtle
-                            : AppTheme.lightBorderSubtle,
-                      ),
-                    ),
-                    child: TabBar(
-                      controller: _tabController,
-                      indicatorColor: accent,
-                      labelColor: accent,
-                      unselectedLabelColor:
-                          isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-                      tabs: const [
-                        Tab(
-                          icon: FaIcon(FontAwesomeIcons.firefox, size: 16),
-                          text: 'Firefox (Android)',
-                        ),
-                        Tab(
-                          icon: FaIcon(FontAwesomeIcons.safari, size: 16),
-                          text: 'Safari (iOS)',
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  // Tab Content
-                  Expanded(
-                    child: TabBarView(
-                      controller: _tabController,
-                      children: [
-                        _buildFirefoxTab(
-                            context, scrollController, accent, isDark, isRtl),
-                        _buildSafariTab(
-                            context, scrollController, accent, isDark, isRtl),
-                      ],
-                    ),
+                  _buildPlatformTab(
+                    index: 1,
+                    label: 'Safari (iOS)',
+                    icon: FontAwesomeIcons.safari,
+                    accent: accent,
+                    isDark: isDark,
                   ),
                 ],
               ),
             ),
           ),
-        );
-      },
+
+          // Tab Content
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildFirefoxTab(context, accent, isDark, isRtl),
+                _buildSafariTab(context, accent, isDark, isRtl),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlatformTab({
+    required int index,
+    required String label,
+    required FaIconData icon,
+    required Color accent,
+    required bool isDark,
+  }) {
+    final isSelected = _selectedIndex == index;
+    final textSecondary = AppTheme.textSecondaryOf(isDark);
+
+    return Expanded(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          _tabController.animateTo(index);
+          setState(() => _selectedIndex = index);
+        },
+        child: AnimatedContainer(
+          duration: AppTheme.motionFast,
+          curve: AppTheme.motionCurve,
+          decoration: BoxDecoration(
+            color: isSelected
+                ? accent.withValues(alpha: isDark ? 0.16 : 0.12)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(9),
+            border: isSelected
+                ? Border.all(
+                    color: accent.withValues(alpha: 0.35),
+                    width: 0.8,
+                  )
+                : null,
+          ),
+          child: Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FaIcon(
+                  icon,
+                  size: 14,
+                  color: isSelected ? accent : textSecondary,
+                ),
+                const SizedBox(width: 7),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: AppTheme.fontDisplay,
+                      fontSize: 12,
+                      fontWeight:
+                          isSelected ? FontWeight.w700 : FontWeight.w500,
+                      color: isSelected ? accent : textSecondary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
   Widget _buildFirefoxTab(
     BuildContext context,
-    ScrollController scrollController,
     Color accent,
     bool isDark,
     bool isRtl,
   ) {
+    final steps = [
+      isRtl
+          ? 'افتح متصفح Firefox على جهاز Android.'
+          : 'Open Firefox on your Android device.',
+      isRtl
+          ? 'افتح القائمة السريعة -> الملحقات (Add-ons).'
+          : 'Open Menu -> Add-ons / Extensions.',
+      isRtl
+          ? 'قم بتثبيت ملحق "XDM Download Redirect" (الموافق لـ Manifest V2).'
+          : 'Load / Install "XDM Download Redirect" extension (xdm-firefox folder).',
+      isRtl
+          ? 'بمجرد التفعيل، سيتم إرسال أي رابط ملف أو Magnet تلقائياً إلى XDM.'
+          : 'Once enabled, all file downloads, .zip, .mp4, and magnet links immediately trigger XDM!',
+    ];
+
     return ListView(
-      controller: scrollController,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      padding: const EdgeInsets.fromLTRB(
+        DmxTokens.sheetHorizontalPadding,
+        6,
+        DmxTokens.sheetHorizontalPadding,
+        20,
+      ),
       children: [
         _buildInfoCard(
           isDark: isDark,
           accent: accent,
+          platformBadge: 'ANDROID',
+          statusLabel: isRtl ? 'بروتوكول dmx://' : 'dmx:// Ready',
           title:
               isRtl ? 'ملحق Firefox Android' : 'Firefox (Android) Redirector',
           description: isRtl
@@ -263,68 +285,36 @@ class _BrowserExtensionsSheetState extends State<BrowserExtensionsSheet>
           icon: FontAwesomeIcons.firefox,
         ),
         const SizedBox(height: 16),
-        _buildStepHeader(isDark,
-            isRtl ? 'خطوات التثبيت والتفعيل:' : 'Installation & Setup Steps:'),
-        _buildStepItem(
-            isDark,
-            '1',
-            isRtl
-                ? 'افتح متصفح Firefox على جهاز Android.'
-                : 'Open Firefox on your Android device.'),
-        _buildStepItem(
-            isDark,
-            '2',
-            isRtl
-                ? 'افتح القائمة السريعة -> الملحقات (Add-ons).'
-                : 'Open Menu -> Add-ons / Extensions.'),
-        _buildStepItem(
-          isDark,
-          '3',
-          isRtl
-              ? 'قم بتثبيت ملحق "XDM Download Redirect" (الموافق لـ Manifest V2).'
-              : 'Load / Install "XDM Download Redirect" extension (xdm-firefox folder).',
+        DmxSheetSection(
+          title:
+              isRtl ? 'خطوات التثبيت والتفعيل' : 'Installation & Setup Steps',
+          isDark: isDark,
+          child: Column(
+            children: [
+              for (var i = 0; i < steps.length; i++) ...[
+                if (i > 0) const SizedBox(height: 10),
+                _buildStepItem(isDark, accent, '${i + 1}', steps[i]),
+              ],
+            ],
+          ),
         ),
-        _buildStepItem(
-          isDark,
-          '4',
-          isRtl
-              ? 'بمجرد التفعيل، سيتم إرسال أي رابط ملف أو Magnet تلقائياً إلى XDM.'
-              : 'Once enabled, all file downloads, .zip, .mp4, and magnet links immediately trigger XDM!',
-        ),
-        const SizedBox(height: 20),
-        Row(
-          children: [
-            Expanded(
-              child: NeonGlowButton(
-                text: isRtl ? 'نسخ بروتوكول dmx://' : 'Copy dmx:// Protocol',
-                color: accent,
-                onPressed: () {
-                  Clipboard.setData(
-                      const ClipboardData(text: 'dmx://add?url='));
-                  _showCopiedSnackbar(
-                      context,
-                      isRtl
-                          ? 'تم نسخ البروتوكول dmx://'
-                          : 'Copied dmx:// scheme to clipboard');
-                },
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: OutlinedButton.icon(
-                icon: const Icon(Icons.flash_on_rounded, size: 18),
-                label: Text(isRtl ? 'اختبار التحويل' : 'Test Interception'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: accent,
-                  side: BorderSide(color: accent),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                ),
-                onPressed: () => _testDeepLink(context),
-              ),
-            ),
-          ],
+        const SizedBox(height: 16),
+        _buildActionButtons(
+          isDark: isDark,
+          accent: accent,
+          primaryLabel: isRtl ? 'نسخ بروتوكول dmx://' : 'Copy dmx:// Protocol',
+          primaryIcon: Icons.copy_rounded,
+          onPrimary: () {
+            Clipboard.setData(const ClipboardData(text: 'dmx://add?url='));
+            _showInfoSnackbar(
+              context,
+              isRtl
+                  ? 'تم نسخ البروتوكول dmx://'
+                  : 'Copied dmx:// scheme to clipboard',
+            );
+          },
+          secondaryLabel: isRtl ? 'اختبار التحويل' : 'Test Interception',
+          onSecondary: () => _testDeepLink(context),
         ),
       ],
     );
@@ -332,18 +322,38 @@ class _BrowserExtensionsSheetState extends State<BrowserExtensionsSheet>
 
   Widget _buildSafariTab(
     BuildContext context,
-    ScrollController scrollController,
     Color accent,
     bool isDark,
     bool isRtl,
   ) {
+    final steps = [
+      isRtl
+          ? 'افتح تطبيق الإعدادات (Settings) في iOS.'
+          : 'Open iOS Settings app.',
+      isRtl
+          ? 'انتقل إلى Safari -> الملحقات (Extensions).'
+          : 'Navigate to Safari -> Extensions.',
+      isRtl
+          ? 'قم بتفعيل ملحق "XDM Download Redirect".'
+          : 'Turn ON "XDM Download Redirect".',
+      isRtl
+          ? 'اختر "السماح لجميع المواقع" (Allow on All Websites) لمنح صلاحية التحويل.'
+          : 'Set permissions to "Allow on All Websites" for seamless background interception.',
+    ];
+
     return ListView(
-      controller: scrollController,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      padding: const EdgeInsets.fromLTRB(
+        DmxTokens.sheetHorizontalPadding,
+        6,
+        DmxTokens.sheetHorizontalPadding,
+        20,
+      ),
       children: [
         _buildInfoCard(
           isDark: isDark,
           accent: accent,
+          platformBadge: 'IOS',
+          statusLabel: isRtl ? 'ملحق الويب' : 'Web Extension',
           title: isRtl
               ? 'ملحق Safari Web Extension (iOS)'
               : 'Safari (iOS) Web Extension',
@@ -353,59 +363,95 @@ class _BrowserExtensionsSheetState extends State<BrowserExtensionsSheet>
           icon: FontAwesomeIcons.safari,
         ),
         const SizedBox(height: 16),
-        _buildStepHeader(isDark,
-            isRtl ? 'خطوات التفعيل في نظام iOS:' : 'iOS Activation Steps:'),
-        _buildStepItem(
-            isDark,
-            '1',
-            isRtl
-                ? 'افتح تطبيق الإعدادات (Settings) في iOS.'
-                : 'Open iOS Settings app.'),
-        _buildStepItem(
-            isDark,
-            '2',
-            isRtl
-                ? 'انتقل إلى Safari -> الملحقات (Extensions).'
-                : 'Navigate to Safari -> Extensions.'),
-        _buildStepItem(
-            isDark,
-            '3',
-            isRtl
-                ? 'قم بتفعيل ملحق "XDM Download Redirect".'
-                : 'Turn ON "XDM Download Redirect".'),
-        _buildStepItem(
-          isDark,
-          '4',
-          isRtl
-              ? 'اختر "السماح لجميع المواقع" (Allow on All Websites) لمنح صلاحية التحويل.'
-              : 'Set permissions to "Allow on All Websites" for seamless background interception.',
+        DmxSheetSection(
+          title: isRtl ? 'خطوات التفعيل في نظام iOS' : 'iOS Activation Steps',
+          isDark: isDark,
+          child: Column(
+            children: [
+              for (var i = 0; i < steps.length; i++) ...[
+                if (i > 0) const SizedBox(height: 10),
+                _buildStepItem(isDark, accent, '${i + 1}', steps[i]),
+              ],
+            ],
+          ),
         ),
-        const SizedBox(height: 20),
-        Row(
-          children: [
-            Expanded(
-              child: NeonGlowButton(
-                text: isRtl ? 'فتح إعدادات Safari' : 'Open Safari Settings',
-                color: accent,
-                onPressed: () => _openSafariSettings(context),
+        const SizedBox(height: 16),
+        _buildActionButtons(
+          isDark: isDark,
+          accent: accent,
+          primaryLabel: isRtl ? 'فتح إعدادات Safari' : 'Open Safari Settings',
+          primaryIcon: Icons.settings_outlined,
+          onPrimary: () => _openSafariSettings(context),
+          secondaryLabel: isRtl ? 'اختبار التحويل' : 'Test Interception',
+          onSecondary: () => _testDeepLink(context),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionButtons({
+    required bool isDark,
+    required Color accent,
+    required String primaryLabel,
+    required IconData primaryIcon,
+    required VoidCallback onPrimary,
+    required String secondaryLabel,
+    required VoidCallback onSecondary,
+  }) {
+    final hairline = AppTheme.hairlineBorder(isDark, strong: true);
+    final textPrimary = AppTheme.textPrimaryOf(isDark);
+
+    return Row(
+      children: [
+        Expanded(
+          child: FilledButton.icon(
+            onPressed: onPrimary,
+            icon: Icon(primaryIcon, size: 17),
+            label: Text(
+              primaryLabel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontFamily: AppTheme.fontDisplay,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
               ),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: OutlinedButton.icon(
-                icon: const Icon(Icons.flash_on_rounded, size: 18),
-                label: Text(isRtl ? 'اختبار التحويل' : 'Test Interception'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: accent,
-                  side: BorderSide(color: accent),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                ),
-                onPressed: () => _testDeepLink(context),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size(0, 48),
+              backgroundColor: accent,
+              foregroundColor: AppTheme.inkOn(accent),
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(DmxTokens.radiusMd),
               ),
             ),
-          ],
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: onSecondary,
+            icon: Icon(Icons.flash_on_rounded, size: 17, color: accent),
+            label: Text(
+              secondaryLabel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontFamily: AppTheme.fontDisplay,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: textPrimary,
+              ),
+            ),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(0, 48),
+              side: BorderSide(color: hairline, width: 1),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(DmxTokens.radiusMd),
+              ),
+            ),
+          ),
         ),
       ],
     );
@@ -414,52 +460,116 @@ class _BrowserExtensionsSheetState extends State<BrowserExtensionsSheet>
   Widget _buildInfoCard({
     required bool isDark,
     required Color accent,
+    required String platformBadge,
+    required String statusLabel,
     required String title,
     required String description,
-    required dynamic icon,
+    required FaIconData icon,
   }) {
+    final textPrimary = AppTheme.textPrimaryOf(isDark);
+    final textSecondary = AppTheme.textSecondaryOf(isDark);
+    final green = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
+
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: accent.withValues(alpha: isDark ? 0.1 : 0.05),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: accent.withValues(alpha: 0.3)),
+        color: accent.withValues(alpha: isDark ? 0.08 : 0.05),
+        borderRadius: BorderRadius.circular(DmxTokens.radiusLg),
+        border: Border.all(
+          color: accent.withValues(alpha: isDark ? 0.25 : 0.22),
+          width: 0.8,
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (icon is IconData)
-            Icon(icon, color: accent, size: 28)
-          else if (icon is FaIconData)
-            FaIcon(icon, color: accent, size: 28)
-          else
-            Icon(Icons.extension_rounded, color: accent, size: 28),
-          const SizedBox(width: 14),
+          Container(
+            width: 44,
+            height: 44,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: isDark ? 0.14 : 0.10),
+              borderRadius: BorderRadius.circular(DmxTokens.radiusMd),
+              border: Border.all(
+                color: accent.withValues(alpha: 0.28),
+                width: 0.8,
+              ),
+            ),
+            child: FaIcon(icon, color: accent, size: 22),
+          ),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: isDark
-                        ? AppTheme.textPrimary
-                        : AppTheme.lightTextPrimary,
-                    fontFamily: 'Space Grotesk',
-                  ),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: accent.withValues(alpha: isDark ? 0.16 : 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        platformBadge,
+                        style: TextStyle(
+                          fontFamily: AppTheme.fontDisplay,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.6,
+                          color: accent,
+                        ),
+                      ),
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: green,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          statusLabel,
+                          style: TextStyle(
+                            fontFamily: AppTheme.fontDisplay,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: green,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 6),
                 Text(
+                  title,
+                  style: TextStyle(
+                    fontFamily: AppTheme.fontDisplay,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
                   description,
                   style: TextStyle(
+                    fontFamily: AppTheme.fontBody,
                     fontSize: 12,
-                    height: 1.4,
-                    color: isDark
-                        ? AppTheme.textSecondary
-                        : AppTheme.lightTextSecondary,
-                    fontFamily: 'Inter',
+                    height: 1.45,
+                    color: textSecondary,
                   ),
                 ),
               ],
@@ -470,63 +580,55 @@ class _BrowserExtensionsSheetState extends State<BrowserExtensionsSheet>
     );
   }
 
-  Widget _buildStepHeader(bool isDark, String title) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.bold,
-          color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
-          fontFamily: 'Space Grotesk',
-        ),
-      ),
-    );
-  }
+  Widget _buildStepItem(
+    bool isDark,
+    Color accent,
+    String number,
+    String text,
+  ) {
+    final textSecondary = AppTheme.textSecondaryOf(isDark);
 
-  Widget _buildStepItem(bool isDark, String number, String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 20,
-            height: 20,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: isDark ? AppTheme.surface : AppTheme.lightSurface,
-              shape: BoxShape.circle,
-              border: Border.all(
-                color:
-                    isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle,
-              ),
-            ),
-            child: Text(
-              number,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                color: isDark ? AppTheme.neonCyan : AppTheme.lightNeonCyan,
-              ),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 24,
+          height: 24,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: accent.withValues(alpha: isDark ? 0.14 : 0.10),
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: accent.withValues(alpha: 0.35),
+              width: 0.8,
             ),
           ),
-          const SizedBox(width: 10),
-          Expanded(
+          child: Text(
+            number,
+            style: TextStyle(
+              fontFamily: AppTheme.fontDisplay,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: accent,
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 2),
             child: Text(
               text,
               style: TextStyle(
-                fontSize: 12,
-                color: isDark
-                    ? AppTheme.textSecondary
-                    : AppTheme.lightTextSecondary,
-                fontFamily: 'Inter',
+                fontFamily: AppTheme.fontBody,
+                fontSize: 12.5,
+                height: 1.4,
+                color: textSecondary,
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

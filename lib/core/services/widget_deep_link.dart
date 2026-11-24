@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../../features/categories/screens/category_detail_screen.dart';
@@ -151,7 +151,8 @@ class WidgetDeepLinkHandler {
                   targetScheme == 'magnet')) {
             _handleAddUrl(target, name: name);
           } else {
-            _log.warning('Rejected deep link with invalid target URL scheme: $targetScheme');
+            _log.warning(
+                'Rejected deep link with invalid target URL scheme: $targetScheme');
           }
         }
         break;

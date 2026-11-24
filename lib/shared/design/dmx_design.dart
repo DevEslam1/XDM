@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_theme.dart';
 import '../../core/utils/localization.dart';
@@ -569,7 +569,8 @@ class DmxButton extends StatelessWidget {
       DmxButtonVariant.filled => baseAccent,
       DmxButtonVariant.outline => Colors.transparent,
       DmxButtonVariant.destructive => baseAccent,
-      DmxButtonVariant.ghost => baseAccent.withValues(alpha: isDark ? 0.12 : 0.08),
+      DmxButtonVariant.ghost =>
+        baseAccent.withValues(alpha: isDark ? 0.12 : 0.08),
     };
 
     final border = variant == DmxButtonVariant.outline

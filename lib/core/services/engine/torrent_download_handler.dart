@@ -1607,11 +1607,13 @@ class TorrentDownloadHandler {
         if (e.type == DioExceptionType.cancel) {
           if (!pauseGuard.isCompleted) {
             try {
+              // Budget covers _saveResumeDataBeforePause (8s) +
+              // getAccurateFileProgress (2s) + haltTorrent (4s) + margin.
               await pauseGuard.future.timeout(
-                const Duration(seconds: 5),
+                const Duration(seconds: 15),
                 onTimeout: () {
                   _log.severe(
-                      'CRASH-TELEMETRY: Pause handler timed out (5s) for torrent $id; forcing stop.');
+                      'CRASH-TELEMETRY: Pause handler timed out (15s) for torrent $id; forcing stop.');
                   _torrentService
                       .forceStopTorrent(id)
                       .catchError((Object err, StackTrace st) {
@@ -1621,7 +1623,9 @@ class TorrentDownloadHandler {
                   return null;
                 },
               );
-            } catch (_) {}
+            } catch (err, st) {
+              _log.warning('pauseGuard wait failed for torrent $id', err, st);
+            }
           }
         }
         rethrow;
@@ -1632,7 +1636,7 @@ class TorrentDownloadHandler {
         if (cancelToken.isCancelled || pauseInitiated) {
           try {
             await pauseGuard.future.timeout(
-              const Duration(seconds: 5),
+              const Duration(seconds: 15),
               onTimeout: () {
                 _log.severe(
                     'CRASH-TELEMETRY: Finally pause timeout (5s) for torrent $id; forcing stop.');
@@ -2015,7 +2019,18 @@ class TorrentDownloadHandler {
         .where((e) => e.torrentId == id)
         .listen((event) {
       if (cancelToken.isCancelled) return;
-      if (event.category.toLowerCase().contains('error')) {
+      final cat = event.category.toLowerCase();
+      // Tracker, DHT, and port-mapping errors are transient/non-fatal in
+      // BitTorrent — a single dead tracker in a magnet list must never abort
+      // an otherwise healthy transfer.
+      if (cat.contains('tracker') ||
+          cat.contains('dht') ||
+          cat.contains('portmap') ||
+          cat.contains('scrape')) {
+        _log.fine('Non-fatal torrent alert ($cat) for $id: ${event.message}');
+        return;
+      }
+      if (cat.contains('error')) {
         final msg = event.message.toLowerCase();
         FailureCategory category = FailureCategory.torrentError;
         // FIX(false-storage): bare 'disk'/'write' matched unrelated alerts
@@ -2028,8 +2043,6 @@ class TorrentDownloadHandler {
             msg.contains('enospc') ||
             msg.contains('disk quota')) {
           category = FailureCategory.diskFull;
-        } else if (msg.contains('tracker')) {
-          category = FailureCategory.torrentError;
         } else if (msg.contains('network') || msg.contains('connection')) {
           category = FailureCategory.network;
         }
@@ -2137,6 +2150,7 @@ class TorrentDownloadHandler {
         if (isTerminal) return;
         final isNonDownloadPhase = rt.lastStateLabel.contains('checking') ||
             rt.lastStateLabel.contains('downloading_metadata') ||
+            rt.lastStateLabel.contains('downloading metadata') ||
             rt.lastStateLabel.contains('allocating');
         if (isNonDownloadPhase) return;
         if (elapsed >= const Duration(minutes: 5)) {
@@ -2999,11 +3013,11 @@ class TorrentDownloadHandler {
       if (selectedIncomplete) return;
     }
     final bool isProgressComplete =
-        (torrent.progress >= 0.999 && totalSize > 0) ||
+        (torrent.progress >= 1.0 && totalSize > 0) ||
             (totalSize > 0 && downloadedBytes >= totalSize) ||
             (torrent.totalWanted > 0 &&
                 torrent.totalWantedDone >= torrent.totalWanted &&
-                torrent.progress >= 0.999);
+                torrent.progress >= 1.0);
     final bool isSeedingComplete = (stateLabel == 'seeding' ||
             stateLabel == 'finished') &&
         (isProgressComplete ||
@@ -3021,25 +3035,29 @@ class TorrentDownloadHandler {
     final finalStatusMessage = (stateLabel == 'seeding' && isSeedingEnabled)
         ? 'Seeding…'
         : 'Completed';
-    final List<Map<String, dynamic>>? finalFiles =
+    final List<Map<String, dynamic>>? sourceFiles =
         resolvedFiles ?? rt.cachedAccurateFiles;
-    if (finalFiles != null && finalFiles.isNotEmpty) {
-      for (final f in finalFiles) {
-        final len = (f['length'] as num?)?.toInt() ?? 0;
-        final isSelected = isTorrentFileSelected(f);
-        if (isSelected && len > 0) {
-          f['downloadedBytes'] = len;
-          f['progress'] = 1.0;
-          f['isComplete'] = true;
-          f['progressEstimated'] = false;
-        } else if (!isSelected) {
-          f['downloadedBytes'] = 0;
-          f['progress'] = 0.0;
-          f['isComplete'] = false;
-          f['progressEstimated'] = false;
-        }
-      }
-    }
+    // Preserve copy-on-write invariant (B24): never mutate cached file maps in place.
+    final List<Map<String, dynamic>>? finalFiles =
+        sourceFiles == null || sourceFiles.isEmpty
+            ? sourceFiles
+            : sourceFiles.map((f) {
+                final copy = Map<String, dynamic>.from(f);
+                final len = (copy['length'] as num?)?.toInt() ?? 0;
+                final isSelected = isTorrentFileSelected(copy);
+                if (isSelected && len > 0) {
+                  copy['downloadedBytes'] = len;
+                  copy['progress'] = 1.0;
+                  copy['isComplete'] = true;
+                  copy['progressEstimated'] = false;
+                } else if (!isSelected) {
+                  copy['downloadedBytes'] = 0;
+                  copy['progress'] = 0.0;
+                  copy['isComplete'] = false;
+                  copy['progressEstimated'] = false;
+                }
+                return copy;
+              }).toList(growable: false);
     emitProgress(DownloadProgress(
       downloadedBytes: totalSize > 0 ? totalSize : downloadedBytes,
       fileSize: totalSize,

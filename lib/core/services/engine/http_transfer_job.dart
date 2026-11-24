@@ -359,10 +359,10 @@ class HttpTransferJob {
   @visibleForTesting
   static String? strongIfRangeValidator(String? etag, String? lastModified) {
     final trimmedEtag = etag?.trim();
-    if (trimmedEtag != null && trimmedEtag.isNotEmpty) {
-      if (trimmedEtag.startsWith('W/') || trimmedEtag.startsWith('w/')) {
-        return null;
-      }
+    if (trimmedEtag != null &&
+        trimmedEtag.isNotEmpty &&
+        !trimmedEtag.startsWith('W/') &&
+        !trimmedEtag.startsWith('w/')) {
       return trimmedEtag;
     }
     final trimmedLm = lastModified?.trim();
@@ -432,7 +432,9 @@ class HttpTransferJob {
       try {
         await DownloadJournal.flushAndSyncForFile(cmd.tempFilePath,
             taskId: cmd.taskId);
-      } catch (_) {}
+      } catch (e, st) {
+        _log.warning('Journal fsync during flushDurableState failed', e, st);
+      }
       try {
         await StateStore.save(
           cmd.tempFilePath,
@@ -441,7 +443,9 @@ class HttpTransferJob {
           taskId: cmd.taskId,
           allowRegression: true,
         );
-      } catch (_) {}
+      } catch (e, st) {
+        _log.warning('State save during flushDurableState failed', e, st);
+      }
     });
   }
 
@@ -457,18 +461,13 @@ class HttpTransferJob {
       }
       return existing;
     }
-    final work = () async {
+    final work = _stateSaveLock.synchronized(() async {
       final st = _state;
       if (st != null && !_disposed && !_finalized) {
         st.status = DmxStateStatus.paused;
         st.pauseReason = effectivePauseReason;
-        try {
-          await DownloadJournal.flushAndSyncForFile(cmd.tempFilePath,
-              taskId: cmd.taskId);
-        } catch (_) {}
-        // F6: workers can still be writing while this save runs — persisting
-        // the raw live state could record counters beyond the flushed bytes.
-        // Flush first, then save the durability-clamped snapshot.
+        // F6: flush active writers BEFORE journal fsync and durable state save
+        // so on-disk bytes always match or exceed the persisted counters.
         final writer = _activeWriter;
         if (writer != null && !writer.isClosed) {
           try {
@@ -485,18 +484,26 @@ class HttpTransferJob {
             _log.fine('Single-stream RAF flush on requestCancel failed', e, stLog);
           }
         }
+        try {
+          await DownloadJournal.flushAndSyncForFile(cmd.tempFilePath,
+              taskId: cmd.taskId);
+        } catch (e, st) {
+          _log.warning('Journal fsync during requestCancel failed', e, st);
+        }
         if (!_stateSavedInCatch && !_disposed && !_finalized) {
           try {
             await StateStore.save(
                 cmd.tempFilePath, _durableStateSnapshot(st, writer),
                 durable: true, taskId: cmd.taskId, allowRegression: true);
-          } catch (_) {}
+          } catch (e, st) {
+            _log.warning('State save during requestCancel failed', e, st);
+          }
         }
       }
       if (!_cancelToken.isCancelled) {
         _cancelToken.cancel('paused:${effectivePauseReason.name}');
       }
-    }();
+    });
     _inFlightCancelWork = work;
     return work;
   }
@@ -796,6 +803,10 @@ class HttpTransferJob {
     try {
       registerWatchdogs();
       await loadAndReconcileState(dio);
+      // Re-register watchdogs now that _state.totalSize is known so
+      // computeHardTimeoutForSize() governs the transfer instead of the fallback.
+      cancelWatchdogs();
+      registerWatchdogs();
       await executeDownload(dio);
       await _finalize(dio);
       _send('done', const TransferResult.success().toMap());
@@ -2000,12 +2011,22 @@ class HttpTransferJob {
           if (headers.containsKey('If-Range') && resumeFrom > 0) {
             _log.info(
                 'HTTP 200 received with If-Range validator on chunk $chunkIndex — '
-                're-verifying without If-Range');
+                're-verifying server identity before retrying without If-Range');
             skipIfRangeThisChunk = true;
-            _state!.etag = null;
-            _state!.lastModified = null;
+            // Preserve _state!.etag and _state!.lastModified across
+            // _verifyServerIdentity so RFC 9110 §13.1.5 validator mismatch
+            // triggers identity-change detection & disk spot-check instead of
+            // blinding it.
+            final prevEtag = _state!.etag;
+            final prevLastMod = _state!.lastModified;
             invalidateIdentityCacheForUrl(cmd.punyUrl);
             await _verifyServerIdentity(dio);
+            // If identity didn't change (server simply ignored If-Range), clear
+            // stale validators for subsequent retries.
+            if (_state!.etag == prevEtag && _state!.lastModified == prevLastMod) {
+              _state!.etag = null;
+              _state!.lastModified = null;
+            }
             continue;
           }
           if (_urlChangedFromSavedState && (_state?.downloadedBytes ?? 0) > 0) {
@@ -2152,26 +2173,27 @@ class HttpTransferJob {
         final digestSink = sha256.startChunkedConversion(innerDigestSink);
 
         if (resumeFrom > 0) {
-          // F18: the writer may still hold up to 256KB per chunk in its
-          // buffers from earlier attempts this session. Digesting the raw
-          // file without flushing folds a zero gap into the hash and
-          // persists a wrong digest (which later fails integrity checks or
-          // resurrects bad data). readRange flushes all writer buffers
-          // before reading, so the digest always covers what is on disk.
-          final resumedBytes = await writer.readRange(chunk.start, resumeFrom);
-          if (resumedBytes.isNotEmpty) {
-            digestSink.add(resumedBytes);
-          }
+          // F18: stream-hash the already-flushed prefix in 64 KB blocks so
+          // resuming multi-GB files never allocates the full prefix in RAM or
+          // holds _metaLock across the entire read.
+          await writer.readRangeStreamed(
+            chunk.start,
+            resumeFrom,
+            digestSink.add,
+          );
         }
 
         var sessionBytes = 0;
-        // F24: pump the response stream through a pass-through controller so
-        // the source subscription can be cancelled explicitly when the chunk
-        // loop exits early (full chunk / hot-split overshoot breaks). Relying
-        // on the loop's implicit break-cancel leaves the HTTP socket draining
-        // in the background while the chunk loop moves on.
-        final pieceController = StreamController<Uint8List>();
-        final sourceSub = stream.listen(
+        // F24: pump the response stream through a backpressure-aware controller
+        // so pausing the consumer (BandwidthGovernor / disk flush) pauses the
+        // underlying HTTP socket subscription instead of buffering unbounded RAM,
+        // and early exits cancel the source subscription deterministically.
+        StreamSubscription<Uint8List>? sourceSub;
+        final pieceController = StreamController<Uint8List>(
+          onPause: () => sourceSub?.pause(),
+          onResume: () => sourceSub?.resume(),
+        );
+        sourceSub = stream.listen(
           pieceController.add,
           onError: pieceController.addError,
           onDone: pieceController.close,
@@ -2234,48 +2256,51 @@ class HttpTransferJob {
         attempts = 0;
         if (chunk.isComplete) {
           try {
-            await writer.flushAll();
-            // FIX(C-2): durability-clamped snapshot (other workers keep
-            // mutating the live state while we flush).
-            await StateStore.save(
-                cmd.tempFilePath, _durableStateSnapshot(_state!, writer),
-                durable: true, taskId: cmd.taskId);
-            final journal = DownloadJournal(
-                StateStore.journalPathFor(cmd.tempFilePath, taskId: cmd.taskId));
-            await journal.open();
-            try {
-              // FIX(journal-init): write the init record the first time the
-              // journal is opened for this file, so recovery after compaction
-              // has accurate threadCount/totalSize (writeInit is a no-op when
-              // the journal already has content). Also emit a periodic
-              // checkpoint so recovery metadata stays accurate.
-              final st = _state!;
-              if (!_journalInitWritten) {
-                await journal.writeInit(st.threadCount, st.totalSize);
-                _journalInitWritten = true;
-              } else if (st.chunks.length > 1) {
-                _journalChunkWritesSinceCheckpoint++;
-                if (_journalChunkWritesSinceCheckpoint >=
-                    _journalCheckpointEveryChunks) {
-                  _journalChunkWritesSinceCheckpoint = 0;
-                  await journal.writeCheckpoint(
-                    st.chunks.map((c) => c.downloaded).toList(),
-                    st.totalSize,
-                    hashes: {
-                      for (var i = 0; i < st.chunks.length; i++)
-                        if (st.chunks[i].hash != null) i: st.chunks[i].hash!,
-                    },
-                  );
+            await _stateSaveLock.synchronized(() async {
+              await writer.flushAll();
+              // FIX(C-2): durability-clamped snapshot (other workers keep
+              // mutating the live state while we flush).
+              await StateStore.save(
+                  cmd.tempFilePath, _durableStateSnapshot(_state!, writer),
+                  durable: true, taskId: cmd.taskId);
+              final journal = DownloadJournal(StateStore.journalPathFor(
+                  cmd.tempFilePath,
+                  taskId: cmd.taskId));
+              await journal.open();
+              try {
+                // FIX(journal-init): write the init record the first time the
+                // journal is opened for this file, so recovery after compaction
+                // has accurate threadCount/totalSize (writeInit is a no-op when
+                // the journal already has content). Also emit a periodic
+                // checkpoint so recovery metadata stays accurate.
+                final st = _state!;
+                if (!_journalInitWritten) {
+                  await journal.writeInit(st.threadCount, st.totalSize);
+                  _journalInitWritten = true;
+                } else if (st.chunks.length > 1) {
+                  _journalChunkWritesSinceCheckpoint++;
+                  if (_journalChunkWritesSinceCheckpoint >=
+                      _journalCheckpointEveryChunks) {
+                    _journalChunkWritesSinceCheckpoint = 0;
+                    await journal.writeCheckpoint(
+                      st.chunks.map((c) => c.downloaded).toList(),
+                      st.totalSize,
+                      hashes: {
+                        for (var i = 0; i < st.chunks.length; i++)
+                          if (st.chunks[i].hash != null) i: st.chunks[i].hash!,
+                      },
+                    );
+                  }
                 }
+                await journal.recordChunkProgress(
+                  chunkIndex,
+                  chunk.downloaded,
+                  hash: chunk.hash,
+                );
+              } finally {
+                await journal.close();
               }
-              await journal.recordChunkProgress(
-                chunkIndex,
-                chunk.downloaded,
-                hash: chunk.hash,
-              );
-            } finally {
-              await journal.close();
-            }
+            });
           } catch (e) {
             debugPrint('[DMX] H-2: chunk-boundary save failed: $e');
             try {
@@ -2574,10 +2599,17 @@ class HttpTransferJob {
             if (netBytes.length != diskBytes.length ||
                 !listEquals(netBytes, diskBytes)) {
               debugPrint(
-                  '[DMX-Job] BUG-2: single-stream spot-check mismatch — resetting chunk progress without deleting file');
+                  '[DMX-Job] BUG-2: single-stream spot-check mismatch — resetting chunk progress and persisting clean state');
               chunk.downloaded = 0;
               st.chunks = ChunkScheduler.singleStream(st.totalSize);
               chunk = st.chunks.first;
+              try {
+                await StateStore.save(cmd.tempFilePath, st,
+                    durable: true, taskId: cmd.taskId, allowRegression: true);
+              } catch (e, stack) {
+                _log.warning('Failed to persist state after spot-check reset',
+                    e, stack);
+              }
             }
           } else {
             await response.data?.stream.listen((_) {}).cancel();
@@ -2671,10 +2703,14 @@ class HttpTransferJob {
             await response.data?.stream.listen((_) {}).cancel();
             if (headers.containsKey('If-Range')) {
               skipIfRangeSingleStream = true;
-              st.etag = null;
-              st.lastModified = null;
+              final prevEtag = st.etag;
+              final prevLastMod = st.lastModified;
               invalidateIdentityCacheForUrl(cmd.punyUrl);
               await _verifyServerIdentity(dio);
+              if (st.etag == prevEtag && st.lastModified == prevLastMod) {
+                st.etag = null;
+                st.lastModified = null;
+              }
               continue;
             }
             if (_urlChangedFromSavedState) {

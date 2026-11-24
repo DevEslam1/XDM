@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
@@ -52,19 +52,20 @@ class _CreateTorrentScreenState extends State<CreateTorrentScreen> {
 
   Future<void> _pickSourceFile() async {
     final result = await FilePicker.pickFiles();
-    if (result != null && result.files.single.path != null) {
+    if (result.isNotEmpty && result.single.path != null) {
       setState(() {
-        _sourceController.text = result.files.single.path!;
+        _sourceController.text = result.single.path!;
         if (_outputController.text.isEmpty) {
-          _outputController.text = '${result.files.single.path!}.torrent';
+          _outputController.text = '${result.single.path!}.torrent';
         }
       });
     }
   }
 
   Future<void> _pickSourceFolder() async {
-    final result = await FilePicker.getDirectoryPath();
-    if (result != null) {
+    final uri = await FilePicker.pickDirectory();
+    if (uri != null) {
+      final result = uri.scheme == 'file' ? uri.toFilePath() : uri.toString();
       setState(() {
         _sourceController.text = result;
         if (_outputController.text.isEmpty) {
@@ -75,8 +76,9 @@ class _CreateTorrentScreenState extends State<CreateTorrentScreen> {
   }
 
   Future<void> _pickOutputDirectory() async {
-    final result = await FilePicker.getDirectoryPath();
-    if (result != null) {
+    final uri = await FilePicker.pickDirectory();
+    if (uri != null) {
+      final result = uri.scheme == 'file' ? uri.toFilePath() : uri.toString();
       final sourcePath = _sourceController.text.trim();
       String baseName = 'download';
       if (sourcePath.isNotEmpty) {

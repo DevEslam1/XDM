@@ -2,8 +2,8 @@ import 'package:dmx/core/app_theme.dart';
 import 'package:dmx/core/services/subscription/subscription_service.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
 import 'package:dmx/features/subscription/widgets/paywall_bottom_sheet.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 void main() {

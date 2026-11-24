@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import '../../core/app_theme.dart';
 import '../../core/services/background_gate.dart';
 import '../../core/services/performance_monitor.dart';
@@ -108,9 +108,7 @@ class _GlassCardState extends State<GlassCard> {
                       isDark,
                       strong: widget.elevated,
                     )),
-          width: highContrast
-              ? 1.5
-              : (widget.accentColor != null ? 1.0 : 0.8),
+          width: highContrast ? 1.5 : (widget.accentColor != null ? 1.0 : 0.8),
         );
 
     final shadows = (isLowEnd || highContrast)

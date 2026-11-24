@@ -497,6 +497,40 @@ class PositionalFileWriter
     });
   }
 
+  /// Streams a byte range from disk in bounded chunks (default 64 KB) to avoid
+  /// loading multi-GB resume prefixes into RAM or holding [_metaLock] across
+  /// the entire read.
+  Future<void> readRangeStreamed(
+    int start,
+    int length,
+    void Function(Uint8List chunk) onChunk, {
+    int chunkSize = 64 * 1024,
+  }) async {
+    if (length <= 0) return;
+    await _metaLock.synchronized(() async {
+      _checkOpen();
+      await _flushAllInternal();
+    });
+    RandomAccessFile? tempRaf;
+    try {
+      final file = File(path);
+      tempRaf = await file.open(mode: FileMode.read);
+      await tempRaf.setPosition(start);
+      var remaining = length;
+      while (remaining > 0) {
+        final toRead = remaining < chunkSize ? remaining : chunkSize;
+        final bytes = await tempRaf.read(toRead);
+        if (bytes.isEmpty) break;
+        onChunk(bytes);
+        remaining -= bytes.length;
+      }
+    } catch (e) {
+      throw PositionalFileWriterException('readRangeStreamed failed: $e');
+    } finally {
+      await tempRaf?.close();
+    }
+  }
+
   Future<int> length() async {
     return _metaLock.synchronized(() async {
       _checkOpen();

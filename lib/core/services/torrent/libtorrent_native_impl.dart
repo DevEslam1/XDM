@@ -29,9 +29,9 @@ class LibtorrentNativeImpl implements ITorrentNative {
   final Map<int, List<lt.TorrentFileEntry>> _cachedFiles = {};
   final Map<int, List<int>> _cachedPriorities = {};
 
-  final StreamController<NativeAlertEvent> _alertController =
+  StreamController<NativeAlertEvent> _alertController =
       StreamController<NativeAlertEvent>.broadcast();
-  final StreamController<Map<int, NativeTorrentStatus>> _statusController =
+  StreamController<Map<int, NativeTorrentStatus>> _statusController =
       StreamController<Map<int, NativeTorrentStatus>>.broadcast();
 
   static const Set<String> _streamableExtensions = {
@@ -87,6 +87,13 @@ class LibtorrentNativeImpl implements ITorrentNative {
   }) async {
     if (_initialized && !_disposed) return;
     _disposed = false;
+    if (_alertController.isClosed) {
+      _alertController = StreamController<NativeAlertEvent>.broadcast();
+    }
+    if (_statusController.isClosed) {
+      _statusController =
+          StreamController<Map<int, NativeTorrentStatus>>.broadcast();
+    }
 
     final session = lt.createSession();
     _session = session;

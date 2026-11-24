@@ -4,8 +4,8 @@ import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dmx/shared/mixins/pausable_loop_animation.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/app_theme.dart';
@@ -26,6 +26,7 @@ import '../../../core/utils/responsive.dart';
 import '../../../core/utils/torrent_id_resolver.dart';
 import '../../../shared/accessibility/xdm_semantics.dart';
 import '../../../shared/design/dmx_design.dart';
+import '../../../shared/widgets/dmx_bottom_sheet.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
 import '../../details/screens/details_screen.dart';
 import '../../downloads/models/download_task.dart';
@@ -859,15 +860,20 @@ class _TelemetryStrip extends StatelessWidget {
     final protoBadge = Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: badgeClr.withValues(alpha: 0.12),
+        color: badgeClr.withValues(alpha: isDark ? 0.14 : 0.10),
         borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: badgeClr.withValues(alpha: isDark ? 0.25 : 0.20),
+          width: 0.6,
+        ),
       ),
       child: Text(
         protoLabel,
         style: TextStyle(
-          fontSize: responsiveFontSize(context, 10),
-          fontWeight: FontWeight.bold,
+          fontSize: responsiveFontSize(context, 9.5),
+          fontWeight: FontWeight.w700,
           fontFamily: 'Space Grotesk',
+          letterSpacing: 0.4,
           color: badgeClr,
         ),
       ),
@@ -879,25 +885,37 @@ class _TelemetryStrip extends StatelessWidget {
             ? context.read<DownloadProvider>().getTorrentUploadSpeed(task.id)
             : 0.0);
 
+    final stripBg = isDark
+        ? Colors.white.withValues(alpha: 0.03)
+        : Colors.black.withValues(alpha: 0.025);
+
     // Completed downloads: clean single metadata line
     if (isCompleted) {
       return RepaintBoundary(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: stripBg,
+            borderRadius: BorderRadius.circular(10),
+          ),
           child: Row(
             children: [
-              Icon(Icons.sd_storage_outlined, size: 14, color: mutedClr),
-              const SizedBox(width: 4),
-              Text(
-                task.sizeFormatted,
-                style: AppTheme.dataStyle(
-                  isDark: isDark,
-                  size: 12,
-                  weight: FontWeight.w600,
-                  color: secClr,
+              Icon(Icons.sd_storage_outlined, size: 13, color: mutedClr),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text(
+                  task.sizeFormatted,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTheme.dataStyle(
+                    isDark: isDark,
+                    size: 11.5,
+                    weight: FontWeight.w600,
+                    color: secClr,
+                  ),
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               protoBadge,
             ],
           ),
@@ -914,43 +932,64 @@ class _TelemetryStrip extends StatelessWidget {
       final etaText = seeding ? 'SEEDING' : task.etaFormatted;
 
       return RepaintBoundary(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          decoration: BoxDecoration(
+            color: stripBg,
+            borderRadius: BorderRadius.circular(10),
+          ),
           child: Column(
             children: [
               Row(
                 children: [
-                  Icon(Icons.speed_rounded, size: 14, color: accent),
-                  const SizedBox(width: 4),
-                  Flexible(
-                    child: Text(
-                      speedText,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTheme.dataStyle(
-                        isDark: isDark,
-                        size: 12,
-                        weight: FontWeight.bold,
-                        color: accent,
-                      ),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Icon(
+                          seeding ? Icons.upload_rounded : Icons.speed_rounded,
+                          size: 13,
+                          color: accent,
+                        ),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            speedText,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTheme.dataStyle(
+                              isDark: isDark,
+                              size: 12,
+                              weight: FontWeight.w700,
+                              color: accent,
+                            ).copyWith(
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Icon(Icons.schedule_rounded, size: 13, color: mutedClr),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            etaText,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTheme.dataStyle(
+                              isDark: isDark,
+                              size: 11.5,
+                              color: secClr,
+                            ).copyWith(
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Icon(Icons.schedule_rounded, size: 14, color: mutedClr),
-                  const SizedBox(width: 4),
-                  Flexible(
-                    child: Text(
-                      etaText,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTheme.dataStyle(
-                        isDark: isDark,
-                        size: 12,
-                        color: secClr,
-                      ),
-                    ),
-                  ),
-                  const Spacer(),
                   Builder(
                     builder: (context) {
                       final provider = context.read<DownloadProvider>();
@@ -958,12 +997,15 @@ class _TelemetryStrip extends StatelessWidget {
                       if (history.length >= 2) {
                         final screenW = MediaQuery.sizeOf(context).width;
                         final sparkWidth = screenW < 340
-                            ? 45.0
-                            : (screenW < 400 ? 60.0 : 80.0);
-                        return _CardSparklineGraph(
-                          history: history,
-                          color: accent,
-                          width: sparkWidth,
+                            ? 42.0
+                            : (screenW < 400 ? 56.0 : 72.0);
+                        return Padding(
+                          padding: const EdgeInsetsDirectional.only(start: 8),
+                          child: _CardSparklineGraph(
+                            history: history,
+                            color: accent,
+                            width: sparkWidth,
+                          ),
                         );
                       }
                       return const SizedBox.shrink();
@@ -971,19 +1013,14 @@ class _TelemetryStrip extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 5),
               Row(
                 children: [
-                  Icon(Icons.sd_storage_outlined, size: 14, color: mutedClr),
+                  Icon(Icons.sd_storage_outlined, size: 13, color: mutedClr),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
                       sizeProgressLabel(
-                        // FIX(M-2): Use combinedDownloadedBytes/combinedTotalSize
-                        // consistently for both active and inactive states.
-                        // For DASH tasks, downloadedBytes is video-only and
-                        // resolvedFileSize is video-only, causing a size jump
-                        // when transitioning to paused (which uses combined).
                         received: task.combinedDownloadedBytes,
                         total: task.combinedTotalSize,
                       ),
@@ -993,6 +1030,8 @@ class _TelemetryStrip extends StatelessWidget {
                         isDark: isDark,
                         size: 11,
                         color: secClr,
+                      ).copyWith(
+                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
                   ),
@@ -1018,12 +1057,16 @@ class _TelemetryStrip extends StatelessWidget {
     };
 
     return RepaintBoundary(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: stripBg,
+          borderRadius: BorderRadius.circular(10),
+        ),
         child: Row(
           children: [
-            Icon(Icons.sd_storage_outlined, size: 14, color: mutedClr),
-            const SizedBox(width: 4),
+            Icon(Icons.sd_storage_outlined, size: 13, color: mutedClr),
+            const SizedBox(width: 5),
             Expanded(
               child: Text(
                 task.downloadedBytes > 0
@@ -1033,9 +1076,11 @@ class _TelemetryStrip extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: AppTheme.dataStyle(
                   isDark: isDark,
-                  size: 12,
+                  size: 11.5,
                   weight: FontWeight.w600,
                   color: secClr,
+                ).copyWith(
+                  fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
             ),
@@ -1172,31 +1217,45 @@ class _ChunkPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (chunks.isEmpty || size.width <= 0 || size.height <= 0) return;
-    final totalSpacing = (chunks.length - 1) * 2.5;
-    final chunkWidth = (size.width - totalSpacing) / chunks.length;
+    final gap = chunks.length > 12 ? 1.5 : 2.5;
+    final totalSpacing = (chunks.length - 1) * gap;
+    final chunkWidth = ((size.width - totalSpacing) / chunks.length).clamp(
+      1.0,
+      size.width,
+    );
+    final radius =
+        Radius.circular((size.height / 2).clamp(1.5, chunkWidth / 2));
     final trackPaint = Paint()
-      ..color = (isDark ? AppTheme.surface : AppTheme.lightSurface)
-          .withValues(alpha: isDark ? 0.3 : 0.15)
+      ..color = (isDark ? Colors.white : Colors.black)
+          .withValues(alpha: isDark ? 0.08 : 0.07)
       ..style = PaintingStyle.fill;
-    final fillPaint = Paint()
+    final completePaint = Paint()
       ..color = color
       ..style = PaintingStyle.fill;
 
     for (int i = 0; i < chunks.length; i++) {
-      final left = i * (chunkWidth + 2.5);
+      final left = i * (chunkWidth + gap);
       final raw = chunks[i];
       final p = raw.isNaN ? 0.0 : raw.clamp(0.0, 1.0);
       final rrect = RRect.fromRectAndRadius(
         Rect.fromLTWH(left, 0, chunkWidth, size.height),
-        const Radius.circular(3),
+        radius,
       );
       canvas.drawRRect(rrect, trackPaint);
       if (p > 0) {
-        final fillRRect = RRect.fromRectAndRadius(
-          Rect.fromLTWH(left, 0, chunkWidth * p, size.height),
-          const Radius.circular(3),
-        );
-        canvas.drawRRect(fillRRect, fillPaint);
+        final fillWidth = chunkWidth * p;
+        final fillRect = Rect.fromLTWH(left, 0, fillWidth, size.height);
+        final fillRRect = RRect.fromRectAndRadius(fillRect, radius);
+        if (p >= 0.999) {
+          canvas.drawRRect(fillRRect, completePaint);
+        } else {
+          final activePaint = Paint()
+            ..shader = LinearGradient(
+              colors: [color.withValues(alpha: 0.72), color],
+            ).createShader(fillRect)
+            ..style = PaintingStyle.fill;
+          canvas.drawRRect(fillRRect, activePaint);
+        }
       }
     }
   }
@@ -1334,6 +1393,7 @@ class _ControlButton extends StatefulWidget {
   final String tooltip;
   final bool filled;
   final bool isLoading;
+  final bool compact;
 
   const _ControlButton({
     super.key,
@@ -1343,6 +1403,7 @@ class _ControlButton extends StatefulWidget {
     required this.tooltip,
     this.filled = false,
     this.isLoading = false,
+    this.compact = false,
   });
 
   @override
@@ -1354,11 +1415,13 @@ class _ControlButtonState extends State<_ControlButton> {
 
   @override
   Widget build(BuildContext context) {
+    final btnSize = widget.compact ? 34.0 : 38.0;
+    final hitSize = widget.compact ? 40.0 : 44.0;
     return Semantics(
       button: true,
       label: widget.tooltip,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+        constraints: BoxConstraints(minWidth: hitSize, minHeight: 44),
         child: Center(
           child: Tooltip(
             message: widget.tooltip,
@@ -1377,29 +1440,29 @@ class _ControlButtonState extends State<_ControlButton> {
                       widget.onPressed?.call();
                     },
               child: AnimatedScale(
-                scale: _pressed ? 0.85 : 1.0,
+                scale: _pressed ? 0.88 : 1.0,
                 duration: AppTheme.motionFast,
                 curve: AppTheme.motionSpring,
                 child: AnimatedContainer(
                   duration: AppTheme.motionBase,
-                  width: 40,
-                  height: 40,
+                  width: btnSize,
+                  height: btnSize,
                   decoration: BoxDecoration(
                     color: widget.filled
                         ? widget.color
-                        : widget.color.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(10),
+                        : widget.color.withValues(alpha: 0.11),
+                    borderRadius: BorderRadius.circular(11),
                     border: Border.all(
                       color: widget.color
-                          .withValues(alpha: widget.filled ? 0 : 0.25),
+                          .withValues(alpha: widget.filled ? 0 : 0.24),
                       width: 0.8,
                     ),
                   ),
                   child: Center(
                     child: widget.isLoading
                         ? SizedBox(
-                            width: 18,
-                            height: 18,
+                            width: 16,
+                            height: 16,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
                               valueColor: AlwaysStoppedAnimation<Color>(
@@ -1410,12 +1473,11 @@ class _ControlButtonState extends State<_ControlButton> {
                             ),
                           )
                         : AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 250),
+                            duration: const Duration(milliseconds: 220),
                             switchInCurve: Curves.easeOutBack,
                             switchOutCurve: Curves.easeIn,
-                            transitionBuilder: (child, anim) =>
-                                RotationTransition(
-                              turns: Tween<double>(begin: 0.75, end: 1.0)
+                            transitionBuilder: (child, anim) => ScaleTransition(
+                              scale: Tween<double>(begin: 0.8, end: 1.0)
                                   .animate(anim),
                               child:
                                   FadeTransition(opacity: anim, child: child),
@@ -1423,7 +1485,7 @@ class _ControlButtonState extends State<_ControlButton> {
                             child: Icon(
                               widget.icon,
                               key: ValueKey(widget.icon),
-                              size: 18,
+                              size: widget.compact ? 17 : 18,
                               color: widget.filled
                                   ? AppTheme.inkOn(widget.color)
                                   : widget.color,
@@ -1455,6 +1517,7 @@ class _ControlCluster extends StatelessWidget with HapticHelper {
         .select((DownloadProvider p) => p.isTaskOperationPending(task.id));
     final isRtl = L10n.isRtl(context);
 
+    final isSmallScreen = MediaQuery.sizeOf(context).width < 360;
     Widget actionBtn;
 
     if (isPending) {
@@ -1466,6 +1529,7 @@ class _ControlCluster extends StatelessWidget with HapticHelper {
         color: accent,
         filled: true,
         isLoading: true,
+        compact: isSmallScreen,
         tooltip: isRtl ? 'جاري المعالجة...' : 'Processing...',
         onPressed: null,
       );
@@ -1474,6 +1538,7 @@ class _ControlCluster extends StatelessWidget with HapticHelper {
         key: ValueKey('pause_${task.id}'),
         icon: Icons.pause_rounded,
         color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+        compact: isSmallScreen,
         tooltip: L10n.of(context, 'pause_btn'),
         onPressed: () {
           triggerHaptic(settings);
@@ -1487,6 +1552,7 @@ class _ControlCluster extends StatelessWidget with HapticHelper {
         icon: Icons.play_arrow_rounded,
         color: accent,
         filled: true,
+        compact: isSmallScreen,
         tooltip: task.status == DownloadStatus.queued
             ? L10n.of(context, 'start_btn')
             : L10n.of(context, 'resume_btn'),
@@ -1501,6 +1567,7 @@ class _ControlCluster extends StatelessWidget with HapticHelper {
         icon: Icons.refresh_rounded,
         color: accent,
         filled: true,
+        compact: isSmallScreen,
         tooltip: L10n.of(context, 'retry_label'),
         onPressed: () {
           triggerHaptic(settings);
@@ -1513,17 +1580,17 @@ class _ControlCluster extends StatelessWidget with HapticHelper {
         mainAxisSize: MainAxisSize.min,
         children: [
           SizedBox(
-            width: 18,
-            height: 18,
+            width: 16,
+            height: 16,
             child: CircularProgressIndicator(
               strokeWidth: 2,
               valueColor: AlwaysStoppedAnimation<Color>(accent),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
           Text(
             'Merging…',
-            style: TextStyle(color: accent, fontSize: 12),
+            style: TextStyle(color: accent, fontSize: 11.5),
           ),
         ],
       );
@@ -1533,6 +1600,7 @@ class _ControlCluster extends StatelessWidget with HapticHelper {
         icon: Icons.folder_open_rounded,
         color: accent,
         filled: true,
+        compact: isSmallScreen,
         tooltip: L10n.of(context, 'open_file_btn'),
         onPressed: () async {
           triggerHaptic(settings);
@@ -1566,7 +1634,7 @@ class _ControlCluster extends StatelessWidget with HapticHelper {
         mainAxisSize: MainAxisSize.min,
         children: [
           AnimatedSwitcher(
-            duration: const Duration(milliseconds: 300),
+            duration: const Duration(milliseconds: 260),
             switchInCurve: Curves.easeOutBack,
             switchOutCurve: Curves.easeIn,
             transitionBuilder: (Widget child, Animation<double> animation) {
@@ -1580,11 +1648,11 @@ class _ControlCluster extends StatelessWidget with HapticHelper {
             },
             child: actionBtn,
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 4),
           _ControlButton(
             icon: Icons.more_vert_rounded,
-            color:
-                isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+            color: AppTheme.textSecondaryOf(isDark),
+            compact: isSmallScreen,
             tooltip: L10n.of(context, 'options_btn'),
             onPressed: () => _showAdvancedControls(context, task, settings),
           ),
@@ -1712,8 +1780,15 @@ class _RecoveryHintRow extends StatelessWidget {
 class _FileCard extends StatelessWidget with HapticHelper {
   final DownloadTask task;
   final bool compact;
+  final bool isSelected;
+  final bool isSelectionMode;
 
-  const _FileCard({required this.task, required this.compact});
+  const _FileCard({
+    required this.task,
+    required this.compact,
+    this.isSelected = false,
+    this.isSelectionMode = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1721,18 +1796,23 @@ class _FileCard extends StatelessWidget with HapticHelper {
     final isDark = settings.isDarkMode;
     final provider = context.read<DownloadProvider>();
     final statusColor = getEffectiveCardAccent(task, provider, isDark);
-    final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+    final mutedClr = AppTheme.textMutedOf(isDark);
 
     final isSmallScreen = MediaQuery.sizeOf(context).width < 360;
     final horizPadding = isSmallScreen ? 10.0 : (compact ? 12.0 : 14.0);
-    final vertPadding = isSmallScreen ? 10.0 : (compact ? 10.0 : 14.0);
+    final vertPadding = isSmallScreen ? 10.0 : (compact ? 10.0 : 13.0);
     final itemGap = isSmallScreen ? 8.0 : 12.0;
 
     return _CardShell(
       accent: statusColor,
       isDark: isDark,
+      isSelected: isSelected,
       onTap: () {
         triggerHaptic(settings);
+        if (isSelectionMode) {
+          provider.toggleTaskSelection(task.id);
+          return;
+        }
         Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => DetailsScreen(taskId: task.id)),
@@ -1753,21 +1833,32 @@ class _FileCard extends StatelessWidget with HapticHelper {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      width: compact ? 38 : 44,
-                      height: compact ? 38 : 44,
+                    AnimatedContainer(
+                      duration: AppTheme.motionFast,
+                      width: compact ? 38 : 42,
+                      height: compact ? 38 : 42,
                       decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(12),
+                        color: isSelected
+                            ? statusColor
+                            : statusColor.withValues(
+                                alpha: isDark ? 0.12 : 0.09,
+                              ),
+                        borderRadius: BorderRadius.circular(11),
                         border: Border.all(
-                          color: statusColor.withValues(alpha: 0.15),
-                          width: 0.8,
+                          color: statusColor.withValues(
+                            alpha: isSelected ? 1.0 : (isDark ? 0.24 : 0.20),
+                          ),
+                          width: 0.9,
                         ),
                       ),
                       child: Icon(
-                        _categoryIcon(task.category),
-                        color: statusColor,
-                        size: compact ? 18 : 21,
+                        isSelected
+                            ? Icons.check_rounded
+                            : _categoryIcon(task.category),
+                        color: isSelected
+                            ? AppTheme.inkOn(statusColor)
+                            : statusColor,
+                        size: compact ? 18 : 20,
                       ),
                     ),
                     SizedBox(width: itemGap),
@@ -1891,8 +1982,15 @@ class _FileCard extends StatelessWidget with HapticHelper {
 class _MediaCard extends StatelessWidget with HapticHelper {
   final DownloadTask task;
   final bool compact;
+  final bool isSelected;
+  final bool isSelectionMode;
 
-  const _MediaCard({required this.task, required this.compact});
+  const _MediaCard({
+    required this.task,
+    required this.compact,
+    this.isSelected = false,
+    this.isSelectionMode = false,
+  });
 
   String get _qualityLabel {
     final preset = task.youtubeQualityPreset ?? '';
@@ -1913,21 +2011,26 @@ class _MediaCard extends StatelessWidget with HapticHelper {
     final isDark = context.select<SettingsProvider, bool>((s) => s.isDarkMode);
     final provider = context.read<DownloadProvider>();
     final statusColor = getEffectiveCardAccent(task, provider, isDark);
-    final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+    final mutedClr = AppTheme.textMutedOf(isDark);
     final qualityColor = _isAudioOnly
         ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
         : (isDark ? AppTheme.neonCyan : AppTheme.lightNeonCyan);
 
     final isSmallScreen = MediaQuery.sizeOf(context).width < 360;
     final horizPadding = isSmallScreen ? 10.0 : (compact ? 12.0 : 14.0);
-    final vertPadding = isSmallScreen ? 10.0 : (compact ? 10.0 : 14.0);
+    final vertPadding = isSmallScreen ? 10.0 : (compact ? 10.0 : 13.0);
     final itemGap = isSmallScreen ? 8.0 : 12.0;
 
     return _CardShell(
       accent: statusColor,
       isDark: isDark,
+      isSelected: isSelected,
       onTap: () {
         triggerHaptic(settings);
+        if (isSelectionMode) {
+          provider.toggleTaskSelection(task.id);
+          return;
+        }
         Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => DetailsScreen(taskId: task.id)),
@@ -1950,16 +2053,23 @@ class _MediaCard extends StatelessWidget with HapticHelper {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
-                      width: compact ? 46 : 56,
+                      width: compact ? 44 : 52,
                       height: compact ? 34 : 40,
                       decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.08),
+                        color: isSelected
+                            ? statusColor
+                            : statusColor.withValues(
+                                alpha: isDark ? 0.12 : 0.09,
+                              ),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: statusColor.withValues(alpha: 0.15),
-                          width: 0.8,
+                          color: statusColor.withValues(
+                            alpha: isSelected ? 1.0 : (isDark ? 0.24 : 0.20),
+                          ),
+                          width: 0.9,
                         ),
-                        image: task.thumbnailUrl != null &&
+                        image: !isSelected &&
+                                task.thumbnailUrl != null &&
                                 task.thumbnailUrl!.trim().isNotEmpty
                             ? DecorationImage(
                                 image: CachedNetworkImageProvider(
@@ -1976,16 +2086,22 @@ class _MediaCard extends StatelessWidget with HapticHelper {
                               )
                             : null,
                       ),
-                      child: task.thumbnailUrl != null &&
-                              task.thumbnailUrl!.trim().isNotEmpty
-                          ? null
-                          : Icon(
-                              _isAudioOnly
-                                  ? Icons.audiotrack_rounded
-                                  : Icons.play_arrow_rounded,
-                              color: statusColor,
-                              size: compact ? 18 : 22,
-                            ),
+                      child: isSelected
+                          ? Icon(
+                              Icons.check_rounded,
+                              color: AppTheme.inkOn(statusColor),
+                              size: 20,
+                            )
+                          : (task.thumbnailUrl != null &&
+                                  task.thumbnailUrl!.trim().isNotEmpty
+                              ? null
+                              : Icon(
+                                  _isAudioOnly
+                                      ? Icons.audiotrack_rounded
+                                      : Icons.play_arrow_rounded,
+                                  color: statusColor,
+                                  size: compact ? 18 : 22,
+                                )),
                     ),
                     SizedBox(width: itemGap),
                     Expanded(
@@ -2133,8 +2249,15 @@ class _MediaCard extends StatelessWidget with HapticHelper {
 class _TorrentCard extends StatefulWidget {
   final DownloadTask task;
   final bool compact;
+  final bool isSelected;
+  final bool isSelectionMode;
 
-  const _TorrentCard({required this.task, required this.compact});
+  const _TorrentCard({
+    required this.task,
+    required this.compact,
+    this.isSelected = false,
+    this.isSelectionMode = false,
+  });
 
   @override
   State<_TorrentCard> createState() => _TorrentCardState();
@@ -2150,14 +2273,14 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
     final currentTask = context.select<DownloadProvider, DownloadTask>(
         (p) => p.findTaskById(widget.task.id) ?? widget.task);
     final statusColor = getEffectiveCardAccent(currentTask, provider, isDark);
-    final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+    final mutedClr = AppTheme.textMutedOf(isDark);
     final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
     final violetClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
     final isMagnet = currentTask.url.startsWith('magnet:');
     final seeding = _isSeeding(currentTask);
 
-    final stats = context.select<DownloadProvider,
-        ({int seeds, int peers, double uploadSpeed})>(
+    final stats = context
+        .select<DownloadProvider, ({int seeds, int peers, double uploadSpeed})>(
       (p) => (
         seeds: p.getTorrentSeeds(currentTask.id),
         peers: p.getTorrentPeers(currentTask.id),
@@ -2173,14 +2296,19 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
 
     final isSmallScreen = MediaQuery.sizeOf(context).width < 360;
     final horizPadding = isSmallScreen ? 10.0 : (widget.compact ? 12.0 : 14.0);
-    final vertPadding = isSmallScreen ? 10.0 : (widget.compact ? 10.0 : 14.0);
+    final vertPadding = isSmallScreen ? 10.0 : (widget.compact ? 10.0 : 13.0);
     final itemGap = isSmallScreen ? 8.0 : 12.0;
 
     return _CardShell(
       accent: statusColor,
       isDark: isDark,
+      isSelected: widget.isSelected,
       onTap: () {
         triggerHaptic(settings);
+        if (widget.isSelectionMode) {
+          provider.toggleTaskSelection(currentTask.id);
+          return;
+        }
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -2204,23 +2332,36 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      width: widget.compact ? 38 : 44,
-                      height: widget.compact ? 38 : 44,
+                    AnimatedContainer(
+                      duration: AppTheme.motionFast,
+                      width: widget.compact ? 38 : 42,
+                      height: widget.compact ? 38 : 42,
                       decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(12),
+                        color: widget.isSelected
+                            ? statusColor
+                            : statusColor.withValues(
+                                alpha: isDark ? 0.12 : 0.09,
+                              ),
+                        borderRadius: BorderRadius.circular(11),
                         border: Border.all(
-                          color: statusColor.withValues(alpha: 0.15),
-                          width: 0.8,
+                          color: statusColor.withValues(
+                            alpha: widget.isSelected
+                                ? 1.0
+                                : (isDark ? 0.24 : 0.20),
+                          ),
+                          width: 0.9,
                         ),
                       ),
                       child: Icon(
-                        isMagnet
-                            ? Icons.link_rounded
-                            : Icons.cloud_download_rounded,
-                        color: statusColor,
-                        size: widget.compact ? 18 : 21,
+                        widget.isSelected
+                            ? Icons.check_rounded
+                            : (isMagnet
+                                ? Icons.link_rounded
+                                : Icons.cloud_download_rounded),
+                        color: widget.isSelected
+                            ? AppTheme.inkOn(statusColor)
+                            : statusColor,
+                        size: widget.compact ? 18 : 20,
                       ),
                     ),
                     SizedBox(width: itemGap),
@@ -2476,27 +2617,34 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                         color: violetClr,
                       ),
                       const SizedBox(width: 8),
-                      Text(
-                        isRtl ? 'مشاركة التورنت' : 'Seed this torrent',
-                        style: AppTheme.dataStyle(
-                          isDark: isDark,
-                          size: 11,
-                          weight: FontWeight.w600,
+                      Expanded(
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 2,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              isRtl ? 'مشاركة التورنت' : 'Seed this torrent',
+                              style: AppTheme.dataStyle(
+                                isDark: isDark,
+                                size: 11,
+                                weight: FontWeight.w600,
+                              ),
+                            ),
+                            if (currentTask.seedingEnabled)
+                              Text(
+                                'Ratio: ${currentTask.seedingRatio.toStringAsFixed(2)}',
+                                style: AppTheme.dataStyle(
+                                  isDark: isDark,
+                                  size: 10,
+                                  color: violetClr,
+                                  weight: FontWeight.w700,
+                                ),
+                              ),
+                          ],
                         ),
                       ),
-                      if (currentTask.seedingEnabled) ...[
-                        const SizedBox(width: 8),
-                        Text(
-                          'Ratio: ${currentTask.seedingRatio.toStringAsFixed(2)}',
-                          style: AppTheme.dataStyle(
-                            isDark: isDark,
-                            size: 10,
-                            color: violetClr,
-                            weight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                      const Spacer(),
+                      const SizedBox(width: 8),
                       Switch(
                         value: currentTask.seedingEnabled,
                         onChanged: (val) {
@@ -2951,13 +3099,16 @@ class _TorrentFileRow extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            SizedBox(
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 96),
               child: Text(
                 !selected
                     ? (lengthKnown ? formatBytes(length.toDouble()) : '—')
                     : (rawBytes <= 0 && !done
                         ? '… / ${lengthKnown ? formatBytes(length.toDouble()) : '—'}'
                         : '${formatBytes(downloaded.toDouble())} / ${lengthKnown ? formatBytes(length.toDouble()) : '—'}'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.end,
                 style: AppTheme.dataStyle(
                   isDark: isDark,
@@ -3081,7 +3232,10 @@ class _PlaylistGroupCardState extends State<PlaylistGroupCard>
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 5),
-                      Row(
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -3090,9 +3244,9 @@ class _PlaylistGroupCardState extends State<PlaylistGroupCard>
                             ),
                             decoration: BoxDecoration(
                               color: accent.withValues(alpha: 0.10),
-                              borderRadius: BorderRadius.circular(8),
+                              borderRadius: BorderRadius.circular(20),
                               border: Border.all(
-                                color: accent.withValues(alpha: 0.3),
+                                color: accent.withValues(alpha: 0.28),
                                 width: 0.8,
                               ),
                             ),
@@ -3107,7 +3261,6 @@ class _PlaylistGroupCardState extends State<PlaylistGroupCard>
                               ),
                             ),
                           ),
-                          const SizedBox(width: 8),
                           Text(
                             '$_completedCount/${widget.items.length}',
                             style: AppTheme.dataStyle(
@@ -3250,140 +3403,164 @@ void _showAdvancedControls(
 ) {
   final isDark = settings.isDarkMode;
   final provider = context.read<DownloadProvider>();
-  final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-  final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
-  showModalBottomSheet(
-    context: context,
-    backgroundColor: Colors.transparent,
-    builder: (context) {
-      return Material(
-        color: isDark ? AppTheme.surface : AppTheme.lightSurface,
-        shape: RoundedRectangleBorder(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          side: BorderSide(
-            color: AppTheme.accent(isDark).withValues(alpha: 0.3),
-            width: 1,
-          ),
+  final accent = getEffectiveCardAccent(task, provider, isDark);
+  final textClr = AppTheme.textPrimaryOf(isDark);
+  final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
+  final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+  final violetClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
+  final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
+  final amberClr = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
+  final displayTitle =
+      task.fileName.trim().isEmpty ? 'Untitled' : task.fileName;
+
+  Widget buildActionTile({
+    required IconData icon,
+    required Color iconColor,
+    required String label,
+    required VoidCallback onTap,
+    bool destructive = false,
+  }) {
+    return ListTile(
+      dense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      leading: Container(
+        width: 34,
+        height: 34,
+        decoration: BoxDecoration(
+          color: iconColor.withValues(alpha: isDark ? 0.14 : 0.10),
+          borderRadius: BorderRadius.circular(10),
         ),
-        clipBehavior: Clip.antiAlias,
-        child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  color: secClr.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(2),
-                ),
+        child: Icon(icon, size: 18, color: iconColor),
+      ),
+      title: Text(
+        label,
+        style: TextStyle(
+          color: destructive ? redClr : textClr,
+          fontFamily: AppTheme.fontDisplay,
+          fontSize: 13.5,
+          fontWeight: destructive ? FontWeight.w700 : FontWeight.w600,
+        ),
+      ),
+      onTap: onTap,
+    );
+  }
+
+  showDmxModalBottomSheet<void>(
+    context: context,
+    builder: (sheetCtx) {
+      return DmxSheetContainer(
+        isDark: isDark,
+        accentColor: accent,
+        scrollable: true,
+        header: DmxSheetHeader(
+          title: displayTitle,
+          subtitle: L10n.translateStatusName(sheetCtx, task.status),
+          icon: task.isTorrent
+              ? Icons.grain_rounded
+              : _categoryIcon(task.category),
+          accentColor: accent,
+          isDark: isDark,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DmxSheetSection(
+              isDark: isDark,
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  buildActionTile(
+                    icon: task.status == DownloadStatus.paused
+                        ? Icons.play_arrow_rounded
+                        : Icons.pause_rounded,
+                    iconColor: accent,
+                    label: task.status == DownloadStatus.paused
+                        ? 'Resume'
+                        : 'Pause',
+                    onTap: () {
+                      Navigator.pop(sheetCtx);
+                      if (task.status == DownloadStatus.paused) {
+                        provider.resumeTask(task.id);
+                      } else {
+                        provider.pauseTask(task.id);
+                      }
+                    },
+                  ),
+                  buildActionTile(
+                    icon: Icons.copy_rounded,
+                    iconColor: blueClr,
+                    label: 'Copy Download Link',
+                    onTap: () async {
+                      Navigator.pop(sheetCtx);
+                      await Clipboard.setData(ClipboardData(text: task.url));
+                      if (context.mounted) {
+                        ThemedSnackbar.show(
+                          context,
+                          message: 'Link copied',
+                          color: greenClr,
+                          icon: Icons.check,
+                        );
+                      }
+                    },
+                  ),
+                  buildActionTile(
+                    icon: Icons.link_rounded,
+                    iconColor: violetClr,
+                    label: 'Update Download Link',
+                    onTap: () {
+                      Navigator.pop(sheetCtx);
+                      _showUpdateLinkDialog(context, task, provider);
+                    },
+                  ),
+                  buildActionTile(
+                    icon: Icons.folder_open_rounded,
+                    iconColor: greenClr,
+                    label: L10n.of(sheetCtx, 'open_file_btn'),
+                    onTap: () async {
+                      Navigator.pop(sheetCtx);
+                      if (task.localFilePath.isNotEmpty &&
+                          !_openingTaskIds.contains(task.id)) {
+                        _openingTaskIds.add(task.id);
+                        try {
+                          await openFile(context, task.localFilePath, settings);
+                        } finally {
+                          _openingTaskIds.remove(task.id);
+                        }
+                      }
+                    },
+                  ),
+                  if (task.isTorrent)
+                    buildActionTile(
+                      icon: Icons.info_outline_rounded,
+                      iconColor: amberClr,
+                      label: L10n.of(sheetCtx, 'properties'),
+                      onTap: () {
+                        Navigator.pop(sheetCtx);
+                        _showTorrentProperties(context, task, settings);
+                      },
+                    ),
+                ],
               ),
-              ListTile(
-                leading: Icon(
-                  task.status == DownloadStatus.paused
-                      ? Icons.play_arrow
-                      : Icons.pause,
-                  color: AppTheme.accent(isDark),
-                ),
-                title: Text(
-                  task.status == DownloadStatus.paused ? 'Resume' : 'Pause',
-                  style: TextStyle(color: textClr),
-                ),
+            ),
+            const SizedBox(height: 10),
+            DmxSheetSection(
+              isDark: isDark,
+              accentColor: redClr,
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+              child: buildActionTile(
+                icon: Icons.delete_outline_rounded,
+                iconColor: redClr,
+                label: L10n.of(sheetCtx, 'delete_btn'),
+                destructive: true,
                 onTap: () {
-                  Navigator.pop(context);
-                  if (task.status == DownloadStatus.paused) {
-                    provider.resumeTask(task.id);
-                  } else {
-                    provider.pauseTask(task.id);
-                  }
-                },
-              ),
-              ListTile(
-                leading: const Icon(
-                  Icons.copy_rounded,
-                  color: AppTheme.neonBlue,
-                ),
-                title: Text(
-                  'Copy Download Link',
-                  style: TextStyle(color: textClr),
-                ),
-                onTap: () async {
-                  Navigator.pop(context);
-                  await Clipboard.setData(ClipboardData(text: task.url));
-                  if (context.mounted) {
-                    ThemedSnackbar.show(
-                      context,
-                      message: 'Link copied',
-                      color: AppTheme.neonGreen,
-                      icon: Icons.check,
-                    );
-                  }
-                },
-              ),
-              ListTile(
-                leading: const Icon(
-                  Icons.link_rounded,
-                  color: AppTheme.neonViolet,
-                ),
-                title: Text(
-                  'Update Download Link',
-                  style: TextStyle(color: textClr),
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showUpdateLinkDialog(context, task, provider);
-                },
-              ),
-              ListTile(
-                leading: const Icon(
-                  Icons.folder_open_rounded,
-                  color: AppTheme.neonGreen,
-                ),
-                title: Text(L10n.of(context, 'open_file_btn'),
-                    style: TextStyle(color: textClr)),
-                onTap: () async {
-                  Navigator.pop(context);
-                  if (task.localFilePath.isNotEmpty &&
-                      !_openingTaskIds.contains(task.id)) {
-                    _openingTaskIds.add(task.id);
-                    try {
-                      await openFile(context, task.localFilePath, settings);
-                    } finally {
-                      _openingTaskIds.remove(task.id);
-                    }
-                  }
-                },
-              ),
-              ListTile(
-                leading: const Icon(
-                  Icons.delete_outline,
-                  color: AppTheme.neonRed,
-                ),
-                title: Text(L10n.of(context, 'delete_btn'),
-                    style: TextStyle(color: textClr)),
-                onTap: () {
-                  Navigator.pop(context);
+                  Navigator.pop(sheetCtx);
                   _confirmDelete(context, task, provider);
                 },
               ),
-              if (task.isTorrent) ...[
-                ListTile(
-                  leading: const Icon(
-                    Icons.info_outline_rounded,
-                    color: AppTheme.neonAmber,
-                  ),
-                  title: Text(L10n.of(context, 'properties'),
-                      style: TextStyle(color: textClr)),
-                  onTap: () {
-                    Navigator.pop(context);
-                    _showTorrentProperties(context, task, settings);
-                  },
-                ),
-              ],
-              const SizedBox(height: 16),
-            ],
-          ),
+            ),
+          ],
         ),
       );
     },
@@ -3488,214 +3665,157 @@ void _showTorrentProperties(
   final seeds = provider.getTorrentSeeds(task.id);
   final peers = provider.getTorrentPeers(task.id);
 
-  showModalBottomSheet(
+  showDmxModalBottomSheet<void>(
     context: context,
-    backgroundColor: Colors.transparent,
-    isScrollControlled: true,
-    builder: (context) {
-      return Container(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.75,
+    builder: (sheetCtx) {
+      return DmxSheetContainer(
+        isDark: isDark,
+        accentColor: amberClr,
+        maxHeightFraction: 0.78,
+        scrollable: true,
+        header: DmxSheetHeader(
+          title: isRtl ? 'خصائص التورنت' : 'Torrent Properties',
+          subtitle: task.fileName,
+          icon: Icons.info_outline_rounded,
+          accentColor: amberClr,
+          isDark: isDark,
         ),
-        decoration: BoxDecoration(
-          color: isDark ? AppTheme.surface : AppTheme.lightSurface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          border: Border.all(
-            color: AppTheme.accent(isDark).withValues(alpha: 0.3),
-            width: 1,
-          ),
-        ),
-        child: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Handle bar
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: secClr.withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            DmxSheetSection(
+              title: isRtl ? 'المعلومات الأساسية' : 'BASIC INFO',
+              accentColor: blueClr,
+              isDark: isDark,
+              child: Column(
+                children: [
+                  _propRow(
+                    isRtl ? 'الاسم' : 'Name',
+                    task.fileName,
+                    textClr,
+                    secClr,
+                    isRtl,
                   ),
-                ),
-                const SizedBox(height: 16),
-                // Title
-                Row(
-                  children: [
-                    Icon(Icons.info_outline_rounded, color: amberClr, size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(
+                  _propRow(
+                    isRtl ? 'المسار' : 'Save Path',
+                    task.savePath,
+                    textClr,
+                    secClr,
+                    isRtl,
+                    mono: true,
+                  ),
+                  _propRow(
+                    isRtl ? 'الحجم الكلي' : 'Total Size',
+                    formatBytes(task.resolvedFileSize),
+                    textClr,
+                    secClr,
+                    isRtl,
+                  ),
+                  _propRow(
+                    isRtl ? 'تم تحميل' : 'Downloaded',
+                    formatBytes(task.displayDownloadedBytes),
+                    textClr,
+                    secClr,
+                    isRtl,
+                  ),
+                  _propRow(
+                    isRtl ? 'الفئة' : 'Category',
+                    task.category.isEmpty ? 'Auto' : task.category,
+                    textClr,
+                    secClr,
+                    isRtl,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            DmxSheetSection(
+              title: isRtl ? 'معلومات النقل' : 'TRANSFER INFO',
+              accentColor: greenClr,
+              isDark: isDark,
+              child: Column(
+                children: [
+                  _propRow(
+                    isRtl ? 'سرعة التحميل' : 'Download Speed',
+                    '${formatBytes(dlSpeed)}/s',
+                    textClr,
+                    secClr,
+                    isRtl,
+                  ),
+                  _propRow(
+                    isRtl ? 'سرعة الرفع' : 'Upload Speed',
+                    '${formatBytes(ulSpeed)}/s',
+                    textClr,
+                    secClr,
+                    isRtl,
+                  ),
+                  _propRow(
+                    isRtl ? 'المزرعون' : 'Seeds',
+                    stats != null ? '${stats.numSeeds}' : '$seeds',
+                    textClr,
+                    secClr,
+                    isRtl,
+                  ),
+                  _propRow(
+                    isRtl ? 'الأقران' : 'Peers',
+                    stats != null ? '${stats.numPeers}' : '$peers',
+                    textClr,
+                    secClr,
+                    isRtl,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            DmxSheetSection(
+              title: isRtl ? 'المعلومات التقنية' : 'TECHNICAL INFO',
+              accentColor: violetClr,
+              isDark: isDark,
+              child: stats != null
+                  ? Column(
+                      children: [
+                        if (stats.piecesTotal > 0)
+                          _propRow(
+                            isRtl ? 'القطع (تقديري)' : 'Pieces (est.)',
+                            '~${stats.piecesHave} / ${stats.piecesTotal}',
+                            textClr,
+                            secClr,
+                            isRtl,
+                          ),
+                        if (stats.currentTracker.isNotEmpty)
+                          _propRow(
+                            isRtl ? 'المُتتبع' : 'Current Tracker',
+                            stats.currentTracker,
+                            textClr,
+                            secClr,
+                            isRtl,
+                            mono: true,
+                          ),
+                        if (stats.nextAnnounceSeconds > 0)
+                          _propRow(
+                            isRtl ? 'الإعلان التالي' : 'Next Announce',
+                            '${stats.nextAnnounceSeconds}s',
+                            textClr,
+                            secClr,
+                            isRtl,
+                          ),
+                      ],
+                    )
+                  : Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
                       child: Text(
-                        isRtl ? 'خصائص التورنت' : 'Torrent Properties',
-                        style: TextStyle(
-                          color: textClr,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
+                        isRtl
+                            ? 'لا توجد بيانات مباشرة (التورنت غير نشط)'
+                            : 'No live data available (torrent is not active)',
+                        style: TextStyle(color: mutedClr, fontSize: 12),
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                // ── Basic Info ──────────────────────────────────────────────
-                _sectionHeader(
-                  isRtl ? 'المعلومات الأساسية' : 'BASIC INFO',
-                  blueClr,
-                  isDark,
-                ),
-                const SizedBox(height: 10),
-                _propRow(
-                  isRtl ? 'الاسم' : 'Name',
-                  task.fileName,
-                  textClr,
-                  secClr,
-                  isRtl,
-                ),
-                _propRow(
-                  isRtl ? 'المسار' : 'Save Path',
-                  task.savePath,
-                  textClr,
-                  secClr,
-                  isRtl,
-                  mono: true,
-                ),
-                _propRow(
-                  isRtl ? 'الحجم الكلي' : 'Total Size',
-                  formatBytes(task.resolvedFileSize),
-                  textClr,
-                  secClr,
-                  isRtl,
-                ),
-                _propRow(
-                  isRtl ? 'تم تحميل' : 'Downloaded',
-                  formatBytes(task.displayDownloadedBytes),
-                  textClr,
-                  secClr,
-                  isRtl,
-                ),
-
-                _propRow(
-                  isRtl ? 'الفئة' : 'Category',
-                  task.category.isEmpty ? 'Auto' : task.category,
-                  textClr,
-                  secClr,
-                  isRtl,
-                ),
-                const SizedBox(height: 20),
-                // ── Transfer Info ───────────────────────────────────────────
-                _sectionHeader(
-                  isRtl ? 'معلومات النقل' : 'TRANSFER INFO',
-                  greenClr,
-                  isDark,
-                ),
-                const SizedBox(height: 10),
-                _propRow(
-                  isRtl ? 'سرعة التحميل' : 'Download Speed',
-                  '${formatBytes(dlSpeed)}/s',
-                  textClr,
-                  secClr,
-                  isRtl,
-                ),
-                _propRow(
-                  isRtl ? 'سرعة الرفع' : 'Upload Speed',
-                  '${formatBytes(ulSpeed)}/s',
-                  textClr,
-                  secClr,
-                  isRtl,
-                ),
-                _propRow(
-                  isRtl ? 'المزرعون' : 'Seeds',
-                  stats != null ? '${stats.numSeeds}' : '$seeds',
-                  textClr,
-                  secClr,
-                  isRtl,
-                ),
-                _propRow(
-                  isRtl ? 'الأقران' : 'Peers',
-                  stats != null ? '${stats.numPeers}' : '$peers',
-                  textClr,
-                  secClr,
-                  isRtl,
-                ),
-                const SizedBox(height: 20),
-                // ── Technical Info ──────────────────────────────────────────
-                _sectionHeader(
-                  isRtl ? 'المعلومات التقنية' : 'TECHNICAL INFO',
-                  violetClr,
-                  isDark,
-                ),
-                const SizedBox(height: 10),
-                if (stats != null) ...[
-                  if (stats.piecesTotal > 0)
-                    _propRow(
-                      isRtl ? 'القطع (تقديري)' : 'Pieces (est.)',
-                      '~${stats.piecesHave} / ${stats.piecesTotal}',
-                      textClr,
-                      secClr,
-                      isRtl,
-                    ),
-                  if (stats.currentTracker.isNotEmpty)
-                    _propRow(
-                      isRtl ? 'المُتتبع' : 'Current Tracker',
-                      stats.currentTracker,
-                      textClr,
-                      secClr,
-                      isRtl,
-                      mono: true,
-                    ),
-                  if (stats.nextAnnounceSeconds > 0)
-                    _propRow(
-                      isRtl ? 'الإعلان التالي' : 'Next Announce',
-                      '${stats.nextAnnounceSeconds}s',
-                      textClr,
-                      secClr,
-                      isRtl,
-                    ),
-                ] else
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Text(
-                      isRtl
-                          ? 'لا توجد بيانات مباشرة (التورنت غير نشط)'
-                          : 'No live data available (torrent is not active)',
-                      style: TextStyle(color: mutedClr, fontSize: 12),
-                    ),
-                  ),
-                const SizedBox(height: 16),
-              ],
             ),
-          ),
+          ],
         ),
       );
     },
-  );
-}
-
-Widget _sectionHeader(String label, Color accentColor, bool isDark) {
-  return Row(
-    children: [
-      Container(
-        width: 3,
-        height: 14,
-        decoration: BoxDecoration(
-          color: accentColor,
-          borderRadius: BorderRadius.circular(2),
-        ),
-      ),
-      const SizedBox(width: 8),
-      Text(
-        label,
-        style: AppTheme.microLabel(
-          isDark: isDark,
-          size: 10,
-        ).copyWith(color: accentColor, letterSpacing: 1.2),
-      ),
-    ],
   );
 }
 
@@ -3934,6 +4054,7 @@ class _SparklinePainter extends CustomPainter {
       ..strokeJoin = StrokeJoin.round;
 
     final path = Path();
+    final fillPath = Path();
     final stepX = size.width / (history.length - 1);
 
     for (int i = 0; i < history.length; i++) {
@@ -3941,10 +4062,28 @@ class _SparklinePainter extends CustomPainter {
       final y = size.height - ((history[i] / maxSpeed) * (size.height - 4) + 2);
       if (i == 0) {
         path.moveTo(x, y);
+        fillPath.moveTo(x, size.height);
+        fillPath.lineTo(x, y);
       } else {
         path.lineTo(x, y);
+        fillPath.lineTo(x, y);
       }
     }
+    fillPath.lineTo(size.width, size.height);
+    fillPath.close();
+
+    final areaPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          color.withValues(alpha: 0.22),
+          color.withValues(alpha: 0.0),
+        ],
+      ).createShader(Offset.zero & size)
+      ..style = PaintingStyle.fill;
+
+    canvas.drawPath(fillPath, areaPaint);
     canvas.drawPath(path, paint);
   }
 

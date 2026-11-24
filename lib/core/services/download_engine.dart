@@ -185,8 +185,8 @@ class DownloadEngine implements IDownloadEngine {
         try {
           await dir.create(recursive: true);
         } catch (_) {
-          // If directory creation failed, fallback safely
-          return true;
+          // Unknown: do not cache a false positive.
+          return null;
         }
       }
 
@@ -215,8 +215,9 @@ class DownloadEngine implements IDownloadEngine {
         return true;
       } else if (Platform.isAndroid || Platform.isLinux || Platform.isMacOS) {
         try {
-          // df -k reports 1K-blocks across POSIX/Android implementations.
-          final stat = await Process.run('df', ['-k', saveDir]);
+          // df -Pk forces POSIX single-line output with 1K-blocks so long
+          // mount/device paths cannot wrap onto 2 lines and break column parsing.
+          final stat = await Process.run('df', ['-Pk', saveDir]);
           if (stat.exitCode == 0) {
             final lines = stat.stdout.toString().trim().split('\n');
             if (lines.length > 1) {
@@ -233,7 +234,7 @@ class DownloadEngine implements IDownloadEngine {
         } catch (e) {
           debugPrint('[DiskCheck] df failed or restricted: $e');
         }
-        return true; // fallback: assume enough space if df cannot be run
+        return null; // Unknown: let caller default to true without caching
       } else if (Platform.isWindows) {
         try {
           // FIX P1-6: Escape single quotes to prevent PowerShell injection.
@@ -253,12 +254,12 @@ class DownloadEngine implements IDownloadEngine {
         } catch (e) {
           debugPrint('[DiskCheck] PowerShell check failed: $e');
         }
-        return true;
+        return null;
       }
-      return true; // fallback: assume enough space
+      return null;
     } catch (e) {
       debugPrint('[DiskCheck] Failed to check disk space: $e');
-      return true;
+      return null;
     }
   }
 

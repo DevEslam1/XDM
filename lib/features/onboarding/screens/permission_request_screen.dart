@@ -2,9 +2,9 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
@@ -90,12 +90,12 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen>
         final dl = await getDownloadsDirectory();
         initialDir = dl?.path;
       }
-      final result = await FilePicker.getDirectoryPath(
+      final uri = await FilePicker.pickDirectory(
         dialogTitle: dialogTitle,
         initialDirectory: initialDir,
       );
-      if (result != null && mounted) {
-        final xdmPath = result;
+      if (uri != null && mounted) {
+        final xdmPath = uri.scheme == 'file' ? uri.toFilePath() : uri.toString();
         final xdmDir = Directory(xdmPath);
         if (!await xdmDir.exists()) {
           await xdmDir.create(recursive: true);

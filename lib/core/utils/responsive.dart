@@ -1,6 +1,6 @@
 import 'dart:math';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 enum ScreenType { phone, tablet, desktop }
 
@@ -63,8 +63,8 @@ double gridChildAspectRatio(BuildContext context,
   // There are (columns - 1) gaps between `columns` tiles in a row, not one
   // gap per tile — subtracting a full gap per column (the previous formula)
   // made every tile narrower than intended, increasingly so as columns grew.
-  final tileWidth =
-      (availableWidth - kGridTileGap * (effectiveColumns - 1)) / effectiveColumns;
+  final tileWidth = (availableWidth - kGridTileGap * (effectiveColumns - 1)) /
+      effectiveColumns;
   final safeTileWidth = tileWidth <= 0 ? availableWidth : tileWidth;
   final ratio = safeTileWidth / kGridTileHeight;
   return ratio.clamp(0.3, 3.0);

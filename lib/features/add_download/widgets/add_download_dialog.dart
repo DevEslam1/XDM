@@ -3,9 +3,9 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -24,9 +24,8 @@ import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
 import '../../../core/utils/url_utils.dart';
-import '../../../shared/design/dmx_design.dart';
+import '../../../shared/design/dmx_tokens.dart';
 import '../../../shared/mixins/pausable_loop_animation.dart';
-import '../../../shared/widgets/neon_glow_button.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
 import '../../downloads/models/download_task.dart';
 import '../../downloads/provider/download_provider.dart';
@@ -656,8 +655,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         type: FileType.custom,
         allowedExtensions: ['torrent'],
       );
-      if (result != null && result.files.single.path != null) {
-        final filePath = result.files.single.path!;
+      if (result.isNotEmpty && result.single.path != null) {
+        final filePath = result.single.path!;
         _urlController.text = filePath;
         final file = File(filePath);
         if (await file.exists()) {
@@ -1620,512 +1619,1046 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     final settings = context.watch<SettingsProvider>();
     final isBatterySaver = settings.batterySaverMode;
     final isDark = settings.isDarkMode;
+    final isAmoled = settings.isAmoledMode;
     final isRtl = L10n.isRtl(context);
-    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-    final secClr =
-        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
-    final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+    final textClr = AppTheme.textPrimaryOf(isDark);
+    final secClr = AppTheme.textSecondaryOf(isDark);
+    final mutedClr = AppTheme.textMutedOf(isDark);
     final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
     final violetClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
+    final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
+    final borderClr = AppTheme.hairlineBorder(isDark, isAmoled: isAmoled);
+    final panelBg = AppTheme.panelBg(isDark, isAmoled: isAmoled);
+    final sheetSurface = AppTheme.sheetSurface(isDark, isAmoled: isAmoled);
 
-    final borderClr = isDark ? AppTheme.border : AppTheme.lightBorder;
-    final classicUi = settings.classicUi;
-    final panelBg = classicUi
-        ? (isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9))
-        : (isDark
-            ? AppTheme.surface.withValues(alpha: 0.4)
-            : AppTheme.lightSurface.withValues(alpha: 0.4));
     return Dialog(
       backgroundColor: Colors.transparent,
       elevation: 0,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 560),
-        child: DmxCardShell(
-          accent: blueClr,
-          radius: 20,
-          showRail: false,
-          child: Stack(
-            children: [
-              AbsorbPointer(
+        constraints: const BoxConstraints(maxWidth: DmxTokens.sheetMaxWidth),
+        child: Container(
+          decoration: AppTheme.sheetDecoration(
+            isDark: isDark,
+            isAmoled: isAmoled,
+            radius: DmxTokens.sheetRadius,
+            roundedAll: true,
+            backgroundColor: sheetSurface,
+            accentColor: blueClr,
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(DmxTokens.sheetRadius),
+            child: Material(
+              color: Colors.transparent,
+              child: AbsorbPointer(
                 absorbing:
                     (_isResolvingLink && !_isTorrentOrMagnet) || _isSubmitting,
-                child: SingleChildScrollView(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Unified Sheet Header
+                    Padding(
+                      padding: const EdgeInsetsDirectional.fromSTEB(
+                        20,
+                        16,
+                        12,
+                        14,
+                      ),
+                      child: Row(
                         children: [
-                          Row(
-                            children: [
-                              Container(
-                                width: 34,
-                                height: 34,
-                                decoration: BoxDecoration(
-                                  color: blueClr.withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                    color: blueClr.withValues(alpha: 0.3),
+                          Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: blueClr.withValues(
+                                alpha: isDark ? 0.14 : 0.10,
+                              ),
+                              borderRadius: BorderRadius.circular(
+                                DmxTokens.badgeRadius,
+                              ),
+                              border: Border.all(
+                                color: blueClr.withValues(
+                                  alpha: isDark ? 0.24 : 0.20,
+                                ),
+                                width: 0.8,
+                              ),
+                            ),
+                            child: Icon(
+                              Icons.download_rounded,
+                              color: blueClr,
+                              size: 19,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  L10n.of(context, 'download_file_title'),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: textClr,
+                                    fontFamily: AppTheme.fontDisplay,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: -0.1,
                                   ),
                                 ),
-                                child: Icon(
-                                  Icons.download_rounded,
-                                  color: blueClr,
-                                  size: 18,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      L10n.of(context, 'download_file_title'),
-                                      style: TextStyle(
-                                        color: textClr,
-                                        fontFamily: 'Space Grotesk',
-                                        fontSize: 18.0,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      isRtl
-                                          ? 'إشارة تنزيل جديدة'
-                                          : 'NEW TRANSMISSION SIGNAL',
-                                      style: TextStyle(
-                                        color: mutedClr,
-                                        fontSize: 10.0,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 1.2,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              _HeaderAction(
-                                icon: Icons.content_paste_rounded,
-                                tooltip: isRtl ? 'لصق' : 'Paste',
-                                color: secClr,
-                                onTap: _pasteFromClipboard,
-                              ),
-                              const SizedBox(width: 6),
-                              _HeaderAction(
-                                icon: Icons.language_rounded,
-                                tooltip: isRtl
-                                    ? 'فتح في المتصفح'
-                                    : 'Open in browser',
-                                color: secClr,
-                                onTap: () async {
-                                  final messenger = ScaffoldMessenger.of(
-                                    context,
-                                  );
-                                  final url = _urlController.text.trim();
-                                  if (url.isEmpty) {
-                                    messenger.removeCurrentSnackBar();
-                                    messenger.showSnackBar(
-                                      SnackBar(
-                                        backgroundColor: Colors.transparent,
-                                        elevation: 0,
-                                        behavior: SnackBarBehavior.floating,
-                                        duration: const Duration(
-                                          milliseconds: 2600,
-                                        ),
-                                        margin: const EdgeInsets.fromLTRB(
-                                          12,
-                                          0,
-                                          12,
-                                          14,
-                                        ),
-                                        padding: EdgeInsets.zero,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            14,
-                                          ),
-                                        ),
-                                        content: Text(
-                                          isRtl
-                                              ? 'لا يوجد رابط لفتحه'
-                                              : 'No URL to open',
-                                        ),
-                                      ),
-                                    );
-                                    return;
-                                  }
-                                  final uri = Uri.tryParse(url);
-                                  if (uri != null && await canLaunchUrl(uri)) {
-                                    await launchUrl(
-                                      uri,
-                                      mode: LaunchMode.externalApplication,
-                                    );
-                                  } else if (mounted) {
-                                    messenger.removeCurrentSnackBar();
-                                    messenger.showSnackBar(
-                                      SnackBar(
-                                        backgroundColor: Colors.transparent,
-                                        elevation: 0,
-                                        behavior: SnackBarBehavior.floating,
-                                        duration: const Duration(
-                                          milliseconds: 2600,
-                                        ),
-                                        margin: const EdgeInsets.fromLTRB(
-                                          12,
-                                          0,
-                                          12,
-                                          14,
-                                        ),
-                                        padding: EdgeInsets.zero,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            14,
-                                          ),
-                                        ),
-                                        content: Text(
-                                          isRtl
-                                              ? 'لا يمكن فتح الرابط'
-                                              : 'Cannot open URL',
-                                        ),
-                                      ),
-                                    );
-                                  }
-                                },
-                              ),
-                              const SizedBox(width: 6),
-                              _HeaderAction(
-                                icon: Icons.close_rounded,
-                                tooltip: isRtl ? 'إغلاق' : 'Close',
-                                color: secClr,
-                                onTap: () => Navigator.pop(context),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-                          _SectionLabel(
-                            text: L10n.of(context, 'link_label'),
-                            color: mutedClr,
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                GestureDetector(
-                                  onTap: _pickTorrentFile,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: violetClr.withValues(alpha: 0.10),
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(
-                                        color: violetClr.withValues(alpha: 0.3),
-                                      ),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.folder_open_rounded,
-                                          size: 12,
-                                          color: violetClr,
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          isRtl ? 'ملف تورنت' : '.TORRENT',
-                                          style: TextStyle(
-                                            color: violetClr,
-                                            fontSize: 9,
-                                            fontWeight: FontWeight.bold,
-                                            letterSpacing: 0.8,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  isRtl
+                                      ? 'إشارة تنزيل جديدة'
+                                      : 'NEW TRANSMISSION SIGNAL',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppTheme.microLabel(
+                                    isDark: isDark,
+                                    color: mutedClr,
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          RepaintBoundary(
-                            child: _CornerFrame(
-                              color: _urlController.text.trim().isEmpty
-                                  ? borderClr
-                                  : (_urlValid
-                                      ? greenClr
-                                      : (isDark
-                                          ? AppTheme.neonRed
-                                          : AppTheme.lightNeonRed)),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: panelBg,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: (!isDark && _urlFocus.hasFocus)
-                                      ? Border.all(
-                                          color: blueClr.withValues(alpha: 0.5),
-                                          width: 1.2,
-                                        )
-                                      : null,
-                                ),
-                                child: Stack(
+                          _HeaderAction(
+                            icon: Icons.content_paste_rounded,
+                            tooltip: isRtl ? 'لصق' : 'Paste',
+                            color: secClr,
+                            isDark: isDark,
+                            onTap: _pasteFromClipboard,
+                          ),
+                          const SizedBox(width: 4),
+                          _HeaderAction(
+                            icon: Icons.language_rounded,
+                            tooltip:
+                                isRtl ? 'فتح في المتصفح' : 'Open in browser',
+                            color: secClr,
+                            isDark: isDark,
+                            onTap: () => _openUrlInBrowser(isRtl),
+                          ),
+                          const SizedBox(width: 4),
+                          _HeaderAction(
+                            icon: Icons.close_rounded,
+                            tooltip: isRtl ? 'إغلاق' : 'Close',
+                            color: mutedClr,
+                            isDark: isDark,
+                            filled: true,
+                            onTap: () => Navigator.pop(context),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Divider(height: 1, thickness: 0.8, color: borderClr),
+                    // Scrollable Form Body
+                    Flexible(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
+                        child: Form(
+                          key: _formKey,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _SectionLabel(
+                                text: L10n.of(context, 'link_label'),
+                                color: mutedClr,
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    if (_urlFocus.hasFocus && isDark)
-                                      Positioned.fill(
-                                        child: ClipRRect(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                          child: AnimatedBuilder(
-                                            animation: _scanController,
-                                            builder: (context, child) =>
-                                                LayoutBuilder(
-                                              builder: (context, c) {
-                                                final x = (c.maxWidth + 60) *
-                                                        _scanController.value -
-                                                    60;
-                                                return Stack(
-                                                  children: [
-                                                    Positioned(
-                                                      left: x,
-                                                      top: 0,
-                                                      bottom: 0,
-                                                      child: Container(
-                                                        width: 40,
-                                                        decoration:
-                                                            BoxDecoration(
-                                                          gradient:
-                                                              LinearGradient(
-                                                            colors: [
-                                                              blueClr
-                                                                  .withValues(
-                                                                alpha: 0,
-                                                              ),
-                                                              blueClr
-                                                                  .withValues(
-                                                                alpha: 0.06,
-                                                              ),
-                                                              blueClr
-                                                                  .withValues(
-                                                                alpha: 0,
-                                                              ),
-                                                            ],
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                );
-                                              },
-                                            ),
+                                    GestureDetector(
+                                      onTap: _pickTorrentFile,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color:
+                                              violetClr.withValues(alpha: 0.10),
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                          border: Border.all(
+                                            color: violetClr.withValues(
+                                                alpha: 0.3),
                                           ),
                                         ),
-                                      ),
-                                    ConstrainedBox(
-                                      constraints: const BoxConstraints(
-                                        maxHeight: 120,
-                                      ),
-                                      child: TextFormField(
-                                        controller: _urlController,
-                                        focusNode: _urlFocus,
-                                        autocorrect: false,
-                                        enableSuggestions: false,
-                                        keyboardType: TextInputType.url,
-                                        maxLines: null,
-                                        minLines: 1,
-                                        maxLength: 2048,
-                                        style: TextStyle(
-                                          color: textClr,
-                                          fontSize: 12,
-                                          fontFamily: 'monospace',
-                                          height: 1.4,
-                                        ),
-                                        validator: (val) {
-                                          if (val == null ||
-                                              val.trim().isEmpty) {
-                                            return L10n.of(
-                                              context,
-                                              'url_empty_error',
-                                            );
-                                          }
-                                          final lines = val
-                                              .split(RegExp(r'[\r\n]+'))
-                                              .map((l) => l.trim())
-                                              .where((l) => l.isNotEmpty)
-                                              .toList();
-                                          if (lines.isEmpty) {
-                                            return L10n.of(
-                                              context,
-                                              'url_empty_error',
-                                            );
-                                          }
-                                          for (final line in lines) {
-                                            if (line.startsWith('magnet:') &&
-                                                !isMagnetUrl(line)) {
-                                              return 'Invalid magnet link format';
-                                            }
-                                            if (!isValidTransmissionUrl(line)) {
-                                              return L10n.of(
-                                                context,
-                                                'url_invalid_error',
-                                              );
-                                            }
-                                          }
-                                          return null;
-                                        },
-                                        decoration: InputDecoration(
-                                          hintText:
-                                              'https:// …  |  magnet:?xt= …',
-                                          hintStyle: TextStyle(
-                                            color: mutedClr.withValues(
-                                              alpha: 0.6,
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.folder_open_rounded,
+                                              size: 12,
+                                              color: violetClr,
                                             ),
-                                            fontSize: 12,
-                                            fontFamily: 'monospace',
-                                          ),
-                                          filled: true,
-                                          fillColor: panelBg,
-                                          contentPadding:
-                                              const EdgeInsets.symmetric(
-                                            horizontal: 14,
-                                            vertical: 12,
-                                          ),
-                                          border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                            borderSide: BorderSide.none,
-                                          ),
-                                          enabledBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                            borderSide: BorderSide.none,
-                                          ),
-                                          focusedBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                            borderSide: BorderSide(
-                                              color: blueClr.withValues(
-                                                alpha: 0.5,
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              isRtl ? 'ملف تورنت' : '.TORRENT',
+                                              style: TextStyle(
+                                                color: violetClr,
+                                                fontSize: 9,
+                                                fontWeight: FontWeight.bold,
+                                                letterSpacing: 0.8,
                                               ),
-                                              width: 1.2,
                                             ),
-                                          ),
-                                          errorBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                            borderSide: BorderSide(
-                                              color: (isDark
-                                                      ? AppTheme.neonRed
-                                                      : AppTheme.lightNeonRed)
-                                                  .withValues(alpha: 0.6),
-                                              width: 1.0,
-                                            ),
-                                          ),
-                                          focusedErrorBorder:
-                                              OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                            borderSide: BorderSide(
-                                              color: (isDark
-                                                      ? AppTheme.neonRed
-                                                      : AppTheme.lightNeonRed)
-                                                  .withValues(alpha: 0.8),
-                                              width: 1.2,
-                                            ),
-                                          ),
-                                          errorStyle: const TextStyle(
-                                            fontSize: 10,
-                                            height: 0.8,
-                                          ),
+                                          ],
                                         ),
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
-                            ),
-                          ),
-                          if (_urlAnalysis != null &&
-                              _urlController.text.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 6, bottom: 2),
-                              child: _IntelligenceChip(
-                                  analysis: _urlAnalysis!, isDark: isDark),
-                            ),
-                          AnimatedBuilder(
-                            animation: _urlController,
-                            builder: (context, child) {
-                              if (_urlController.text.trim().isEmpty) {
-                                return const SizedBox.shrink();
-                              }
-                              final valid = _urlValid;
-                              final lineCount = _urlController.text
-                                  .split(RegExp(r'[\r\n]+'))
-                                  .where((l) => l.trim().isNotEmpty)
-                                  .length;
-                              return Padding(
-                                padding: const EdgeInsets.only(top: 6),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      valid
-                                          ? Icons.check_circle_rounded
-                                          : Icons.cancel_rounded,
-                                      size: 13,
-                                      color: valid
-                                          ? greenClr
-                                          : (isDark
-                                              ? AppTheme.neonRed
-                                              : AppTheme.lightNeonRed),
+                              const SizedBox(height: 8),
+                              RepaintBoundary(
+                                child: AnimatedContainer(
+                                  duration: AppTheme.motionFast,
+                                  decoration: BoxDecoration(
+                                    color: panelBg,
+                                    borderRadius: BorderRadius.circular(
+                                        DmxTokens.radiusMd),
+                                    border: Border.all(
+                                      color: _urlController.text.trim().isEmpty
+                                          ? (_urlFocus.hasFocus
+                                              ? blueClr
+                                              : borderClr)
+                                          : (_urlValid ? greenClr : redClr),
+                                      width: _urlFocus.hasFocus ||
+                                              _urlController.text
+                                                  .trim()
+                                                  .isNotEmpty
+                                          ? 1.2
+                                          : 0.8,
                                     ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      valid
-                                          ? (lineCount > 1
-                                              ? (isRtl
-                                                  ? '$lineCount روابط صالحة'
-                                                  : '$lineCount VALID SIGNALS')
+                                  ),
+                                  child: Stack(
+                                    children: [
+                                      if (_urlFocus.hasFocus && isDark)
+                                        Positioned.fill(
+                                          child: ClipRRect(
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                            child: AnimatedBuilder(
+                                              animation: _scanController,
+                                              builder: (context, child) =>
+                                                  LayoutBuilder(
+                                                builder: (context, c) {
+                                                  final x = (c.maxWidth + 60) *
+                                                          _scanController
+                                                              .value -
+                                                      60;
+                                                  return Stack(
+                                                    children: [
+                                                      Positioned(
+                                                        left: x,
+                                                        top: 0,
+                                                        bottom: 0,
+                                                        child: Container(
+                                                          width: 40,
+                                                          decoration:
+                                                              BoxDecoration(
+                                                            gradient:
+                                                                LinearGradient(
+                                                              colors: [
+                                                                blueClr
+                                                                    .withValues(
+                                                                  alpha: 0,
+                                                                ),
+                                                                blueClr
+                                                                    .withValues(
+                                                                  alpha: 0.06,
+                                                                ),
+                                                                blueClr
+                                                                    .withValues(
+                                                                  alpha: 0,
+                                                                ),
+                                                              ],
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  );
+                                                },
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ConstrainedBox(
+                                        constraints: const BoxConstraints(
+                                          maxHeight: 120,
+                                        ),
+                                        child: TextFormField(
+                                          controller: _urlController,
+                                          focusNode: _urlFocus,
+                                          autocorrect: false,
+                                          enableSuggestions: false,
+                                          keyboardType: TextInputType.url,
+                                          maxLines: null,
+                                          minLines: 1,
+                                          maxLength: 2048,
+                                          style: TextStyle(
+                                            color: textClr,
+                                            fontSize: 12,
+                                            fontFamily: 'monospace',
+                                            height: 1.4,
+                                          ),
+                                          validator: (val) {
+                                            if (val == null ||
+                                                val.trim().isEmpty) {
+                                              return L10n.of(
+                                                context,
+                                                'url_empty_error',
+                                              );
+                                            }
+                                            final lines = val
+                                                .split(RegExp(r'[\r\n]+'))
+                                                .map((l) => l.trim())
+                                                .where((l) => l.isNotEmpty)
+                                                .toList();
+                                            if (lines.isEmpty) {
+                                              return L10n.of(
+                                                context,
+                                                'url_empty_error',
+                                              );
+                                            }
+                                            for (final line in lines) {
+                                              if (line.startsWith('magnet:') &&
+                                                  !isMagnetUrl(line)) {
+                                                return 'Invalid magnet link format';
+                                              }
+                                              if (!isValidTransmissionUrl(
+                                                  line)) {
+                                                return L10n.of(
+                                                  context,
+                                                  'url_invalid_error',
+                                                );
+                                              }
+                                            }
+                                            return null;
+                                          },
+                                          decoration: InputDecoration(
+                                            hintText:
+                                                'https:// …  |  magnet:?xt= …',
+                                            hintStyle: TextStyle(
+                                              color: mutedClr.withValues(
+                                                alpha: 0.6,
+                                              ),
+                                              fontSize: 12,
+                                              fontFamily: 'monospace',
+                                            ),
+                                            filled: true,
+                                            fillColor: panelBg,
+                                            contentPadding:
+                                                const EdgeInsets.symmetric(
+                                              horizontal: 14,
+                                              vertical: 12,
+                                            ),
+                                            border: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(
+                                                12,
+                                              ),
+                                              borderSide: BorderSide.none,
+                                            ),
+                                            enabledBorder: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(
+                                                12,
+                                              ),
+                                              borderSide: BorderSide.none,
+                                            ),
+                                            focusedBorder: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(
+                                                12,
+                                              ),
+                                              borderSide: BorderSide(
+                                                color: blueClr.withValues(
+                                                  alpha: 0.5,
+                                                ),
+                                                width: 1.2,
+                                              ),
+                                            ),
+                                            errorBorder: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(
+                                                12,
+                                              ),
+                                              borderSide: BorderSide(
+                                                color: (isDark
+                                                        ? AppTheme.neonRed
+                                                        : AppTheme.lightNeonRed)
+                                                    .withValues(alpha: 0.6),
+                                                width: 1.0,
+                                              ),
+                                            ),
+                                            focusedErrorBorder:
+                                                OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(
+                                                12,
+                                              ),
+                                              borderSide: BorderSide(
+                                                color: (isDark
+                                                        ? AppTheme.neonRed
+                                                        : AppTheme.lightNeonRed)
+                                                    .withValues(alpha: 0.8),
+                                                width: 1.2,
+                                              ),
+                                            ),
+                                            errorStyle: const TextStyle(
+                                              fontSize: 10,
+                                              height: 0.8,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              if (_urlAnalysis != null &&
+                                  _urlController.text.isNotEmpty)
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.only(top: 6, bottom: 2),
+                                  child: _IntelligenceChip(
+                                      analysis: _urlAnalysis!, isDark: isDark),
+                                ),
+                              AnimatedBuilder(
+                                animation: _urlController,
+                                builder: (context, child) {
+                                  if (_urlController.text.trim().isEmpty) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  final valid = _urlValid;
+                                  final lineCount = _urlController.text
+                                      .split(RegExp(r'[\r\n]+'))
+                                      .where((l) => l.trim().isNotEmpty)
+                                      .length;
+                                  return Padding(
+                                    padding: const EdgeInsets.only(top: 6),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          valid
+                                              ? Icons.check_circle_rounded
+                                              : Icons.cancel_rounded,
+                                          size: 13,
+                                          color: valid
+                                              ? greenClr
+                                              : (isDark
+                                                  ? AppTheme.neonRed
+                                                  : AppTheme.lightNeonRed),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          valid
+                                              ? (lineCount > 1
+                                                  ? (isRtl
+                                                      ? '$lineCount روابط صالحة'
+                                                      : '$lineCount VALID SIGNALS')
+                                                  : (isRtl
+                                                      ? 'إشارة صالحة'
+                                                      : 'SIGNAL VALID'))
                                               : (isRtl
-                                                  ? 'إشارة صالحة'
-                                                  : 'SIGNAL VALID'))
-                                          : (isRtl
-                                              ? 'إشارة غير صالحة'
-                                              : 'INVALID SIGNAL'),
-                                      style: TextStyle(
-                                        color: valid
-                                            ? greenClr
-                                            : (isDark
-                                                ? AppTheme.neonRed
-                                                : AppTheme.lightNeonRed),
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 1,
+                                                  ? 'إشارة غير صالحة'
+                                                  : 'INVALID SIGNAL'),
+                                          style: TextStyle(
+                                            color: valid
+                                                ? greenClr
+                                                : (isDark
+                                                    ? AppTheme.neonRed
+                                                    : AppTheme.lightNeonRed),
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 1,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
+                              const SizedBox(height: 14),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    flex: 3,
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        _SectionLabel(
+                                          text: L10n.of(
+                                              context, 'file_name_label'),
+                                          color: mutedClr,
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: TextFormField(
+                                                controller: _nameController,
+                                                style: TextStyle(
+                                                  color: textClr,
+                                                  fontSize: 12,
+                                                ),
+                                                onChanged: (v) =>
+                                                    _userEditedName =
+                                                        v.trim().isNotEmpty,
+                                                validator: (val) {
+                                                  if (val == null ||
+                                                      val.trim().isEmpty) {
+                                                    return L10n.of(
+                                                      context,
+                                                      'filename_empty_error',
+                                                    );
+                                                  }
+                                                  return null;
+                                                },
+                                                decoration: InputDecoration(
+                                                  hintText: 'filename',
+                                                  hintStyle: TextStyle(
+                                                    color: mutedClr.withValues(
+                                                      alpha: 0.6,
+                                                    ),
+                                                    fontSize: 11,
+                                                  ),
+                                                  filled: true,
+                                                  fillColor: panelBg,
+                                                  errorStyle: const TextStyle(
+                                                    fontSize: 10,
+                                                    height: 0.8,
+                                                  ),
+                                                  contentPadding:
+                                                      const EdgeInsets
+                                                          .symmetric(
+                                                    horizontal: 12,
+                                                    vertical: 11,
+                                                  ),
+                                                  border: OutlineInputBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            12),
+                                                    borderSide: BorderSide(
+                                                      color:
+                                                          borderClr.withValues(
+                                                        alpha: 0.5,
+                                                      ),
+                                                      width: 0.8,
+                                                    ),
+                                                  ),
+                                                  enabledBorder:
+                                                      OutlineInputBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            12),
+                                                    borderSide: BorderSide(
+                                                      color:
+                                                          borderClr.withValues(
+                                                        alpha: 0.5,
+                                                      ),
+                                                      width: 0.8,
+                                                    ),
+                                                  ),
+                                                  focusedBorder:
+                                                      OutlineInputBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            12),
+                                                    borderSide: BorderSide(
+                                                      color: blueClr.withValues(
+                                                        alpha: 0.5,
+                                                      ),
+                                                      width: 1.2,
+                                                    ),
+                                                  ),
+                                                  errorBorder:
+                                                      OutlineInputBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            12),
+                                                    borderSide: BorderSide(
+                                                      color: (isDark
+                                                              ? AppTheme.neonRed
+                                                              : AppTheme
+                                                                  .lightNeonRed)
+                                                          .withValues(
+                                                        alpha: 0.6,
+                                                      ),
+                                                      width: 1.0,
+                                                    ),
+                                                  ),
+                                                  focusedErrorBorder:
+                                                      OutlineInputBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                      12,
+                                                    ),
+                                                    borderSide: BorderSide(
+                                                      color: (isDark
+                                                              ? AppTheme.neonRed
+                                                              : AppTheme
+                                                                  .lightNeonRed)
+                                                          .withValues(
+                                                        alpha: 0.8,
+                                                      ),
+                                                      width: 1.2,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                            Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 6,
+                                              ),
+                                              child: Text(
+                                                '.',
+                                                style: TextStyle(
+                                                  color: secClr,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 16,
+                                                ),
+                                              ),
+                                            ),
+                                            SizedBox(
+                                              width: 62,
+                                              child: TextFormField(
+                                                controller: _extController,
+                                                style: TextStyle(
+                                                  color: textClr,
+                                                  fontSize: 12,
+                                                  fontFamily: 'monospace',
+                                                ),
+                                                decoration: InputDecoration(
+                                                  hintText: 'ext',
+                                                  hintStyle: TextStyle(
+                                                    color: mutedClr.withValues(
+                                                      alpha: 0.6,
+                                                    ),
+                                                    fontSize: 11,
+                                                    fontFamily: 'monospace',
+                                                  ),
+                                                  filled: true,
+                                                  fillColor: panelBg,
+                                                  contentPadding:
+                                                      const EdgeInsets
+                                                          .symmetric(
+                                                    horizontal: 10,
+                                                    vertical: 11,
+                                                  ),
+                                                  border: OutlineInputBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            12),
+                                                    borderSide: BorderSide(
+                                                      color:
+                                                          borderClr.withValues(
+                                                        alpha: 0.5,
+                                                      ),
+                                                      width: 0.8,
+                                                    ),
+                                                  ),
+                                                  enabledBorder:
+                                                      OutlineInputBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            12),
+                                                    borderSide: BorderSide(
+                                                      color:
+                                                          borderClr.withValues(
+                                                        alpha: 0.5,
+                                                      ),
+                                                      width: 0.8,
+                                                    ),
+                                                  ),
+                                                  focusedBorder:
+                                                      OutlineInputBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            12),
+                                                    borderSide: BorderSide(
+                                                      color: blueClr.withValues(
+                                                        alpha: 0.5,
+                                                      ),
+                                                      width: 1.2,
+                                                    ),
+                                                  ),
+                                                  errorBorder:
+                                                      OutlineInputBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            12),
+                                                    borderSide: BorderSide(
+                                                      color: (isDark
+                                                              ? AppTheme.neonRed
+                                                              : AppTheme
+                                                                  .lightNeonRed)
+                                                          .withValues(
+                                                        alpha: 0.6,
+                                                      ),
+                                                      width: 1.0,
+                                                    ),
+                                                  ),
+                                                  focusedErrorBorder:
+                                                      OutlineInputBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                      12,
+                                                    ),
+                                                    borderSide: BorderSide(
+                                                      color: (isDark
+                                                              ? AppTheme.neonRed
+                                                              : AppTheme
+                                                                  .lightNeonRed)
+                                                          .withValues(
+                                                        alpha: 0.8,
+                                                      ),
+                                                      width: 1.2,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    flex: 2,
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        _SectionLabel(
+                                          text: L10n.of(
+                                              context, 'category_label'),
+                                          color: mutedClr,
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Container(
+                                          decoration: BoxDecoration(
+                                            color: panelBg,
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                            border: Border.all(
+                                              color: borderClr.withValues(
+                                                alpha: 0.5,
+                                              ),
+                                              width: 0.8,
+                                            ),
+                                          ),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                          ),
+                                          child: DropdownButtonHideUnderline(
+                                            child: DropdownButton<String>(
+                                              dropdownColor: isDark
+                                                  ? AppTheme.surface
+                                                  : AppTheme.lightSurface,
+                                              value: _selectedCategory,
+                                              isExpanded: true,
+                                              icon: Icon(
+                                                Icons.arrow_drop_down,
+                                                color: secClr,
+                                                size: 18,
+                                              ),
+                                              style: TextStyle(
+                                                color: textClr,
+                                                fontSize: 12,
+                                              ),
+                                              items: _categories.map((cat) {
+                                                return DropdownMenuItem<String>(
+                                                  value: cat,
+                                                  child: Text(
+                                                    L10n.translateCategory(
+                                                      context,
+                                                      cat,
+                                                    ),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                );
+                                              }).toList(),
+                                              onChanged: (val) {
+                                                if (val != null) {
+                                                  runHaptic(settings);
+                                                  setState(
+                                                    () =>
+                                                        _selectedCategory = val,
+                                                  );
+                                                }
+                                              },
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              Row(
+                                children: [
+                                  if (!_isTorrentOrMagnet) ...[
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              _SectionLabel(
+                                                text: L10n.of(
+                                                    context, 'threads_label'),
+                                                color: mutedClr,
+                                              ),
+                                              const SizedBox.shrink(),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Container(
+                                            height: 40,
+                                            decoration: BoxDecoration(
+                                              color: panelBg,
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                              border:
+                                                  Border.all(color: borderClr),
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                _StepBtn(
+                                                  icon: Icons.remove_rounded,
+                                                  onTap: isBatterySaver
+                                                      ? null
+                                                      : () => _stepThread(-1),
+                                                  color: secClr,
+                                                ),
+                                                Expanded(
+                                                  child: Center(
+                                                    child: Text(
+                                                      '$_selectedThreads',
+                                                      style: TextStyle(
+                                                        color: blueClr,
+                                                        fontFamily:
+                                                            'Space Grotesk',
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        fontSize: 15,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                                _StepBtn(
+                                                  icon: Icons.add_rounded,
+                                                  onTap: isBatterySaver
+                                                      ? null
+                                                      : () => _stepThread(1),
+                                                  color: secClr,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
+                                    const SizedBox(width: 12),
                                   ],
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        _SectionLabel(
+                                          text: isRtl ? 'خيارات' : 'OPTIONS',
+                                          color: mutedClr,
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Row(
+                                          children: [
+                                            _ToggleChip(
+                                              icon: Icons.wifi_rounded,
+                                              label:
+                                                  isRtl ? 'واي فاي' : 'WI-FI',
+                                              active: _wifiOnly,
+                                              color: blueClr,
+                                              isDark: isDark,
+                                              onTap: () => setState(
+                                                () => _wifiOnly = !_wifiOnly,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            _ToggleChip(
+                                              icon: Icons.refresh_rounded,
+                                              label: isRtl ? 'إعادة' : 'RETRY',
+                                              active: _retry,
+                                              color: greenClr,
+                                              isDark: isDark,
+                                              onTap: () => setState(
+                                                  () => _retry = !_retry),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              GestureDetector(
+                                onTap: () {
+                                  triggerHaptic(settings);
+                                  setState(
+                                      () => _showAdvanced = !_showAdvanced);
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 10,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: panelBg,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: borderClr),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.tune_rounded,
+                                        size: 15,
+                                        color: secClr,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          isRtl
+                                              ? 'خيارات متقدمة'
+                                              : 'ADVANCED OPTIONS',
+                                          style: TextStyle(
+                                            color: secClr,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 1,
+                                          ),
+                                        ),
+                                      ),
+                                      AnimatedRotation(
+                                        turns: _showAdvanced ? 0.5 : 0,
+                                        duration:
+                                            const Duration(milliseconds: 200),
+                                        child: Icon(
+                                          Icons.keyboard_arrow_up_rounded,
+                                          size: 16,
+                                          color: secClr,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 14),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                flex: 3,
-                                child: Column(
+                              ),
+                              AnimatedCrossFade(
+                                firstChild:
+                                    const SizedBox(width: double.infinity),
+                                secondChild: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
+                                    const SizedBox(height: 10),
+                                    TextFormField(
+                                      controller: _referrerController,
+                                      style: TextStyle(
+                                        color: textClr,
+                                        fontSize: 12,
+                                        fontFamily: 'monospace',
+                                      ),
+                                      decoration: InputDecoration(
+                                        hintText: isRtl
+                                            ? 'رابط صفحة التنزيل (اختياري)'
+                                            : 'Download / referrer page link (optional)',
+                                        hintStyle: TextStyle(
+                                          color:
+                                              mutedClr.withValues(alpha: 0.6),
+                                          fontSize: 11,
+                                        ),
+                                        filled: true,
+                                        fillColor: panelBg,
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                          horizontal: 14,
+                                          vertical: 11,
+                                        ),
+                                        border: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                          borderSide: BorderSide(
+                                            color: borderClr.withValues(
+                                                alpha: 0.5),
+                                            width: 0.8,
+                                          ),
+                                        ),
+                                        enabledBorder: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                          borderSide: BorderSide(
+                                            color: borderClr.withValues(
+                                                alpha: 0.5),
+                                            width: 0.8,
+                                          ),
+                                        ),
+                                        focusedBorder: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                          borderSide: BorderSide(
+                                            color:
+                                                blueClr.withValues(alpha: 0.5),
+                                            width: 1.2,
+                                          ),
+                                        ),
+                                        errorBorder: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                          borderSide: BorderSide(
+                                            color: (isDark
+                                                    ? AppTheme.neonRed
+                                                    : AppTheme.lightNeonRed)
+                                                .withValues(alpha: 0.6),
+                                            width: 1.0,
+                                          ),
+                                        ),
+                                        focusedErrorBorder: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                          borderSide: BorderSide(
+                                            color: (isDark
+                                                    ? AppTheme.neonRed
+                                                    : AppTheme.lightNeonRed)
+                                                .withValues(alpha: 0.8),
+                                            width: 1.2,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    _buildCredentialsSection(
+                                      isRtl: isRtl,
+                                      isDark: isDark,
+                                      textClr: textClr,
+                                      mutedClr: mutedClr,
+                                      panelBg: panelBg,
+                                      borderClr: borderClr,
+                                      blueClr: blueClr,
+                                    ),
+                                    const SizedBox(height: 12),
                                     _SectionLabel(
-                                      text: L10n.of(context, 'file_name_label'),
+                                      text: L10n.of(context, 'save_path_label'),
                                       color: mutedClr,
                                     ),
                                     const SizedBox(height: 8),
@@ -2133,31 +2666,20 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                       children: [
                                         Expanded(
                                           child: TextFormField(
-                                            controller: _nameController,
+                                            controller: _pathController,
                                             style: TextStyle(
                                               color: textClr,
-                                              fontSize: 12,
+                                              fontSize: 11,
+                                              fontFamily: 'monospace',
                                             ),
-                                            onChanged: (v) => _userEditedName =
-                                                v.trim().isNotEmpty,
                                             validator: (val) {
                                               if (val == null ||
                                                   val.trim().isEmpty) {
-                                                return L10n.of(
-                                                  context,
-                                                  'filename_empty_error',
-                                                );
+                                                return 'Save path cannot be empty';
                                               }
                                               return null;
                                             },
                                             decoration: InputDecoration(
-                                              hintText: 'filename',
-                                              hintStyle: TextStyle(
-                                                color: mutedClr.withValues(
-                                                  alpha: 0.6,
-                                                ),
-                                                fontSize: 11,
-                                              ),
                                               filled: true,
                                               fillColor: panelBg,
                                               errorStyle: const TextStyle(
@@ -2174,8 +2696,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                                     BorderRadius.circular(12),
                                                 borderSide: BorderSide(
                                                   color: borderClr.withValues(
-                                                    alpha: 0.5,
-                                                  ),
+                                                      alpha: 0.5),
                                                   width: 0.8,
                                                 ),
                                               ),
@@ -2184,8 +2705,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                                     BorderRadius.circular(12),
                                                 borderSide: BorderSide(
                                                   color: borderClr.withValues(
-                                                    alpha: 0.5,
-                                                  ),
+                                                      alpha: 0.5),
                                                   width: 0.8,
                                                 ),
                                               ),
@@ -2194,8 +2714,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                                     BorderRadius.circular(12),
                                                 borderSide: BorderSide(
                                                   color: blueClr.withValues(
-                                                    alpha: 0.5,
-                                                  ),
+                                                      alpha: 0.5),
                                                   width: 1.2,
                                                 ),
                                               ),
@@ -2207,753 +2726,290 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                                           ? AppTheme.neonRed
                                                           : AppTheme
                                                               .lightNeonRed)
-                                                      .withValues(
-                                                    alpha: 0.6,
-                                                  ),
+                                                      .withValues(alpha: 0.6),
                                                   width: 1.0,
                                                 ),
                                               ),
                                               focusedErrorBorder:
                                                   OutlineInputBorder(
                                                 borderRadius:
-                                                    BorderRadius.circular(
-                                                  12,
-                                                ),
-                                                borderSide: BorderSide(
-                                                  color: (isDark
-                                                          ? AppTheme.neonRed
-                                                          : AppTheme
-                                                              .lightNeonRed)
-                                                      .withValues(
-                                                    alpha: 0.8,
-                                                  ),
-                                                  width: 1.2,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 6,
-                                          ),
-                                          child: Text(
-                                            '.',
-                                            style: TextStyle(
-                                              color: secClr,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 16,
-                                            ),
-                                          ),
-                                        ),
-                                        SizedBox(
-                                          width: 62,
-                                          child: TextFormField(
-                                            controller: _extController,
-                                            style: TextStyle(
-                                              color: textClr,
-                                              fontSize: 12,
-                                              fontFamily: 'monospace',
-                                            ),
-                                            decoration: InputDecoration(
-                                              hintText: 'ext',
-                                              hintStyle: TextStyle(
-                                                color: mutedClr.withValues(
-                                                  alpha: 0.6,
-                                                ),
-                                                fontSize: 11,
-                                                fontFamily: 'monospace',
-                                              ),
-                                              filled: true,
-                                              fillColor: panelBg,
-                                              contentPadding:
-                                                  const EdgeInsets.symmetric(
-                                                horizontal: 10,
-                                                vertical: 11,
-                                              ),
-                                              border: OutlineInputBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(12),
-                                                borderSide: BorderSide(
-                                                  color: borderClr.withValues(
-                                                    alpha: 0.5,
-                                                  ),
-                                                  width: 0.8,
-                                                ),
-                                              ),
-                                              enabledBorder: OutlineInputBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(12),
-                                                borderSide: BorderSide(
-                                                  color: borderClr.withValues(
-                                                    alpha: 0.5,
-                                                  ),
-                                                  width: 0.8,
-                                                ),
-                                              ),
-                                              focusedBorder: OutlineInputBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(12),
-                                                borderSide: BorderSide(
-                                                  color: blueClr.withValues(
-                                                    alpha: 0.5,
-                                                  ),
-                                                  width: 1.2,
-                                                ),
-                                              ),
-                                              errorBorder: OutlineInputBorder(
-                                                borderRadius:
                                                     BorderRadius.circular(12),
                                                 borderSide: BorderSide(
                                                   color: (isDark
                                                           ? AppTheme.neonRed
                                                           : AppTheme
                                                               .lightNeonRed)
-                                                      .withValues(
-                                                    alpha: 0.6,
-                                                  ),
-                                                  width: 1.0,
-                                                ),
-                                              ),
-                                              focusedErrorBorder:
-                                                  OutlineInputBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(
-                                                  12,
-                                                ),
-                                                borderSide: BorderSide(
-                                                  color: (isDark
-                                                          ? AppTheme.neonRed
-                                                          : AppTheme
-                                                              .lightNeonRed)
-                                                      .withValues(
-                                                    alpha: 0.8,
-                                                  ),
+                                                      .withValues(alpha: 0.8),
                                                   width: 1.2,
                                                 ),
                                               ),
                                             ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                flex: 2,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    _SectionLabel(
-                                      text: L10n.of(context, 'category_label'),
-                                      color: mutedClr,
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Container(
-                                      decoration: BoxDecoration(
-                                        color: panelBg,
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(
-                                          color: borderClr.withValues(
-                                            alpha: 0.5,
-                                          ),
-                                          width: 0.8,
-                                        ),
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                      ),
-                                      child: DropdownButtonHideUnderline(
-                                        child: DropdownButton<String>(
-                                          dropdownColor: isDark
-                                              ? AppTheme.surface
-                                              : AppTheme.lightSurface,
-                                          value: _selectedCategory,
-                                          isExpanded: true,
-                                          icon: Icon(
-                                            Icons.arrow_drop_down,
-                                            color: secClr,
-                                            size: 18,
-                                          ),
-                                          style: TextStyle(
-                                            color: textClr,
-                                            fontSize: 12,
-                                          ),
-                                          items: _categories.map((cat) {
-                                            return DropdownMenuItem<String>(
-                                              value: cat,
-                                              child: Text(
-                                                L10n.translateCategory(
-                                                  context,
-                                                  cat,
-                                                ),
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            );
-                                          }).toList(),
-                                          onChanged: (val) {
-                                            if (val != null) {
-                                              runHaptic(settings);
-                                              setState(
-                                                () => _selectedCategory = val,
-                                              );
-                                            }
-                                          },
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              if (!_isTorrentOrMagnet) ...[
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          _SectionLabel(
-                                            text: L10n.of(
-                                                context, 'threads_label'),
-                                            color: mutedClr,
-                                          ),
-                                          const SizedBox.shrink(),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Container(
-                                        height: 40,
-                                        decoration: BoxDecoration(
-                                          color: panelBg,
-                                          borderRadius:
-                                              BorderRadius.circular(12),
-                                          border: Border.all(color: borderClr),
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            _StepBtn(
-                                              icon: Icons.remove_rounded,
-                                              onTap: isBatterySaver
-                                                  ? null
-                                                  : () => _stepThread(-1),
-                                              color: secClr,
-                                            ),
-                                            Expanded(
-                                              child: Center(
-                                                child: Text(
-                                                  '$_selectedThreads',
-                                                  style: TextStyle(
-                                                    color: blueClr,
-                                                    fontFamily: 'Space Grotesk',
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 15,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                            _StepBtn(
-                                              icon: Icons.add_rounded,
-                                              onTap: isBatterySaver
-                                                  ? null
-                                                  : () => _stepThread(1),
-                                              color: secClr,
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                              ],
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    _SectionLabel(
-                                      text: isRtl ? 'خيارات' : 'OPTIONS',
-                                      color: mutedClr,
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Row(
-                                      children: [
-                                        _ToggleChip(
-                                          icon: Icons.wifi_rounded,
-                                          label: isRtl ? 'واي فاي' : 'WI-FI',
-                                          active: _wifiOnly,
-                                          color: blueClr,
-                                          isDark: isDark,
-                                          onTap: () => setState(
-                                            () => _wifiOnly = !_wifiOnly,
                                           ),
                                         ),
                                         const SizedBox(width: 8),
-                                        _ToggleChip(
-                                          icon: Icons.refresh_rounded,
-                                          label: isRtl ? 'إعادة' : 'RETRY',
-                                          active: _retry,
-                                          color: greenClr,
-                                          isDark: isDark,
-                                          onTap: () =>
-                                              setState(() => _retry = !_retry),
+                                        _SquareButton(
+                                          icon: Icons.folder_open_rounded,
+                                          color: blueClr,
+                                          onTap: () async {
+                                            runHaptic(settings);
+                                            try {
+                                              final uri = await FilePicker
+                                                      .pickDirectory()
+                                                  .timeout(
+                                                const Duration(seconds: 30),
+                                              );
+                                              if (uri != null) {
+                                                final result =
+                                                    uri.scheme == 'file'
+                                                        ? uri.toFilePath()
+                                                        : uri.toString();
+                                                setState(
+                                                  () => _pathController.text =
+                                                      result,
+                                                );
+                                              }
+                                            } on TimeoutException {
+                                              if (context.mounted) {
+                                                ThemedSnackbar.show(
+                                                  context,
+                                                  message: L10n.isRtl(context)
+                                                      ? 'انتهت مهلة تحديد المجلد'
+                                                      : 'File picker timed out',
+                                                  color: AppTheme.neonRed,
+                                                  icon: Icons.error_outline,
+                                                  isDarkMode:
+                                                      settings.isDarkMode,
+                                                );
+                                              }
+                                            }
+                                          },
                                         ),
                                       ],
                                     ),
+                                    const SizedBox(height: 12),
+                                    _ToggleRow(
+                                      icon: Icons.schedule_rounded,
+                                      label: isRtl ? 'جدولة' : 'Schedule',
+                                      value: _isScheduled,
+                                      color: violetClr,
+                                      isDark: isDark,
+                                      onChanged: (v) {
+                                        setState(() {
+                                          _isScheduled = v;
+                                          if (_isScheduled &&
+                                              _scheduledDateTime == null) {
+                                            _scheduledDateTime =
+                                                DateTime.now().add(
+                                              const Duration(hours: 1),
+                                            );
+                                          }
+                                        });
+                                      },
+                                    ),
+                                    if (_isScheduled) ...[
+                                      const SizedBox(height: 8),
+                                      GestureDetector(
+                                        onTap: () async {
+                                          final now = DateTime.now();
+                                          final date = await showDatePicker(
+                                            context: context,
+                                            initialDate: _scheduledDateTime ??
+                                                now.add(
+                                                    const Duration(hours: 1)),
+                                            firstDate: now,
+                                            lastDate: now.add(
+                                              const Duration(days: 365),
+                                            ),
+                                          );
+                                          if (date != null && mounted) {
+                                            if (!context.mounted) return;
+                                            final time = await showTimePicker(
+                                              context: context,
+                                              initialTime:
+                                                  TimeOfDay.fromDateTime(
+                                                _scheduledDateTime ??
+                                                    now.add(
+                                                      const Duration(hours: 1),
+                                                    ),
+                                              ),
+                                            );
+                                            if (time != null && mounted) {
+                                              setState(() {
+                                                _scheduledDateTime = DateTime(
+                                                  date.year,
+                                                  date.month,
+                                                  date.day,
+                                                  time.hour,
+                                                  time.minute,
+                                                );
+                                              });
+                                            }
+                                          }
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 10,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: violetClr.withValues(
+                                              alpha: 0.08,
+                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(10),
+                                            border: Border.all(
+                                              color: violetClr.withValues(
+                                                alpha: 0.4,
+                                              ),
+                                            ),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                Icons.schedule_rounded,
+                                                size: 15,
+                                                color: violetClr,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: Text(
+                                                  _scheduledDateTime != null
+                                                      ? '${_scheduledDateTime!.day}/${_scheduledDateTime!.month}/${_scheduledDateTime!.year}  ${_scheduledDateTime!.hour.toString().padLeft(2, '0')}:${_scheduledDateTime!.minute.toString().padLeft(2, '0')}'
+                                                      : (isRtl
+                                                          ? 'اختر الوقت'
+                                                          : 'Tap to set date & time'),
+                                                  style: TextStyle(
+                                                    color: textClr,
+                                                    fontSize: 12,
+                                                    fontFamily: 'monospace',
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ],
                                 ),
+                                crossFadeState: _showAdvanced
+                                    ? CrossFadeState.showSecond
+                                    : CrossFadeState.showFirst,
+                                duration: const Duration(milliseconds: 220),
+                                sizeCurve: Curves.easeInOut,
                               ),
+                              if (_torrentFiles.isNotEmpty) ...[
+                                const SizedBox(height: 16),
+                                _TorrentFilesPanel(
+                                  files: _torrentFiles,
+                                  isDark: isDark,
+                                  panelBg: panelBg,
+                                  borderClr: borderClr,
+                                  onToggle: (i, v) {
+                                    _torrentFiles[i]['selected'] = v;
+                                    _torrentFiles[i]['priority'] = v ? 4 : 0;
+                                    _updateSelectedTorrentSize();
+                                  },
+                                  onSelectAll: (v) {
+                                    for (final f in _torrentFiles) {
+                                      f['selected'] = v;
+                                      f['priority'] = v ? 4 : 0;
+                                    }
+                                    _updateSelectedTorrentSize();
+                                  },
+                                ),
+                              ],
                             ],
                           ),
-                          const SizedBox(height: 12),
-                          GestureDetector(
-                            onTap: () {
-                              triggerHaptic(settings);
-                              setState(() => _showAdvanced = !_showAdvanced);
-                            },
-                            child: Container(
+                        ),
+                      ),
+                    ),
+                    // Pinned Action Bar Footer
+                    Divider(height: 1, thickness: 0.8, color: borderClr),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                      child: Row(
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            style: TextButton.styleFrom(
+                              foregroundColor: redClr,
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 12,
                                 vertical: 10,
                               ),
-                              decoration: BoxDecoration(
-                                color: panelBg,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: borderClr),
+                            ),
+                            child: Text(
+                              L10n.of(context, 'cancel_btn'),
+                              style: const TextStyle(
+                                fontFamily: AppTheme.fontDisplay,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
                               ),
+                            ),
+                          ),
+                          const Spacer(),
+                          if (_isResolvingLink)
+                            Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 10),
                               child: Row(
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(
-                                    Icons.tune_rounded,
-                                    size: 15,
-                                    color: secClr,
+                                  SizedBox(
+                                    width: 15,
+                                    height: 15,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: blueClr,
+                                    ),
                                   ),
                                   const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      isRtl
-                                          ? 'خيارات متقدمة'
-                                          : 'ADVANCED OPTIONS',
-                                      style: TextStyle(
-                                        color: secClr,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 1,
-                                      ),
-                                    ),
-                                  ),
-                                  AnimatedRotation(
-                                    turns: _showAdvanced ? 0.5 : 0,
-                                    duration: const Duration(milliseconds: 200),
-                                    child: Icon(
-                                      Icons.keyboard_arrow_up_rounded,
-                                      size: 16,
-                                      color: secClr,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          AnimatedCrossFade(
-                            firstChild: const SizedBox(width: double.infinity),
-                            secondChild: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const SizedBox(height: 10),
-                                TextFormField(
-                                  controller: _referrerController,
-                                  style: TextStyle(
-                                    color: textClr,
-                                    fontSize: 12,
-                                    fontFamily: 'monospace',
-                                  ),
-                                  decoration: InputDecoration(
-                                    hintText: isRtl
-                                        ? 'رابط صفحة التنزيل (اختياري)'
-                                        : 'Download / referrer page link (optional)',
-                                    hintStyle: TextStyle(
-                                      color: mutedClr.withValues(alpha: 0.6),
-                                      fontSize: 11,
-                                    ),
-                                    filled: true,
-                                    fillColor: panelBg,
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 11,
-                                    ),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: borderClr.withValues(alpha: 0.5),
-                                        width: 0.8,
-                                      ),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: borderClr.withValues(alpha: 0.5),
-                                        width: 0.8,
-                                      ),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: blueClr.withValues(alpha: 0.5),
-                                        width: 1.2,
-                                      ),
-                                    ),
-                                    errorBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: (isDark
-                                                ? AppTheme.neonRed
-                                                : AppTheme.lightNeonRed)
-                                            .withValues(alpha: 0.6),
-                                        width: 1.0,
-                                      ),
-                                    ),
-                                    focusedErrorBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: (isDark
-                                                ? AppTheme.neonRed
-                                                : AppTheme.lightNeonRed)
-                                            .withValues(alpha: 0.8),
-                                        width: 1.2,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                _buildCredentialsSection(
-                                  isRtl: isRtl,
-                                  isDark: isDark,
-                                  textClr: textClr,
-                                  mutedClr: mutedClr,
-                                  panelBg: panelBg,
-                                  borderClr: borderClr,
-                                  blueClr: blueClr,
-                                ),
-                                const SizedBox(height: 12),
-                                _SectionLabel(
-                                  text: L10n.of(context, 'save_path_label'),
-                                  color: mutedClr,
-                                ),
-                                const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: TextFormField(
-                                        controller: _pathController,
-                                        style: TextStyle(
-                                          color: textClr,
-                                          fontSize: 11,
-                                          fontFamily: 'monospace',
-                                        ),
-                                        validator: (val) {
-                                          if (val == null ||
-                                              val.trim().isEmpty) {
-                                            return 'Save path cannot be empty';
-                                          }
-                                          return null;
-                                        },
-                                        decoration: InputDecoration(
-                                          filled: true,
-                                          fillColor: panelBg,
-                                          errorStyle: const TextStyle(
-                                            fontSize: 10,
-                                            height: 0.8,
-                                          ),
-                                          contentPadding:
-                                              const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 11,
-                                          ),
-                                          border: OutlineInputBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                            borderSide: BorderSide(
-                                              color: borderClr.withValues(
-                                                  alpha: 0.5),
-                                              width: 0.8,
-                                            ),
-                                          ),
-                                          enabledBorder: OutlineInputBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                            borderSide: BorderSide(
-                                              color: borderClr.withValues(
-                                                  alpha: 0.5),
-                                              width: 0.8,
-                                            ),
-                                          ),
-                                          focusedBorder: OutlineInputBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                            borderSide: BorderSide(
-                                              color: blueClr.withValues(
-                                                  alpha: 0.5),
-                                              width: 1.2,
-                                            ),
-                                          ),
-                                          errorBorder: OutlineInputBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                            borderSide: BorderSide(
-                                              color: (isDark
-                                                      ? AppTheme.neonRed
-                                                      : AppTheme.lightNeonRed)
-                                                  .withValues(alpha: 0.6),
-                                              width: 1.0,
-                                            ),
-                                          ),
-                                          focusedErrorBorder:
-                                              OutlineInputBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                            borderSide: BorderSide(
-                                              color: (isDark
-                                                      ? AppTheme.neonRed
-                                                      : AppTheme.lightNeonRed)
-                                                  .withValues(alpha: 0.8),
-                                              width: 1.2,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    _SquareButton(
-                                      icon: Icons.folder_open_rounded,
-                                      color: blueClr,
-                                      onTap: () async {
-                                        runHaptic(settings);
-                                        try {
-                                          final result = await FilePicker
-                                                  .getDirectoryPath()
-                                              .timeout(
-                                            const Duration(seconds: 30),
-                                          );
-                                          if (result != null) {
-                                            setState(
-                                              () =>
-                                                  _pathController.text = result,
-                                            );
-                                          }
-                                        } on TimeoutException {
-                                          if (context.mounted) {
-                                            ThemedSnackbar.show(
-                                              context,
-                                              message: L10n.isRtl(context)
-                                                  ? 'انتهت مهلة تحديد المجلد'
-                                                  : 'File picker timed out',
-                                              color: AppTheme.neonRed,
-                                              icon: Icons.error_outline,
-                                              isDarkMode: settings.isDarkMode,
-                                            );
-                                          }
-                                        }
-                                      },
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 12),
-                                _ToggleRow(
-                                  icon: Icons.schedule_rounded,
-                                  label: isRtl ? 'جدولة' : 'Schedule',
-                                  value: _isScheduled,
-                                  color: violetClr,
-                                  isDark: isDark,
-                                  onChanged: (v) {
-                                    setState(() {
-                                      _isScheduled = v;
-                                      if (_isScheduled &&
-                                          _scheduledDateTime == null) {
-                                        _scheduledDateTime = DateTime.now().add(
-                                          const Duration(hours: 1),
-                                        );
-                                      }
-                                    });
-                                  },
-                                ),
-                                if (_isScheduled) ...[
-                                  const SizedBox(height: 8),
-                                  GestureDetector(
-                                    onTap: () async {
-                                      final now = DateTime.now();
-                                      final date = await showDatePicker(
-                                        context: context,
-                                        initialDate: _scheduledDateTime ??
-                                            now.add(const Duration(hours: 1)),
-                                        firstDate: now,
-                                        lastDate: now.add(
-                                          const Duration(days: 365),
-                                        ),
-                                      );
-                                      if (date != null && mounted) {
-                                        if (!context.mounted) return;
-                                        final time = await showTimePicker(
-                                          context: context,
-                                          initialTime: TimeOfDay.fromDateTime(
-                                            _scheduledDateTime ??
-                                                now.add(
-                                                  const Duration(hours: 1),
-                                                ),
-                                          ),
-                                        );
-                                        if (time != null && mounted) {
-                                          setState(() {
-                                            _scheduledDateTime = DateTime(
-                                              date.year,
-                                              date.month,
-                                              date.day,
-                                              time.hour,
-                                              time.minute,
-                                            );
-                                          });
-                                        }
-                                      }
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 10,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: violetClr.withValues(
-                                          alpha: 0.08,
-                                        ),
-                                        borderRadius: BorderRadius.circular(10),
-                                        border: Border.all(
-                                          color: violetClr.withValues(
-                                            alpha: 0.4,
-                                          ),
-                                        ),
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            Icons.schedule_rounded,
-                                            size: 15,
-                                            color: violetClr,
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Expanded(
-                                            child: Text(
-                                              _scheduledDateTime != null
-                                                  ? '${_scheduledDateTime!.day}/${_scheduledDateTime!.month}/${_scheduledDateTime!.year}  ${_scheduledDateTime!.hour.toString().padLeft(2, '0')}:${_scheduledDateTime!.minute.toString().padLeft(2, '0')}'
-                                                  : (isRtl
-                                                      ? 'اختر الوقت'
-                                                      : 'Tap to set date & time'),
-                                              style: TextStyle(
-                                                color: textClr,
-                                                fontSize: 12,
-                                                fontFamily: 'monospace',
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                            crossFadeState: _showAdvanced
-                                ? CrossFadeState.showSecond
-                                : CrossFadeState.showFirst,
-                            duration: const Duration(milliseconds: 220),
-                            sizeCurve: Curves.easeInOut,
-                          ),
-                          if (_torrentFiles.isNotEmpty) ...[
-                            const SizedBox(height: 16),
-                            _TorrentFilesPanel(
-                              files: _torrentFiles,
-                              isDark: isDark,
-                              panelBg: panelBg,
-                              borderClr: borderClr,
-                              onToggle: (i, v) {
-                                _torrentFiles[i]['selected'] = v;
-                                _torrentFiles[i]['priority'] = v ? 4 : 0;
-                                _updateSelectedTorrentSize();
-                              },
-                              onSelectAll: (v) {
-                                for (final f in _torrentFiles) {
-                                  f['selected'] = v;
-                                  f['priority'] = v ? 4 : 0;
-                                }
-                                _updateSelectedTorrentSize();
-                              },
-                            ),
-                          ],
-                          const SizedBox(height: 20),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context),
-                                child: Text(
-                                  L10n.of(context, 'cancel_btn'),
-                                  style: const TextStyle(
-                                    color: Colors.red,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              // FIX-M11: Show progress indicator during link resolution
-                              if (_isResolvingLink)
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      SizedBox(
-                                        width: 15,
-                                        height: 15,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: blueClr,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        isRtl ? 'جارٍ الاتصال…' : 'ACQUIRING…',
-                                        style: TextStyle(
-                                          color: blueClr,
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
-                                          letterSpacing: 1,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                )
-                              else
-                                TextButton(
-                                  onPressed: _resolveLinkMetadata,
-                                  child: Text(
-                                    L10n.of(context, 'connect_btn'),
+                                  Text(
+                                    isRtl ? 'جارٍ الاتصال…' : 'ACQUIRING…',
                                     style: TextStyle(
+                                      fontFamily: AppTheme.fontDisplay,
                                       color: blueClr,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 1.0,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.6,
                                     ),
                                   ),
+                                ],
+                              ),
+                            )
+                          else
+                            OutlinedButton(
+                              onPressed: _resolveLinkMetadata,
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: blueClr,
+                                side: BorderSide(
+                                  color: blueClr.withValues(alpha: 0.45),
+                                  width: 1,
                                 ),
-                              const SizedBox(width: 4),
-                              NeonGlowButton(
-                                onPressed: ((_isResolvingLink &&
-                                            !_isTorrentOrMagnet) ||
+                                minimumSize: const Size(0, 44),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(
+                                    DmxTokens.radiusMd,
+                                  ),
+                                ),
+                              ),
+                              child: Text(
+                                L10n.of(context, 'connect_btn'),
+                                style: const TextStyle(
+                                  fontFamily: AppTheme.fontDisplay,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                          const SizedBox(width: 8),
+                          FilledButton.icon(
+                            onPressed:
+                                ((_isResolvingLink && !_isTorrentOrMagnet) ||
                                         _isSubmitting)
                                     ? null
                                     : () {
@@ -2961,37 +3017,97 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                           _handleDuplicateOrSubmit();
                                         }
                                       },
-                                text: (_isResolvingLink && !_isTorrentOrMagnet)
-                                    ? (L10n.isRtl(context)
-                                        ? 'إنتظار الاتصال...'
-                                        : 'Connecting...')
-                                    : _isSubmitting
-                                        ? (L10n.isRtl(context)
-                                            ? 'جاري الإضافة...'
-                                            : 'Adding...')
-                                        : L10n.of(context, 'add_btn'),
-                                icon: Icons.add_circle_outline,
-                                isLoading:
-                                    (_isResolvingLink && !_isTorrentOrMagnet) ||
-                                        _isSubmitting,
-                                color: greenClr,
-                                glowColor: greenClr,
-                                isExpanded: false,
-                                isFilled: true,
+                            icon: ((_isResolvingLink && !_isTorrentOrMagnet) ||
+                                    _isSubmitting)
+                                ? SizedBox(
+                                    width: 15,
+                                    height: 15,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: AppTheme.inkOn(greenClr),
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.add_circle_outline_rounded,
+                                    size: 18,
+                                  ),
+                            label: Text(
+                              (_isResolvingLink && !_isTorrentOrMagnet)
+                                  ? (isRtl
+                                      ? 'إنتظار الاتصال...'
+                                      : 'Connecting...')
+                                  : _isSubmitting
+                                      ? (isRtl
+                                          ? 'جاري الإضافة...'
+                                          : 'Adding...')
+                                      : L10n.of(context, 'add_btn'),
+                              style: const TextStyle(
+                                fontFamily: AppTheme.fontDisplay,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
                               ),
-                            ],
+                            ),
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size(0, 44),
+                              backgroundColor: greenClr,
+                              foregroundColor: AppTheme.inkOn(greenClr),
+                              disabledBackgroundColor:
+                                  greenClr.withValues(alpha: 0.4),
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 18,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(
+                                  DmxTokens.radiusMd,
+                                ),
+                              ),
+                            ),
                           ),
                         ],
                       ),
                     ),
-                  ),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
         ),
       ),
     );
+  }
+
+  Future<void> _openUrlInBrowser(bool isRtl) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final url = _urlController.text.trim();
+    if (url.isEmpty) {
+      messenger.removeCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(milliseconds: 2600),
+          content: Text(
+            isRtl ? 'لا يوجد رابط لفتحه' : 'No URL to open',
+          ),
+        ),
+      );
+      return;
+    }
+    final uri = Uri.tryParse(url);
+    if (uri != null && await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else if (mounted) {
+      messenger.removeCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(milliseconds: 2600),
+          content: Text(
+            isRtl ? 'لا يمكن فتح الرابط' : 'Cannot open URL',
+          ),
+        ),
+      );
+    }
   }
 }
 
@@ -3018,85 +3134,26 @@ class _SectionLabel extends StatelessWidget {
   const _SectionLabel({required this.text, required this.color, this.trailing});
   @override
   Widget build(BuildContext context) {
+    final label = Text(
+      text,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        fontFamily: AppTheme.fontDisplay,
+        color: color,
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.7,
+      ),
+    );
+    if (trailing == null) return label;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          text,
-          style: TextStyle(
-            color: color,
-            fontSize: 12.0,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 0.8,
-          ),
-        ),
-        if (trailing != null) trailing!,
+        Flexible(child: label),
+        trailing!,
       ],
     );
-  }
-}
-
-class _CornerFrame extends StatelessWidget {
-  final Widget child;
-  final Color color;
-  const _CornerFrame({required this.child, required this.color});
-  @override
-  Widget build(BuildContext context) {
-    const len = 12.0;
-    Widget bracket(bool top, bool left) => CustomPaint(
-          size: const Size(len, len),
-          painter: _BracketPainter(color: color, top: top, left: left),
-        );
-    return Stack(
-      children: [
-        Padding(padding: const EdgeInsets.all(5), child: child),
-        Positioned(top: 0, left: 0, child: bracket(true, true)),
-        Positioned(top: 0, right: 0, child: bracket(true, false)),
-        Positioned(bottom: 0, left: 0, child: bracket(false, true)),
-        Positioned(bottom: 0, right: 0, child: bracket(false, false)),
-      ],
-    );
-  }
-}
-
-class _BracketPainter extends CustomPainter {
-  final Color color;
-  final bool top;
-  final bool left;
-  _BracketPainter({required this.color, required this.top, required this.left});
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = 1.6
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-    final path = Path();
-    if (top && left) {
-      path.moveTo(0, size.height);
-      path.lineTo(0, 0);
-      path.lineTo(size.width, 0);
-    } else if (top && !left) {
-      path.moveTo(0, 0);
-      path.lineTo(size.width, 0);
-      path.lineTo(size.width, size.height);
-    } else if (!top && left) {
-      path.moveTo(0, 0);
-      path.lineTo(0, size.height);
-      path.lineTo(size.width, size.height);
-    } else {
-      path.moveTo(size.width, 0);
-      path.lineTo(size.width, size.height);
-      path.lineTo(0, size.height);
-    }
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _BracketPainter oldDelegate) {
-    return color != oldDelegate.color ||
-        top != oldDelegate.top ||
-        left != oldDelegate.left;
   }
 }
 
@@ -3104,11 +3161,15 @@ class _HeaderAction extends StatelessWidget {
   final IconData icon;
   final String tooltip;
   final Color color;
+  final bool isDark;
+  final bool filled;
   final VoidCallback onTap;
   const _HeaderAction({
     required this.icon,
     required this.tooltip,
     required this.color,
+    required this.isDark,
+    this.filled = false,
     required this.onTap,
   });
   @override
@@ -3117,17 +3178,22 @@ class _HeaderAction extends StatelessWidget {
       button: true,
       label: tooltip,
       child: Material(
-        color: Colors.transparent,
+        color: filled
+            ? (isDark
+                ? AppTheme.surfaceRaised.withValues(alpha: 0.7)
+                : AppTheme.lightBgSunken.withValues(alpha: 0.9))
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
         child: Tooltip(
           message: tooltip,
           child: InkWell(
             onTap: onTap,
             borderRadius: BorderRadius.circular(10),
             child: Container(
-              width: 48,
-              height: 48,
+              width: 38,
+              height: 38,
               alignment: Alignment.center,
-              child: Icon(icon, size: 18, color: color),
+              child: Icon(icon, size: 19, color: color),
             ),
           ),
         ),
@@ -3144,51 +3210,58 @@ class _IntelligenceChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final accent = (analysis.siteType == SiteType.videoStreaming ||
             analysis.contentHint == ContentHint.videoFile)
-        ? AppTheme.neonBlue
+        ? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
         : (analysis.siteType == SiteType.magnetSource
-            ? AppTheme.neonViolet
-            : AppTheme.neonGreen);
+            ? (isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet)
+            : (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen));
     final icon = (analysis.siteType == SiteType.videoStreaming ||
             analysis.contentHint == ContentHint.videoFile)
-        ? Icons.play_circle_outline
+        ? Icons.play_circle_outline_rounded
         : (analysis.siteType == SiteType.magnetSource
             ? Icons.link_rounded
-            : Icons.info_outline);
+            : Icons.info_outline_rounded);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
-        color: accent.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: accent.withValues(alpha: 0.3), width: 0.5),
+        color: accent.withValues(alpha: isDark ? 0.12 : 0.08),
+        borderRadius: BorderRadius.circular(DmxTokens.radiusSm),
+        border: Border.all(color: accent.withValues(alpha: 0.3), width: 0.8),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: accent),
+          Icon(icon, size: 13, color: accent),
           const SizedBox(width: 6),
-          Text(
-            '${analysis.profile?.displayName ?? analysis.siteType.name.toUpperCase()} • ${analysis.contentHint.name.replaceAll(RegExp(r"(?=[A-Z])"), " ").toUpperCase()}',
-            style: TextStyle(
-              color: accent,
-              fontSize: 9,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.5,
+          Flexible(
+            child: Text(
+              '${analysis.profile?.displayName ?? analysis.siteType.name.toUpperCase()} • ${analysis.contentHint.name.replaceAll(RegExp(r"(?=[A-Z])"), " ").toUpperCase()}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontFamily: AppTheme.fontDisplay,
+                color: accent,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.4,
+              ),
             ),
           ),
           if (analysis.detectedQuality != null) ...[
             const SizedBox(width: 6),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
               decoration: BoxDecoration(
-                color: accent.withValues(alpha: 0.2),
+                color: accent,
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
                 analysis.detectedQuality!,
-                style: const TextStyle(
-                    fontSize: 8,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white),
+                style: TextStyle(
+                  fontFamily: AppTheme.fontDisplay,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.inkOn(accent),
+                ),
               ),
             ),
           ],
@@ -3213,14 +3286,14 @@ class _SquareButton extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(DmxTokens.radiusMd),
         child: Container(
-          width: 48,
-          height: 48,
+          width: 44,
+          height: 44,
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: color.withValues(alpha: 0.3)),
+            borderRadius: BorderRadius.circular(DmxTokens.radiusMd),
+            border: Border.all(color: color.withValues(alpha: 0.3), width: 0.8),
           ),
           child: Icon(icon, size: 18, color: color),
         ),
@@ -3244,13 +3317,16 @@ class _StepBtn extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
+        borderRadius: BorderRadius.circular(DmxTokens.radiusSm),
         child: Container(
-          width: 48,
-          height: 48,
+          width: 40,
+          height: 40,
           alignment: Alignment.center,
-          child: Icon(icon,
-              size: 17,
-              color: onTap == null ? color.withValues(alpha: 0.3) : color),
+          child: Icon(
+            icon,
+            size: 17,
+            color: onTap == null ? color.withValues(alpha: 0.3) : color,
+          ),
         ),
       ),
     );
@@ -3274,41 +3350,37 @@ class _ToggleChip extends StatelessWidget {
   });
   @override
   Widget build(BuildContext context) {
+    final muted = AppTheme.textMutedOf(isDark);
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        duration: AppTheme.motionFast,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
-          color: active ? color.withValues(alpha: 0.12) : Colors.transparent,
-          borderRadius: BorderRadius.circular(9),
+          color: active
+              ? color.withValues(alpha: isDark ? 0.14 : 0.10)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(DmxTokens.radiusSm),
           border: Border.all(
             color: active
                 ? color.withValues(alpha: 0.45)
-                : (isDark ? AppTheme.border : AppTheme.lightBorder),
-            width: active ? 1 : 0.8,
+                : AppTheme.hairlineBorder(isDark),
+            width: active ? 1.0 : 0.8,
           ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon,
-              size: 13,
-              color: active
-                  ? color
-                  : (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted),
-            ),
-            const SizedBox(width: 6),
+            Icon(icon, size: 14, color: active ? color : muted),
+            const SizedBox(width: 5),
             Text(
               label,
               style: TextStyle(
-                color: active
-                    ? color
-                    : (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted),
-                fontSize: 9,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.8,
+                fontFamily: AppTheme.fontDisplay,
+                color: active ? color : muted,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.6,
               ),
             ),
           ],
@@ -3339,18 +3411,18 @@ class _ToggleRow extends StatelessWidget {
       children: [
         Icon(
           icon,
-          size: 15,
-          color: value
-              ? color
-              : (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted),
+          size: 16,
+          color: value ? color : AppTheme.textMutedOf(isDark),
         ),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
             label,
             style: TextStyle(
-              color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
-              fontSize: 12,
+              fontFamily: AppTheme.fontBody,
+              color: AppTheme.textPrimaryOf(isDark),
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ),
@@ -3387,8 +3459,8 @@ class _TorrentFilesPanel extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: panelBg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: violet.withValues(alpha: 0.3)),
+        borderRadius: BorderRadius.circular(DmxTokens.radiusMd),
+        border: Border.all(color: violet.withValues(alpha: 0.3), width: 0.8),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3403,22 +3475,19 @@ class _TorrentFilesPanel extends StatelessWidget {
                   child: Text(
                     '${L10n.isRtl(context) ? "ملفات التورنت" : "TORRENT FILES"} ($selectedCount/${files.length})',
                     style: TextStyle(
-                      color: isDark
-                          ? AppTheme.textPrimary
-                          : AppTheme.lightTextPrimary,
+                      fontFamily: AppTheme.fontDisplay,
+                      color: AppTheme.textPrimaryOf(isDark),
                       fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.6,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 TextButton(
                   style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
@@ -3426,18 +3495,17 @@ class _TorrentFilesPanel extends StatelessWidget {
                   child: Text(
                     L10n.isRtl(context) ? 'الكل' : 'ALL',
                     style: TextStyle(
-                      fontSize: 10,
+                      fontFamily: AppTheme.fontDisplay,
+                      fontSize: 11,
                       color: violet,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
                 TextButton(
                   style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
@@ -3445,9 +3513,9 @@ class _TorrentFilesPanel extends StatelessWidget {
                   child: Text(
                     L10n.isRtl(context) ? 'إلغاء' : 'NONE',
                     style: TextStyle(
-                      fontSize: 10,
-                      color:
-                          isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                      fontFamily: AppTheme.fontDisplay,
+                      fontSize: 11,
+                      color: AppTheme.textMutedOf(isDark),
                     ),
                   ),
                 ),
@@ -3458,23 +3526,19 @@ class _TorrentFilesPanel extends StatelessWidget {
             constraints: const BoxConstraints(maxHeight: 180),
             margin: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: (isDark ? Colors.black : Colors.white).withValues(
-                alpha: 0.15,
-              ),
-              borderRadius: BorderRadius.circular(8),
+              color: AppTheme.surfaceColor(isDark, elevated: false),
+              borderRadius: BorderRadius.circular(DmxTokens.radiusSm),
             ),
             child: ListView.separated(
               physics: const ClampingScrollPhysics(),
               itemCount: files.length,
               separatorBuilder: (context, index) =>
-                  Divider(color: borderClr.withValues(alpha: 0.3), height: 1),
+                  Divider(color: borderClr, height: 1, thickness: 0.6),
               itemBuilder: (ctx, idx) {
                 final file = files[idx];
                 final isSelected = file['selected'] as bool? ?? true;
-                final fileName = (file['name'] as String? ?? '').replaceAll(
-                  '+',
-                  ' ',
-                );
+                final fileName =
+                    (file['name'] as String? ?? '').replaceAll('+', ' ');
                 final length = (file['length'] as num?)?.toInt() ?? 0;
                 return Material(
                   color: Colors.transparent,
@@ -3488,13 +3552,10 @@ class _TorrentFilesPanel extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
+                        fontFamily: AppTheme.fontBody,
                         color: isSelected
-                            ? (isDark
-                                ? AppTheme.textPrimary
-                                : AppTheme.lightTextPrimary)
-                            : (isDark
-                                ? AppTheme.textSecondary
-                                : AppTheme.lightTextSecondary),
+                            ? AppTheme.textPrimaryOf(isDark)
+                            : AppTheme.textSecondaryOf(isDark),
                         fontSize: 12,
                         fontWeight:
                             isSelected ? FontWeight.w600 : FontWeight.normal,
@@ -3504,12 +3565,10 @@ class _TorrentFilesPanel extends StatelessWidget {
                     ),
                     subtitle: Text(
                       formatBytes(length.toDouble()),
-                      style: TextStyle(
-                        color: isDark
-                            ? AppTheme.textMuted
-                            : AppTheme.lightTextMuted,
-                        fontSize: 10,
-                        fontFamily: 'monospace',
+                      style: AppTheme.dataStyle(
+                        isDark: isDark,
+                        size: 11,
+                        color: AppTheme.textMutedOf(isDark),
                       ),
                     ),
                     onChanged: (val) => onToggle(idx, val ?? true),

@@ -1,9 +1,9 @@
 import 'dart:typed_data';
 
 import 'package:dmx/features/browser/models/browser_tab.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 class _FakeController implements InAppWebViewController {
   @override

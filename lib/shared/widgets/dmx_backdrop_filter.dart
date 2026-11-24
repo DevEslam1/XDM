@@ -2,8 +2,8 @@ import 'dart:math';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/services/background_gate.dart';
@@ -209,10 +209,7 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
         child: ColoredBox(
           // FIX: derive the no-blur scrim from the resolved theme surface so
           // it stays correct in light mode (was hardcoded black).
-          color: Theme.of(context)
-              .colorScheme
-              .surface
-              .withValues(alpha: 0.85),
+          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.85),
           child: RepaintBoundary(child: widget.child),
         ),
       );
@@ -241,10 +238,7 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
         child: ColoredBox(
           // FIX: light scrim derived from the theme surface (was hardcoded
           // black, which rendered dark in light mode).
-          color: Theme.of(context)
-              .colorScheme
-              .surface
-              .withValues(alpha: 0.35),
+          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.35),
           child: RepaintBoundary(child: widget.child),
         ),
       );

@@ -32,11 +32,14 @@ class BandwidthGovernor {
   @visibleForTesting
   int get lastRefillMsForTesting => _lastRefillMs;
 
+  final double? _fixedThrottleFactor;
+
   BandwidthGovernor([
     this._globalBytesPerSecond = 0,
     double burstFactor = 1.5,
     double? throttleFactor,
-  ]) : _burstFactor = burstFactor.clamp(1.0, 1.5) {
+  ])  : _burstFactor = burstFactor.clamp(1.0, 1.5),
+        _fixedThrottleFactor = throttleFactor?.clamp(0.05, 1.0) {
     PowerMonitor.throttleFactorNotifier.addListener(onPowerStateChanged);
   }
 
@@ -83,8 +86,10 @@ class BandwidthGovernor {
     _domainStates.clear();
   }
 
-  /// Live throttle factor derived from current battery and power policy.
-  double get throttleFactor => PowerMonitor.throttleFactor;
+  /// Live throttle factor derived from current battery and power policy
+  /// (or the explicit isolate-passed factor inside spawned worker isolates).
+  double get throttleFactor =>
+      _fixedThrottleFactor ?? PowerMonitor.throttleFactor;
 
   /// True when power monitoring is active and throttling bandwidth.
   bool get powerThrottleActive => throttleFactor < 1.0;
@@ -185,12 +190,16 @@ class BandwidthGovernor {
   int acquireNonBlocking(int bytes, {String? taskId}) {
     if (bytes <= 0) return 0;
 
+    int waitMs = 0;
     if (taskId != null && _taskLimits.containsKey(taskId)) {
-      return _acquireTaskLimited(bytes, taskId);
+      waitMs = _acquireTaskLimited(bytes, taskId);
     }
 
-    if (isUnlimited) return 0;
-    return _acquireGlobal(bytes);
+    if (!isUnlimited) {
+      final globalWait = _acquireGlobal(bytes);
+      if (globalWait > waitMs) waitMs = globalWait;
+    }
+    return waitMs;
   }
 
   static const int _maxThrottleWaitMs = 1000;

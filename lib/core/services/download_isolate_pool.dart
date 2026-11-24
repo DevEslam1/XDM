@@ -627,6 +627,7 @@ class DownloadIsolatePool implements MemoryPressureListener {
       }
       // Re-queue surviving sibling jobs to a fresh worker only if not cancelled or disposed.
       for (final job in remainingPending) {
+        job._worker = null;
         if (!job._disposed && !job._cancelled) {
           _queue.add(job);
         } else {
@@ -637,10 +638,10 @@ class DownloadIsolatePool implements MemoryPressureListener {
           );
         }
       }
-      // Use beforeNextEvent first to allow isolate to finish any in-flight buffer flush,
-      // with a 2-second fallback timer before hard killing.
-      worker.disposeResources(killPriority: Isolate.beforeNextEvent);
+      // Capture isolate reference BEFORE disposeResources() clears worker.isolate,
+      // so the 2-second Isolate.immediate fallback timer can actually hard-kill it.
       final isolateToKill = worker.isolate;
+      worker.disposeResources(killPriority: Isolate.beforeNextEvent);
       if (isolateToKill != null) {
         Timer(const Duration(seconds: 2), () {
           try {

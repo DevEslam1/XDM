@@ -1,7 +1,8 @@
 import 'dart:typed_data';
-import 'package:flutter/material.dart';
+
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:logging/logging.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'browser_tab_identity.dart';
 import 'browser_tab_ui_state.dart';
@@ -102,10 +103,12 @@ class BrowserTab {
       webViewState.findInteractionController;
   void resetFindController() => webViewState.resetFindController();
 
-  void Function(int activeMatchOrdinal, int numberOfMatches, bool isDoneCounting)?
+  void Function(
+          int activeMatchOrdinal, int numberOfMatches, bool isDoneCounting)?
       get onFindResultReceived => webViewState.onFindResultReceived;
   set onFindResultReceived(
-    void Function(int activeMatchOrdinal, int numberOfMatches, bool isDoneCounting)?
+    void Function(
+            int activeMatchOrdinal, int numberOfMatches, bool isDoneCounting)?
         callback,
   ) {
     webViewState.onFindResultReceived = callback;

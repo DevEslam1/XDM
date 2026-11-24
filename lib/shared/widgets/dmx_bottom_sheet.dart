@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_theme.dart';
@@ -43,8 +43,8 @@ Future<T?> showDmxModalBottomSheet<T>({
     useRootNavigator: useRootNavigator,
     backgroundColor: Colors.transparent,
     elevation: 0,
-    barrierColor:
-        barrierColor ?? (isDark ? AppTheme.overlayScrim : AppTheme.lightOverlayScrim),
+    barrierColor: barrierColor ??
+        (isDark ? AppTheme.overlayScrim : AppTheme.lightOverlayScrim),
     routeSettings: routeSettings,
     constraints: const BoxConstraints(maxWidth: double.infinity),
   );
@@ -177,7 +177,7 @@ class DmxSheetContainer extends StatelessWidget {
         ? BorderRadius.circular(borderRadius)
         : BorderRadius.vertical(top: Radius.circular(borderRadius));
 
-    Widget sheet = Container(
+    final Widget sheet = Container(
       decoration: AppTheme.sheetDecoration(
         isDark: dark,
         isAmoled: amoled,
@@ -216,7 +216,8 @@ class DmxSheetContainer extends StatelessWidget {
 
     final availableHeight =
         (screenHeight - viewInsetBottom).clamp(200.0, screenHeight);
-    final maxH = (availableHeight * maxHeightFraction).clamp(200.0, availableHeight);
+    final maxH =
+        (availableHeight * maxHeightFraction).clamp(200.0, availableHeight);
 
     return AnimatedPadding(
       duration: AppTheme.motionFast,
@@ -436,14 +437,17 @@ class DmxSheetSection extends StatelessWidget {
               ),
             ),
           ],
-          Container(
-            padding: padding,
-            decoration: BoxDecoration(
-              color: bgColor,
+          Material(
+            color: bgColor,
+            shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(borderRadius),
-              border: Border.all(color: borderClr, width: 0.8),
+              side: BorderSide(color: borderClr, width: 0.8),
             ),
-            child: child,
+            clipBehavior: Clip.antiAlias,
+            child: Padding(
+              padding: padding,
+              child: child,
+            ),
           ),
         ],
       ),
@@ -498,7 +502,8 @@ class DmxSheetActionBar extends StatelessWidget {
         (primaryDestructive
             ? (dark ? AppTheme.neonRed : AppTheme.lightNeonRed)
             : (dark ? AppTheme.neonBlue : AppTheme.lightNeonBlue));
-    final primaryFg = primaryDestructive ? Colors.white : AppTheme.inkOn(primaryBg);
+    final primaryFg =
+        primaryDestructive ? Colors.white : AppTheme.inkOn(primaryBg);
 
     Widget content;
     if (children != null && children!.isNotEmpty) {

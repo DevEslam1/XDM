@@ -1,10 +1,12 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/app_theme.dart';
 import '../../../core/domain/subscription/subscription_plan.dart';
 import '../../../core/services/subscription/subscription_service.dart';
 import '../../../core/utils/localization.dart';
+import '../../../shared/design/dmx_tokens.dart';
+import '../../../shared/widgets/dmx_bottom_sheet.dart';
 
 /// Bottom sheet shown when a free user attempts a premium-only action.
 ///
@@ -26,10 +28,8 @@ class PaywallBottomSheet extends StatefulWidget {
     String? featureName,
     VoidCallback? onDismiss,
   }) {
-    return showModalBottomSheet(
+    return showDmxModalBottomSheet<void>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
       builder: (_) => PaywallBottomSheet(
         subscriptionService: context.read<SubscriptionService>(),
         featureName: featureName,
@@ -48,160 +48,302 @@ class _PaywallBottomSheetState extends State<PaywallBottomSheet> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isRtl = L10n.isRtl(context);
+    final accent = isDark ? AppTheme.neonCyan : AppTheme.lightNeonCyan;
+    final textPrimary = AppTheme.textPrimaryOf(isDark);
+    final textSecondary = AppTheme.textSecondaryOf(isDark);
+    final textMuted = AppTheme.textMutedOf(isDark);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? AppTheme.surface : AppTheme.lightSurface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+    final highlights = isRtl
+        ? const [
+            (Icons.bolt_rounded, 'تنزيل متعدد المسارات بأقصى سرعة'),
+            (Icons.block_rounded, 'تجربة نظيفة بدون إعلانات'),
+            (Icons.hub_rounded, 'أدوات التورنت والوسائط المتقدمة'),
+          ]
+        : const [
+            (Icons.bolt_rounded, 'Max-speed multi-segment acceleration'),
+            (Icons.block_rounded, 'Clean, ad-free downloading experience'),
+            (Icons.hub_rounded, 'Advanced torrent, playlist & cloud tools'),
+          ];
+
+    return DmxSheetContainer(
+      scrollable: true,
+      showDragHandle: true,
+      showHeaderDivider: false,
+      isDark: isDark,
+      accentColor: accent,
+      padding: const EdgeInsets.fromLTRB(
+        DmxTokens.sheetHorizontalPadding,
+        4,
+        DmxTokens.sheetHorizontalPadding,
+        16,
       ),
-      child: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+      footer: _buildFooter(context, isDark, accent, textMuted),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Top dismiss button row + centered hero emblem
+          Stack(
+            alignment: Alignment.center,
             children: [
-              // Handle
               Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Header icon
-              Container(
-                padding: const EdgeInsets.all(16),
+                width: 64,
+                height: 64,
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                     colors: [
-                      AppTheme.neonCyan.withValues(alpha: 0.2),
-                      AppTheme.neonCyan.withValues(alpha: 0.05),
+                      accent.withValues(alpha: isDark ? 0.22 : 0.16),
+                      accent.withValues(alpha: isDark ? 0.06 : 0.04),
                     ],
                   ),
                   shape: BoxShape.circle,
+                  border: Border.all(
+                    color: accent.withValues(alpha: isDark ? 0.35 : 0.28),
+                    width: 1,
+                  ),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.diamond_rounded,
-                  color: AppTheme.neonCyan,
-                  size: 36,
+                  color: accent,
+                  size: 32,
                 ),
               ),
-              const SizedBox(height: 16),
-
-              // Title
-              Text(
-                widget.featureName != null
-                    ? L10n.of(context, 'subscription_unlock_feature')
-                    : L10n.of(context, 'subscription_go_premium'),
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                L10n.of(context, 'subscription_paywall_subtitle'),
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.grey,
-                    ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 24),
-
-              // Plan selection
-              ...SubscriptionPlan.all.map((plan) => Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: _buildPlanOption(context, plan, isDark),
-                  )),
-
-              const SizedBox(height: 20),
-
-              // Subscribe button
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => _subscribe(context),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.neonCyan,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 18),
+              PositionedDirectional(
+                top: 0,
+                end: 0,
+                child: IconButton(
+                  onPressed: () {
+                    widget.onDismiss?.call();
+                    Navigator.of(context).maybePop();
+                  },
+                  tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
+                  icon: Icon(Icons.close_rounded, size: 20, color: textMuted),
+                  style: IconButton.styleFrom(
+                    minimumSize: const Size(38, 38),
+                    backgroundColor: isDark
+                        ? AppTheme.surfaceRaised.withValues(alpha: 0.7)
+                        : AppTheme.lightBgSunken.withValues(alpha: 0.9),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  child: Text(
-                    L10n.of(context, 'subscription_subscribe_now'),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
+                      borderRadius: BorderRadius.circular(10),
                     ),
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
-
-              // Terms
-              Text(
-                L10n.of(context, 'subscription_terms'),
-                style: TextStyle(
-                  fontSize: 11,
-                  color: Colors.grey[500],
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
             ],
           ),
-        ),
+          const SizedBox(height: 14),
+
+          // Title
+          Text(
+            widget.featureName != null
+                ? L10n.of(context, 'subscription_unlock_feature')
+                : L10n.of(context, 'subscription_go_premium'),
+            style: TextStyle(
+              fontFamily: AppTheme.fontDisplay,
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.3,
+              color: textPrimary,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 6),
+
+          if (widget.featureName != null && widget.featureName!.isNotEmpty) ...[
+            Center(
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: isDark ? 0.14 : 0.10),
+                  borderRadius: BorderRadius.circular(DmxTokens.radiusFull),
+                  border: Border.all(
+                    color: accent.withValues(alpha: 0.3),
+                    width: 0.8,
+                  ),
+                ),
+                child: Text(
+                  widget.featureName!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: AppTheme.fontDisplay,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: accent,
+                  ),
+                ),
+              ),
+            ),
+          ],
+
+          Text(
+            L10n.of(context, 'subscription_paywall_subtitle'),
+            style: TextStyle(
+              fontFamily: AppTheme.fontBody,
+              fontSize: 13,
+              height: 1.4,
+              color: textSecondary,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+
+          // Value highlights
+          DmxSheetSection(
+            isDark: isDark,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Column(
+              children: [
+                for (var i = 0; i < highlights.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(highlights[i].$1, size: 16, color: accent),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          highlights[i].$2,
+                          style: TextStyle(
+                            fontFamily: AppTheme.fontBody,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: textPrimary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Plan selection
+          ...SubscriptionPlan.all.map(
+            (plan) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _buildPlanOption(context, plan, isDark, accent),
+            ),
+          ),
+        ],
       ),
     );
   }
 
+  Widget _buildFooter(
+    BuildContext context,
+    bool isDark,
+    Color accent,
+    Color textMuted,
+  ) {
+    final dividerColor = AppTheme.hairlineBorder(isDark);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Divider(height: 1, thickness: 0.8, color: dividerColor),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              FilledButton(
+                onPressed: () => _subscribe(context),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(0, 50),
+                  backgroundColor: accent,
+                  foregroundColor: AppTheme.inkOn(accent),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(DmxTokens.radiusMd),
+                  ),
+                ),
+                child: Text(
+                  L10n.of(context, 'subscription_subscribe_now'),
+                  style: const TextStyle(
+                    fontFamily: AppTheme.fontDisplay,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                L10n.of(context, 'subscription_terms'),
+                style: TextStyle(
+                  fontFamily: AppTheme.fontBody,
+                  fontSize: 11,
+                  height: 1.35,
+                  color: textMuted,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildPlanOption(
-      BuildContext context, SubscriptionPlan plan, bool isDark) {
+    BuildContext context,
+    SubscriptionPlan plan,
+    bool isDark,
+    Color accent,
+  ) {
     final isSelected = _selectedPlan.id == plan.id;
+    final textPrimary = AppTheme.textPrimaryOf(isDark);
+    final textSecondary = AppTheme.textSecondaryOf(isDark);
+    final textMuted = AppTheme.textMutedOf(isDark);
+    final amber = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
+    final unselectedBorder = AppTheme.hairlineBorder(isDark);
 
     return GestureDetector(
       onTap: () => setState(() => _selectedPlan = plan),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(14),
+        duration: AppTheme.motionFast,
+        curve: AppTheme.motionCurve,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         decoration: BoxDecoration(
           color: isSelected
-              ? AppTheme.neonCyan.withValues(alpha: 0.1)
-              : isDark
-                  ? Colors.white.withValues(alpha: 0.03)
-                  : Colors.black.withValues(alpha: 0.03),
-          borderRadius: BorderRadius.circular(12),
+              ? accent.withValues(alpha: isDark ? 0.12 : 0.08)
+              : AppTheme.surfaceColor(isDark, elevated: false),
+          borderRadius: BorderRadius.circular(DmxTokens.radiusMd),
           border: Border.all(
-            color: isSelected
-                ? AppTheme.neonCyan
-                : isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.black.withValues(alpha: 0.08),
-            width: isSelected ? 2 : 1,
+            color: isSelected ? accent : unselectedBorder,
+            width: isSelected ? 1.8 : 0.8,
           ),
         ),
         child: Row(
           children: [
-            // Radio
+            // Radio indicator
             Container(
               width: 20,
               height: 20,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: isSelected ? AppTheme.neonCyan : Colors.grey,
+                  color: isSelected ? accent : textMuted,
                   width: 2,
                 ),
-                color: isSelected ? AppTheme.neonCyan : Colors.transparent,
+                color: isSelected ? accent : Colors.transparent,
               ),
               child: isSelected
-                  ? const Center(
-                      child: Icon(Icons.circle, size: 8, color: Colors.black))
+                  ? Center(
+                      child: Icon(
+                        Icons.check_rounded,
+                        size: 13,
+                        color: AppTheme.inkOn(accent),
+                      ),
+                    )
                   : null,
             ),
             const SizedBox(width: 12),
@@ -213,28 +355,43 @@ class _PaywallBottomSheetState extends State<PaywallBottomSheet> {
                 children: [
                   Row(
                     children: [
-                      Text(
-                        plan.displayName,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
+                      Flexible(
+                        child: Text(
+                          plan.displayName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: AppTheme.fontDisplay,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                            color: textPrimary,
+                          ),
                         ),
                       ),
                       if (plan.isPopular) ...[
-                        const SizedBox(width: 6),
+                        const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppTheme.neonAmber.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(4),
+                            horizontal: 7,
+                            vertical: 2,
                           ),
-                          child: const Text(
+                          decoration: BoxDecoration(
+                            color:
+                                amber.withValues(alpha: isDark ? 0.18 : 0.14),
+                            borderRadius:
+                                BorderRadius.circular(DmxTokens.radiusSm),
+                            border: Border.all(
+                              color: amber.withValues(alpha: 0.35),
+                              width: 0.8,
+                            ),
+                          ),
+                          child: Text(
                             'POPULAR',
                             style: TextStyle(
-                              fontSize: 8,
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.neonAmber,
+                              fontFamily: AppTheme.fontDisplay,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: amber,
                               letterSpacing: 0.5,
                             ),
                           ),
@@ -242,24 +399,29 @@ class _PaywallBottomSheetState extends State<PaywallBottomSheet> {
                       ],
                     ],
                   ),
+                  const SizedBox(height: 2),
                   Text(
                     plan.description,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.grey[400],
+                      fontFamily: AppTheme.fontBody,
+                      fontSize: 12,
+                      color: textSecondary,
                     ),
                   ),
                 ],
               ),
             ),
+            const SizedBox(width: 10),
 
             // Price
             Text(
               '${plan.price}${plan.period}',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 15,
-                color: isSelected ? AppTheme.neonCyan : null,
+              style: AppTheme.dataStyle(
+                isDark: isDark,
+                size: 15,
+                color: isSelected ? accent : textPrimary,
               ),
             ),
           ],

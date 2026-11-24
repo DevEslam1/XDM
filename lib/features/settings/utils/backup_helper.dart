@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -295,7 +295,7 @@ abstract final class BackupHelper {
       type: FileType.custom,
       allowedExtensions: ['json', 'txt'],
     );
-    if (result == null || result.files.single.path == null) return;
+    if (result.isEmpty || result.single.path == null) return;
     if (!context.mounted) return;
     final replace = await _showImportOptionDialog(
       context,
@@ -303,7 +303,7 @@ abstract final class BackupHelper {
       isDark: isDark,
     );
     if (replace == null) return;
-    final file = File(result.files.single.path!);
+    final file = File(result.single.path!);
     final fileSize = await file.length();
     const maxSizeBytes = 50 * 1024 * 1024;
     if (fileSize > maxSizeBytes) {

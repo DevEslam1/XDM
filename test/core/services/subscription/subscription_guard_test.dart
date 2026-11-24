@@ -4,8 +4,8 @@ import 'package:dmx/core/domain/subscription/subscription_tier.dart';
 import 'package:dmx/core/services/subscription/subscription_guard.dart';
 import 'package:dmx/core/services/subscription/subscription_service.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 class _GuardHost extends StatefulWidget {

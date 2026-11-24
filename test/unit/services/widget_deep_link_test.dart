@@ -1,6 +1,6 @@
 import 'package:dmx/core/services/widget_deep_link.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../helpers/test_helpers.dart';
 

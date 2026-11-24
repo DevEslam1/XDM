@@ -932,14 +932,14 @@ class StateStoreInstance {
     final pathLock =
         await _lock.synchronized(() => _acquirePathLock(targetPath));
 
-    _lock.synchronized(() {
+    await _lock.synchronized(() {
       _heldPaths.add(targetPath);
     });
 
     try {
       await pathLock.synchronized(() async {
         // 1. Clear memory dedup caches
-        _lock.synchronized(() {
+        await _lock.synchronized(() {
           _lastFingerprints.remove(targetPath);
           _lastWrittenBytes.remove(targetPath);
           _lastSaveTimes.remove(targetPath);
@@ -964,7 +964,7 @@ class StateStoreInstance {
 
         if (taskId != null && taskId.isNotEmpty) {
           final legacyPath = _legacyPathFor(tempFilePath);
-          _lock.synchronized(() {
+          await _lock.synchronized(() {
             _lastFingerprints.remove(legacyPath);
             _lastWrittenBytes.remove(legacyPath);
             _lastSaveTimes.remove(legacyPath);
@@ -1000,7 +1000,7 @@ class StateStoreInstance {
         }
       });
     } finally {
-      _lock.synchronized(() {
+      await _lock.synchronized(() {
         _heldPaths.remove(targetPath);
         _pathLocks.remove(targetPath);
         if (taskId != null && taskId.isNotEmpty) {

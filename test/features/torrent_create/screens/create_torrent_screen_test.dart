@@ -5,43 +5,64 @@ import 'package:dmx/features/settings/provider/settings_provider.dart';
 import 'package:dmx/features/torrent_create/screens/create_torrent_screen.dart';
 import 'package:dmx/shared/widgets/neon_glow_button.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../helpers/test_helpers.dart';
+
+final class _FakePlatformFile extends PlatformFile {
+  _FakePlatformFile({required String path, required this.name, int? size})
+      : uri = Uri.file(path),
+        _size = size;
+
+  @override
+  final String name;
+
+  @override
+  final Uri uri;
+
+  final int? _size;
+
+  @override
+  int? lengthSync() => _size;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
 
 class _FakeFilePicker extends FilePickerPlatform {
   String? pickedFilePath;
   String? pickedDirectoryPath;
 
   @override
-  Future<FilePickerResult?> pickFiles({
+  Future<List<PlatformFile>> pickFiles({
     String? dialogTitle,
     String? initialDirectory,
     FileType type = FileType.any,
     List<String>? allowedExtensions,
     Function(FilePickerStatus)? onFileLoading,
     int compressionQuality = 0,
-    bool allowMultiple = false,
-    bool withData = false,
-    bool withReadStream = false,
-    bool lockParentWindow = false,
-    bool readSequential = false,
-    bool cancelUploadOnWindowBlur = true,
-    AndroidSAFOptions? androidSafOptions,
+    AndroidOptions? androidOptions,
+    DarwinOptions? darwinOptions,
+    LinuxOptions? linuxOptions,
+    WindowsOptions? windowsOptions,
+    WebOptions? webOptions,
   }) async {
-    if (pickedFilePath == null) return null;
-    return FilePickerResult([
-      PlatformFile(path: pickedFilePath, name: 'picked.bin', size: 1),
-    ]);
+    if (pickedFilePath == null) return [];
+    return [
+      _FakePlatformFile(path: pickedFilePath!, name: 'picked.bin', size: 1),
+    ];
   }
 
   @override
   Future<String?> getDirectoryPath({
     String? dialogTitle,
-    bool lockParentWindow = false,
     String? initialDirectory,
-    AndroidSAFOptions? androidSafOptions,
+    AndroidOptions? androidOptions,
+    DarwinOptions? darwinOptions,
+    LinuxOptions? linuxOptions,
+    WindowsOptions? windowsOptions,
+    WebOptions? webOptions,
   }) async {
     return pickedDirectoryPath;
   }

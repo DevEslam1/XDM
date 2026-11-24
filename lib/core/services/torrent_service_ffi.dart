@@ -484,14 +484,24 @@ class TorrentService {
         (torrents) async {
           await _torrentLock.synchronized(() async {
             try {
-              // FIX-2.3: Throttle torrent stream listener - skip if unchanged
+              // FIX-2.3: Throttle torrent stream listener - skip only when all
+              // download, seeding, peer, and metadata fields are unchanged.
               bool anyChanged = false;
               for (final entry in torrents.entries) {
                 final prev = _latestStats[entry.key];
+                final next = entry.value;
                 if (prev == null ||
-                    prev.progress != entry.value.progress ||
-                    prev.stateLabel != entry.value.stateLabel ||
-                    prev.downloadRate != entry.value.downloadRate) {
+                    prev.progress != next.progress ||
+                    prev.stateLabel != next.stateLabel ||
+                    prev.downloadRate != next.downloadRate ||
+                    prev.uploadRate != next.uploadRate ||
+                    prev.totalPayloadUpload != next.totalUploaded ||
+                    prev.seedingTime != next.seedingTime ||
+                    prev.numPeers != next.numPeers ||
+                    prev.numSeeds != next.numSeeds ||
+                    prev.hasMetadata != next.hasMetadata ||
+                    prev.isPaused != next.isPaused ||
+                    prev.totalWantedDone != next.totalWantedDone) {
                   anyChanged = true;
                   break;
                 }
@@ -1613,7 +1623,8 @@ class TorrentService {
         final resolvedSize = native.size > 0
             ? native.size
             : ((knownSizes?[i] ?? 0) > 0 ? knownSizes![i]! : 0);
-        final file = File(p.join(savePath, native.name));
+        final relPath = native.path.isNotEmpty ? native.path : native.name;
+        final file = File(p.join(savePath, relPath));
         final exists = await file.exists();
 
         int downloaded;
@@ -1878,7 +1889,8 @@ class TorrentService {
 
   static Future<void> autoSaveResumeData() async {
     if (!isPluginAvailable || _activeTorrentIds.isEmpty) return;
-    for (final id in _activeTorrentIds) {
+    final idsSnapshot = List<int>.from(_activeTorrentIds);
+    for (final id in idsSnapshot) {
       try {
         final data = await _native.saveResumeData(id);
         if (data != null && data.isNotEmpty) {
@@ -1927,8 +1939,11 @@ class TorrentService {
   static void prioritizeFile(int torrentId, int fileIndex, {int priority = 7}) {
     if (!isInitialized || torrentId < 0) return;
     try {
-      final current =
-          List<int>.from(_cachedPrioritiesSnapshot[torrentId] ?? const []);
+      var cached = _cachedPrioritiesSnapshot[torrentId];
+      if (cached == null || cached.isEmpty) {
+        cached = _native.getFilePriorities(torrentId);
+      }
+      final current = List<int>.from(cached);
       if (fileIndex >= 0 && fileIndex < current.length) {
         current[fileIndex] = priority;
         setFilePriorities(torrentId, current);

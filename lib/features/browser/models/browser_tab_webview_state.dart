@@ -1,6 +1,6 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:logging/logging.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'browser_tab_identity.dart';
 
@@ -13,7 +13,8 @@ class BrowserTabWebViewState {
   PullToRefreshController? pullToRefreshController;
   FindInteractionController? _findInteractionController;
   bool _findControllerInitFailed = false;
-  void Function(int activeMatchOrdinal, int numberOfMatches, bool isDoneCounting)?
+  void Function(
+          int activeMatchOrdinal, int numberOfMatches, bool isDoneCounting)?
       onFindResultReceived;
 
   final ValueNotifier<double> progressNotifier;
@@ -62,7 +63,8 @@ class BrowserTabWebViewState {
     if (_findInteractionController == null) {
       try {
         _findInteractionController = FindInteractionController(
-          onFindResultReceived: (controller, activeMatchOrdinal, numberOfMatches, isDoneCounting) {
+          onFindResultReceived: (controller, activeMatchOrdinal,
+              numberOfMatches, isDoneCounting) {
             onFindResultReceived?.call(
               activeMatchOrdinal,
               numberOfMatches,

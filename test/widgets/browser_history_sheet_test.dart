@@ -3,8 +3,8 @@ import 'package:dmx/features/browser/widgets/browser_history_sheet.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/features/downloads/provider/download_provider.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../helpers/fake_services.dart';
 import '../helpers/test_helpers.dart';

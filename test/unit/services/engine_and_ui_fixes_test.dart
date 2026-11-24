@@ -12,8 +12,8 @@ import 'package:dmx/core/services/site_intelligence/site_intelligence_service.da
 import 'package:dmx/features/details/widgets/torrent_files_panel.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/features/downloads/provider/network_monitor.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 class FakeNetworkMonitor extends NetworkMonitor {
   bool _mockHasConnection = true;

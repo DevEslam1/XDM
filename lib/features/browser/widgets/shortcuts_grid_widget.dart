@@ -1,6 +1,6 @@
 import 'package:dmx/core/app_theme.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 class ShortcutsGridWidget extends StatelessWidget {
   final List<Map<String, String>> customShortcuts;

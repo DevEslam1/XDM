@@ -7,8 +7,8 @@ import 'package:dmx/features/downloads/provider/download_provider.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
 import 'package:dmx/shared/widgets/dmx_app_icon.dart';
 import 'package:dmx/shared/widgets/dmx_backdrop_filter.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_theme.dart';
@@ -29,6 +29,7 @@ import '../../features/home/screens/home_screen.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../../features/settings/widgets/app_lock_screen.dart';
 import '../../features/settings/widgets/update_dialogs.dart';
+import '../design/dmx_tokens.dart';
 import 'themed_snackbar.dart';
 
 class MainNavigationContainer extends StatefulWidget {
@@ -460,8 +461,11 @@ class _PhoneBottomNavBar extends StatelessWidget {
     bool classicUi,
     bool vibration
   }) settingsTuple;
-  final ({int activeTabIndex, bool isNavbarVisible, bool isSelectionMode})
-      navState;
+  final ({
+    int activeTabIndex,
+    bool isNavbarVisible,
+    bool isSelectionMode
+  }) navState;
   final bool isDark;
   final bool isRtl;
 
@@ -475,14 +479,19 @@ class _PhoneBottomNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final currentIndex = navState.activeTabIndex;
-    final navBg = isDark
-        ? (settingsTuple.isAmoled
-            ? AppTheme.amoledBackground
-            : AppTheme.surface)
-        : AppTheme.lightSurface;
+    final navBg = AppTheme.surfaceColor(
+      isDark,
+      isAmoled: settingsTuple.isAmoled,
+      elevated: true,
+    );
+    final borderColor = AppTheme.hairlineBorder(
+      isDark,
+      isAmoled: settingsTuple.isAmoled,
+    );
     final isShowing = navState.isNavbarVisible &&
         currentIndex != 1 &&
         !navState.isSelectionMode;
+    final useSolid = settingsTuple.classicUi || PowerMonitor.isLowEndDevice;
 
     return AnimatedSlide(
       offset: isShowing ? Offset.zero : const Offset(0, 1.8),
@@ -492,55 +501,164 @@ class _PhoneBottomNavBar extends StatelessWidget {
         child: SafeArea(
           top: false,
           child: Container(
-            margin: const EdgeInsets.only(left: 20, right: 20, bottom: 16),
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
             alignment: Alignment.bottomCenter,
             child: Container(
-              constraints: const BoxConstraints(maxWidth: 480),
-              decoration: settingsTuple.classicUi
-                  ? BoxDecoration(
-                      color: navBg,
-                      borderRadius: BorderRadius.circular(32),
-                      border: Border.all(
-                        color: isDark
-                            ? (settingsTuple.isAmoled
-                                ? AppTheme.amoledBorder
-                                : AppTheme.border)
-                            : AppTheme.lightBorder,
-                        width: 1.0,
+              constraints: const BoxConstraints(maxWidth: 460),
+              decoration: BoxDecoration(
+                color: useSolid
+                    ? navBg
+                    : navBg.withValues(
+                        alpha: settingsTuple.isAmoled
+                            ? 0.96
+                            : (isDark ? 0.88 : 0.94),
                       ),
-                    )
-                  : BoxDecoration(
-                      color: navBg.withValues(
-                        alpha: settingsTuple.isAmoled ? 0.95 : 0.7,
-                      ),
-                      borderRadius: BorderRadius.circular(32),
-                      border: Border.all(
-                        color: isDark
-                            ? (settingsTuple.isAmoled
-                                ? AppTheme.amoledBorder
-                                : AppTheme.glassBorder)
-                            : AppTheme.lightGlassBorder,
-                        width: 0.8,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(
-                            alpha: isDark ? 0.4 : 0.12,
-                          ),
-                          blurRadius: 20,
-                          spreadRadius: 1,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
-                    ),
+                borderRadius: BorderRadius.circular(DmxTokens.radius2xl),
+                border: Border.all(
+                  color: borderColor,
+                  width: DmxTokens.borderThin,
+                ),
+                boxShadow: settingsTuple.classicUi
+                    ? null
+                    : AppTheme.cardShadow(isDark, elevated: true),
+              ),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(32),
-                child: Directionality(
-                  textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
-                  child: Container(
-                    constraints: const BoxConstraints(minHeight: 64),
+                borderRadius: BorderRadius.circular(DmxTokens.radius2xl),
+                child: DmxBackdropFilter(
+                  sigmaX: useSolid ? 0 : 14,
+                  sigmaY: useSolid ? 0 : 14,
+                  forceSolid: useSolid,
+                  child: Directionality(
+                    textDirection:
+                        isRtl ? TextDirection.rtl : TextDirection.ltr,
+                    child: Container(
+                      constraints: const BoxConstraints(minHeight: 62),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10.0,
+                        vertical: 6.0,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          _NavItem(
+                            index: 0,
+                            icon: Icons.file_download_outlined,
+                            activeIcon: Icons.file_download,
+                            label: L10n.of(context, 'title_transmissions'),
+                            settingsTuple: settingsTuple,
+                            isDark: isDark,
+                            currentIndex: currentIndex,
+                          ),
+                          _NavItem(
+                            index: 1,
+                            icon: Icons.language_outlined,
+                            activeIcon: Icons.language,
+                            label: L10n.of(context, 'title_browser'),
+                            settingsTuple: settingsTuple,
+                            isDark: isDark,
+                            currentIndex: currentIndex,
+                          ),
+                          _NavItem(
+                            index: 2,
+                            icon: Icons.settings_outlined,
+                            activeIcon: Icons.settings_rounded,
+                            label: L10n.of(context, 'title_config'),
+                            settingsTuple: settingsTuple,
+                            isDark: isDark,
+                            currentIndex: currentIndex,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TabletFloatingNavBar extends StatelessWidget {
+  final ({
+    bool isDark,
+    bool isAmoled,
+    bool classicUi,
+    bool vibration
+  }) settingsTuple;
+  final ({
+    int activeTabIndex,
+    bool isNavbarVisible,
+    bool isSelectionMode
+  }) navState;
+  final bool isDark;
+  final bool isRtl;
+
+  const _TabletFloatingNavBar({
+    required this.settingsTuple,
+    required this.navState,
+    required this.isDark,
+    required this.isRtl,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final currentIndex = navState.activeTabIndex;
+    final navBg = AppTheme.surfaceColor(
+      isDark,
+      isAmoled: settingsTuple.isAmoled,
+      elevated: true,
+    );
+    final borderColor = AppTheme.hairlineBorder(
+      isDark,
+      isAmoled: settingsTuple.isAmoled,
+    );
+    final isShowing = navState.isNavbarVisible &&
+        currentIndex != 1 &&
+        !navState.isSelectionMode;
+    final useSolid = settingsTuple.classicUi || PowerMonitor.isLowEndDevice;
+
+    return AnimatedSlide(
+      offset: isShowing ? Offset.zero : const Offset(0, 1.8),
+      duration: AppTheme.motionSlow,
+      curve: AppTheme.motionCurve,
+      child: RepaintBoundary(
+        child: SafeArea(
+          top: false,
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 20, left: 32, right: 32),
+            alignment: Alignment.bottomCenter,
+            constraints: const BoxConstraints(minHeight: 66),
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 440),
+              decoration: BoxDecoration(
+                color: useSolid
+                    ? navBg
+                    : navBg.withValues(
+                        alpha: settingsTuple.isAmoled
+                            ? 0.96
+                            : (isDark ? 0.88 : 0.94),
+                      ),
+                borderRadius: BorderRadius.circular(DmxTokens.radius2xl),
+                border: Border.all(
+                  color: borderColor,
+                  width: DmxTokens.borderThin,
+                ),
+                boxShadow: settingsTuple.classicUi
+                    ? null
+                    : AppTheme.cardShadow(isDark, elevated: true),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(DmxTokens.radius2xl),
+                child: DmxBackdropFilter(
+                  sigmaX: useSolid ? 0 : 14,
+                  sigmaY: useSolid ? 0 : 14,
+                  forceSolid: useSolid,
+                  child: Padding(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 12.0,
+                      horizontal: 14.0,
                       vertical: 6.0,
                     ),
                     child: Row(
@@ -586,133 +704,6 @@ class _PhoneBottomNavBar extends StatelessWidget {
   }
 }
 
-class _TabletFloatingNavBar extends StatelessWidget {
-  final ({
-    bool isDark,
-    bool isAmoled,
-    bool classicUi,
-    bool vibration
-  }) settingsTuple;
-  final ({int activeTabIndex, bool isNavbarVisible, bool isSelectionMode})
-      navState;
-  final bool isDark;
-  final bool isRtl;
-
-  const _TabletFloatingNavBar({
-    required this.settingsTuple,
-    required this.navState,
-    required this.isDark,
-    required this.isRtl,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final currentIndex = navState.activeTabIndex;
-    final navBg = isDark
-        ? (settingsTuple.isAmoled
-            ? AppTheme.amoledBackground
-            : AppTheme.surface)
-        : AppTheme.lightSurface;
-    final isShowing = navState.isNavbarVisible &&
-        currentIndex != 1 &&
-        !navState.isSelectionMode;
-
-    return AnimatedSlide(
-      offset: isShowing ? Offset.zero : const Offset(0, 1.8),
-      duration: AppTheme.motionSlow,
-      curve: AppTheme.motionCurve,
-      child: RepaintBoundary(
-        child: SafeArea(
-          top: false,
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 24, left: 32, right: 32),
-            alignment: Alignment.bottomCenter,
-            constraints: const BoxConstraints(minHeight: 70),
-            child: Container(
-              constraints: const BoxConstraints(maxWidth: 460),
-              decoration: settingsTuple.classicUi
-                  ? BoxDecoration(
-                      color: navBg,
-                      borderRadius: BorderRadius.circular(30),
-                      border: Border.all(
-                        color: isDark
-                            ? (settingsTuple.isAmoled
-                                ? AppTheme.amoledBorder
-                                : AppTheme.border)
-                            : AppTheme.lightBorder,
-                        width: 1.0,
-                      ),
-                    )
-                  : BoxDecoration(
-                      color: navBg.withValues(
-                        alpha: settingsTuple.isAmoled ? 1.0 : 0.7,
-                      ),
-                      borderRadius: BorderRadius.circular(30),
-                      border: Border.all(
-                        color: isDark
-                            ? (settingsTuple.isAmoled
-                                ? AppTheme.amoledBorder
-                                : AppTheme.glassBorder)
-                            : AppTheme.lightGlassBorder,
-                        width: 0.8,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(
-                            alpha: isDark ? 0.45 : 0.15,
-                          ),
-                          blurRadius: 20,
-                          spreadRadius: 2,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
-                    ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(30),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _NavItem(
-                        index: 0,
-                        icon: Icons.file_download_outlined,
-                        activeIcon: Icons.file_download,
-                        label: L10n.of(context, 'title_transmissions'),
-                        settingsTuple: settingsTuple,
-                        isDark: isDark,
-                        currentIndex: currentIndex,
-                      ),
-                      _NavItem(
-                        index: 1,
-                        icon: Icons.language_outlined,
-                        activeIcon: Icons.language,
-                        label: L10n.of(context, 'title_browser'),
-                        settingsTuple: settingsTuple,
-                        isDark: isDark,
-                        currentIndex: currentIndex,
-                      ),
-                      _NavItem(
-                        index: 2,
-                        icon: Icons.settings_outlined,
-                        activeIcon: Icons.settings_rounded,
-                        label: L10n.of(context, 'title_config'),
-                        settingsTuple: settingsTuple,
-                        isDark: isDark,
-                        currentIndex: currentIndex,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _NavigationRailWidget extends StatelessWidget {
   final ({
     bool isDark,
@@ -733,10 +724,6 @@ class _NavigationRailWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // FIX-P3: Read providers instead of watch()ing them — the rail already
-    // receives navState/settingsTuple as params, so progress-tick rebuilds
-    // would otherwise repaint the whole rail every second. Selectors scope
-    // rebuilds to the accent color inputs only.
     final downloadProvider = context.read<DownloadProvider>();
     final activeColor = context.select(
       (DownloadProvider p) => getActiveFilterColor(p, isDark),
@@ -745,31 +732,22 @@ class _NavigationRailWidget extends StatelessWidget {
       (SettingsProvider s) =>
           getSettingsTabColor(s.activeSettingsTabIndex, isDark),
     );
-    final inactiveColor =
-        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
-    final navBg = isDark
-        ? (settingsTuple.isAmoled
-            ? AppTheme.amoledBackground
-            : AppTheme.surface)
-        : AppTheme.lightSurface;
+    final inactiveColor = AppTheme.textSecondaryOf(isDark);
+    final navBg = AppTheme.surfaceColor(
+      isDark,
+      isAmoled: settingsTuple.isAmoled,
+    );
+    final sideBorderColor = AppTheme.hairlineBorder(
+      isDark,
+      isAmoled: settingsTuple.isAmoled,
+    );
 
     final isPhoneLandscapeMode = isPhoneLandscape(context);
-    final baseRailWidth = isPhoneLandscapeMode ? 78.0 : 84.0;
+    final baseRailWidth = isPhoneLandscapeMode ? 76.0 : 84.0;
 
-    // Account for camera notch / display cutout on the leading edge (left in LTR, right in RTL)
     final mediaPadding = MediaQuery.paddingOf(context);
     final sideInset = isRtl ? mediaPadding.right : mediaPadding.left;
     final totalRailWidth = baseRailWidth + sideInset;
-
-    final sideBorderColor = isDark
-        ? (settingsTuple.isAmoled
-            ? AppTheme.amoledBorder
-            : (settingsTuple.classicUi
-                ? AppTheme.border
-                : AppTheme.glassBorder))
-        : (settingsTuple.classicUi
-            ? AppTheme.lightBorder
-            : AppTheme.lightGlassBorder);
 
     final useSolidNav = settingsTuple.classicUi || PowerMonitor.isLowEndDevice;
     return Container(
@@ -779,20 +757,20 @@ class _NavigationRailWidget extends StatelessWidget {
         color: useSolidNav
             ? navBg
             : navBg.withValues(
-                alpha: settingsTuple.isAmoled ? 1.0 : 0.85,
+                alpha: settingsTuple.isAmoled ? 1.0 : 0.90,
               ),
         border: Border(
           right: isRtl
               ? BorderSide.none
-              : BorderSide(color: sideBorderColor, width: 0.8),
+              : BorderSide(color: sideBorderColor, width: DmxTokens.borderThin),
           left: isRtl
-              ? BorderSide(color: sideBorderColor, width: 0.8)
+              ? BorderSide(color: sideBorderColor, width: DmxTokens.borderThin)
               : BorderSide.none,
         ),
       ),
       child: DmxBackdropFilter(
-        sigmaX: useSolidNav ? 0 : 16,
-        sigmaY: useSolidNav ? 0 : 16,
+        sigmaX: useSolidNav ? 0 : 14,
+        sigmaY: useSolidNav ? 0 : 14,
         forceSolid: useSolidNav,
         child: SafeArea(
           top: true,
@@ -801,17 +779,24 @@ class _NavigationRailWidget extends StatelessWidget {
           right: true,
           child: Column(
             children: [
-              SizedBox(height: isPhoneLandscapeMode ? 6 : 16),
+              SizedBox(height: isPhoneLandscapeMode ? 8 : 16),
               Padding(
                 padding: EdgeInsets.symmetric(
-                  vertical: isPhoneLandscapeMode ? 4 : 12,
+                  vertical: isPhoneLandscapeMode ? 4 : 10,
                 ),
                 child: DmxAppIcon(
-                  size: isPhoneLandscapeMode ? 26 : 34,
-                  showGlow: true,
+                  size: isPhoneLandscapeMode ? 26 : 32,
+                  showGlow: false,
                 ),
               ),
-              SizedBox(height: isPhoneLandscapeMode ? 4 : 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 18),
+                child: Divider(
+                  height: isPhoneLandscapeMode ? 8 : 16,
+                  thickness: 0.8,
+                  color: sideBorderColor,
+                ),
+              ),
               Expanded(
                 child: Center(
                   child: SingleChildScrollView(
@@ -913,17 +898,15 @@ class _RailItem extends StatelessWidget {
       hint: 'Double tap to switch tab',
       child: Padding(
         padding: EdgeInsets.symmetric(
-          vertical: isLandscapeMode ? 3 : 4,
-          horizontal: 4,
+          vertical: isLandscapeMode ? 3 : 5,
+          horizontal: 6,
         ),
         child: Material(
           color: Colors.transparent,
           child: InkWell(
             onTap: onTap,
-            focusColor: isDark
-                ? AppTheme.focusRing.withValues(alpha: 0.3)
-                : AppTheme.lightFocusRing.withValues(alpha: 0.3),
-            borderRadius: BorderRadius.circular(12),
+            focusColor: AppTheme.focusRingColor(isDark).withValues(alpha: 0.25),
+            borderRadius: BorderRadius.circular(DmxTokens.radiusMd),
             child: AnimatedContainer(
               duration: AppTheme.motionBase,
               curve: AppTheme.motionCurve,
@@ -933,13 +916,14 @@ class _RailItem extends StatelessWidget {
               ),
               decoration: BoxDecoration(
                 color: isSelected
-                    ? activeColor.withValues(alpha: 0.12)
+                    ? activeColor.withValues(alpha: isDark ? 0.14 : 0.10)
                     : Colors.transparent,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(DmxTokens.radiusMd),
                 border: isSelected
                     ? Border.all(
-                        color: activeColor.withValues(alpha: 0.3),
-                        width: 0.8,
+                        color:
+                            activeColor.withValues(alpha: isDark ? 0.28 : 0.22),
+                        width: DmxTokens.borderThin,
                       )
                     : null,
               ),
@@ -950,7 +934,7 @@ class _RailItem extends StatelessWidget {
                     clipBehavior: Clip.none,
                     children: [
                       Icon(displayIcon,
-                          color: color, size: isLandscapeMode ? 22 : 24),
+                          color: color, size: isLandscapeMode ? 21 : 23),
                       if (index == 0)
                         PositionedDirectional(
                           top: -4,
@@ -959,7 +943,7 @@ class _RailItem extends StatelessWidget {
                         ),
                     ],
                   ),
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 4),
                   SizedBox(
                     width: double.infinity,
                     child: FittedBox(
@@ -967,10 +951,11 @@ class _RailItem extends StatelessWidget {
                       child: Text(
                         label,
                         style: TextStyle(
+                          fontFamily: AppTheme.fontDisplay,
                           color: color,
-                          fontSize: isLandscapeMode ? 9.5 : 10.5,
+                          fontSize: isLandscapeMode ? 10 : 11,
                           fontWeight:
-                              isSelected ? FontWeight.bold : FontWeight.w500,
+                              isSelected ? FontWeight.w700 : FontWeight.w500,
                         ),
                         maxLines: 1,
                         textAlign: TextAlign.center,
@@ -1014,8 +999,6 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isSelected = currentIndex == index;
-    // FIX-P3: Select only the accent-color inputs instead of watch()ing the
-    // whole providers, so the nav bar does not rebuild on every progress tick.
     final activeColor = (index == 0)
         ? context.select(
             (DownloadProvider p) => getActiveFilterColor(p, isDark),
@@ -1026,8 +1009,7 @@ class _NavItem extends StatelessWidget {
                     getSettingsTabColor(s.activeSettingsTabIndex, isDark),
               )
             : (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue);
-    final inactiveColor =
-        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final inactiveColor = AppTheme.textSecondaryOf(isDark);
     final color = isSelected ? activeColor : inactiveColor;
     final displayIcon = isSelected ? activeIcon : icon;
 
@@ -1041,103 +1023,67 @@ class _NavItem extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             onTap: () {
-              if (settingsTuple.vibration) HapticFeedback.mediumImpact();
+              if (settingsTuple.vibration) HapticFeedback.lightImpact();
               context.read<DownloadProvider>().setActiveTabIndex(index);
             },
-            focusColor: isDark
-                ? AppTheme.focusRing.withValues(alpha: 0.3)
-                : AppTheme.lightFocusRing.withValues(alpha: 0.3),
-            borderRadius: BorderRadius.circular(16),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    AnimatedContainer(
-                      duration: AppTheme.motionBase,
-                      curve: AppTheme.motionSpring,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? activeColor.withValues(alpha: 0.12)
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(20),
-                        border: isSelected
-                            ? Border.all(
-                                color: activeColor.withValues(alpha: 0.3),
-                                width: 0.8,
-                              )
-                            : null,
-                      ),
-                      child: Icon(displayIcon,
-                          color: color, size: isTablet(context) ? 24 : 22),
-                    ),
-                    // PERF: Badge is scoped to its own Selector so only the
-                    // badge rebuilds on download-count changes, not the whole
-                    // nav bar.
-                    if (index == 0)
-                      PositionedDirectional(
-                        top: -4,
-                        end: 4,
-                        child: Selector<DownloadProvider, int>(
-                          selector: (_, p) => p.downloadingTasksCount,
-                          builder: (_, count, __) {
-                            if (count <= 0) return const SizedBox.shrink();
-                            return Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 5,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? AppTheme.neonGreen
-                                    : AppTheme.lightNeonGreen,
-                                borderRadius: BorderRadius.circular(10),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: (isDark
-                                            ? AppTheme.neonGreen
-                                            : AppTheme.lightNeonGreen)
-                                        .withValues(alpha: 0.4),
-                                    blurRadius: 4,
-                                  ),
-                                ],
-                              ),
-                              child: Text(
-                                '$count',
-                                style: TextStyle(
-                                  color: isDark ? Colors.black : Colors.white,
-                                  fontSize: isTablet(context) ? 10 : 9,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            );
-                          },
+            focusColor: AppTheme.focusRingColor(isDark).withValues(alpha: 0.25),
+            borderRadius: BorderRadius.circular(DmxTokens.radiusLg),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      AnimatedContainer(
+                        duration: AppTheme.motionBase,
+                        curve: AppTheme.motionCurve,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 5,
                         ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? activeColor.withValues(
+                                  alpha: isDark ? 0.16 : 0.11)
+                              : Colors.transparent,
+                          borderRadius:
+                              BorderRadius.circular(DmxTokens.radiusFull),
+                        ),
+                        child: Icon(
+                          displayIcon,
                           color: color,
-                          fontSize: isTablet(context) ? 11.5 : 10.0,
-                          fontWeight:
-                              isSelected ? FontWeight.bold : FontWeight.w500,
-                          letterSpacing: 0.3,
+                          size: isTablet(context) ? 23 : 21,
                         ),
+                      ),
+                      if (index == 0)
+                        PositionedDirectional(
+                          top: -3,
+                          end: 4,
+                          child: _ActiveCountBadge(isDark: isDark),
+                        ),
+                    ],
                   ),
-                ),
-              ],
+                  const SizedBox(height: 3),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      style: TextStyle(
+                        fontFamily: AppTheme.fontDisplay,
+                        color: color,
+                        fontSize: isTablet(context) ? 11.5 : 10.5,
+                        fontWeight:
+                            isSelected ? FontWeight.w700 : FontWeight.w500,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -1146,7 +1092,6 @@ class _NavItem extends StatelessWidget {
   }
 }
 
-// FIX-4.3: Separate widget for badge to avoid rebuilding parent nav buttons
 class _ActiveCountBadge extends StatelessWidget {
   final bool isDark;
   const _ActiveCountBadge({required this.isDark});
@@ -1157,28 +1102,21 @@ class _ActiveCountBadge extends StatelessWidget {
       selector: (_, p) => p.downloadingTasksCount,
       builder: (_, count, __) {
         if (count <= 0) return const SizedBox.shrink();
+        final badgeBg = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
+        final badgeFg = AppTheme.inkOn(badgeBg);
         return Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 4,
-            vertical: 1,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
           decoration: BoxDecoration(
-            color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(
-                color: (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
-                    .withValues(alpha: 0.4),
-                blurRadius: 4,
-              ),
-            ],
+            color: badgeBg,
+            borderRadius: BorderRadius.circular(DmxTokens.radiusFull),
           ),
           child: Text(
             '$count',
             style: TextStyle(
-              color: isDark ? Colors.black : Colors.white,
-              fontSize: 9,
-              fontWeight: FontWeight.bold,
+              fontFamily: AppTheme.fontDisplay,
+              color: badgeFg,
+              fontSize: 9.5,
+              fontWeight: FontWeight.w700,
             ),
           ),
         );

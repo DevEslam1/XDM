@@ -1,9 +1,11 @@
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/app_theme.dart';
 import '../../../core/domain/torrent_models.dart';
+import '../../../shared/design/dmx_tokens.dart';
+import '../../../shared/widgets/dmx_bottom_sheet.dart';
 import '../../downloads/provider/download_provider.dart';
 import '../../settings/provider/settings_provider.dart';
 
@@ -16,10 +18,8 @@ class TorrentAdvancedSettingsSheet extends StatefulWidget {
   });
 
   static Future<void> show(BuildContext context, int torrentId) {
-    return showModalBottomSheet(
+    return showDmxModalBottomSheet<void>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
       builder: (ctx) => TorrentAdvancedSettingsSheet(torrentId: torrentId),
     );
   }
@@ -74,30 +74,33 @@ class _TorrentAdvancedSettingsSheetState
     super.dispose();
   }
 
+  void _showSnack(String message, {required bool isError}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isError
+        ? (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed)
+        : (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: bg,
+      ),
+    );
+  }
+
   Future<void> _addWebSeed(DownloadProvider provider) async {
     final url = _webSeedController.text.trim();
     if (url.isEmpty ||
         (!url.startsWith('http://') &&
             !url.startsWith('https://') &&
             !url.startsWith('ftp://'))) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a valid HTTP/HTTPS/FTP URL'),
-          backgroundColor: AppTheme.neonRed,
-        ),
-      );
+      _showSnack('Please enter a valid HTTP/HTTPS/FTP URL', isError: true);
       return;
     }
 
     provider.addWebSeed(url, widget.torrentId);
     _webSeedController.clear();
     setState(() {});
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Web seed added'),
-        backgroundColor: AppTheme.neonGreen,
-      ),
-    );
+    _showSnack('Web seed added', isError: false);
   }
 
   Future<void> _applyProxy(DownloadProvider provider) async {
@@ -105,12 +108,7 @@ class _TorrentAdvancedSettingsSheetState
     final port = int.tryParse(_proxyPortController.text.trim()) ?? 1080;
 
     if (_selectedProxyType != ProxyType.none && host.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a valid proxy host'),
-          backgroundColor: AppTheme.neonRed,
-        ),
-      );
+      _showSnack('Please enter a valid proxy host', isError: true);
       return;
     }
 
@@ -128,21 +126,11 @@ class _TorrentAdvancedSettingsSheetState
             : null,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Proxy settings applied successfully'),
-            backgroundColor: AppTheme.neonGreen,
-          ),
-        );
+        _showSnack('Proxy settings applied successfully', isError: false);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to apply proxy: $e'),
-            backgroundColor: AppTheme.neonRed,
-          ),
-        );
+        _showSnack('Failed to apply proxy: $e', isError: true);
       }
     } finally {
       if (mounted) setState(() => _isSavingProxy = false);
@@ -154,9 +142,9 @@ class _TorrentAdvancedSettingsSheetState
       type: FileType.custom,
       allowedExtensions: ['pem', 'crt', 'cer'],
     );
-    if (result != null && result.files.single.path != null) {
+    if (result.isNotEmpty && result.single.path != null) {
       setState(() {
-        _selectedCertPath = result.files.single.path;
+        _selectedCertPath = result.single.path;
       });
     }
   }
@@ -166,20 +154,18 @@ class _TorrentAdvancedSettingsSheetState
       type: FileType.custom,
       allowedExtensions: ['pem', 'key'],
     );
-    if (result != null && result.files.single.path != null) {
+    if (result.isNotEmpty && result.single.path != null) {
       setState(() {
-        _selectedKeyPath = result.files.single.path;
+        _selectedKeyPath = result.single.path;
       });
     }
   }
 
   Future<void> _applySsl(DownloadProvider provider) async {
     if (_selectedCertPath == null || _selectedKeyPath == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select both a certificate and a private key'),
-          backgroundColor: AppTheme.neonRed,
-        ),
+      _showSnack(
+        'Please select both a certificate and a private key',
+        isError: true,
       );
       return;
     }
@@ -191,25 +177,60 @@ class _TorrentAdvancedSettingsSheetState
         privateKeyPath: _selectedKeyPath!,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('SSL certificates applied successfully'),
-            backgroundColor: AppTheme.neonGreen,
-          ),
-        );
+        _showSnack('SSL certificates applied successfully', isError: false);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to apply SSL certificates: $e'),
-            backgroundColor: AppTheme.neonRed,
-          ),
-        );
+        _showSnack('Failed to apply SSL certificates: $e', isError: true);
       }
     } finally {
       if (mounted) setState(() => _isSavingSsl = false);
     }
+  }
+
+  InputDecoration _fieldDecoration({
+    required bool isDark,
+    required Color focusColor,
+    String? labelText,
+    String? hintText,
+    Widget? suffixIcon,
+  }) {
+    final borderClr = AppTheme.hairlineBorder(isDark);
+    final fillClr = AppTheme.surfaceColor(isDark, elevated: false);
+    final mutedClr = AppTheme.textMutedOf(isDark);
+    final secClr = AppTheme.textSecondaryOf(isDark);
+
+    return InputDecoration(
+      labelText: labelText,
+      labelStyle: TextStyle(
+        fontFamily: AppTheme.fontBody,
+        fontSize: 12,
+        color: secClr,
+      ),
+      hintText: hintText,
+      hintStyle: TextStyle(
+        fontFamily: AppTheme.fontBody,
+        fontSize: 12,
+        color: mutedClr.withValues(alpha: 0.7),
+      ),
+      filled: true,
+      fillColor: fillClr,
+      isDense: true,
+      suffixIcon: suffixIcon,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(DmxTokens.radiusMd),
+        borderSide: BorderSide(color: borderClr, width: 0.8),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(DmxTokens.radiusMd),
+        borderSide: BorderSide(color: borderClr, width: 0.8),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(DmxTokens.radiusMd),
+        borderSide: BorderSide(color: focusColor, width: 1.2),
+      ),
+    );
   }
 
   @override
@@ -221,567 +242,476 @@ class _TorrentAdvancedSettingsSheetState
       (p) => p.getWebSeeds(widget.torrentId),
     );
 
-    final bgClr = isDark ? const Color(0xFF1E222A) : Colors.white;
-    final textClr = isDark ? Colors.white : Colors.black87;
-    final mutedClr = isDark ? Colors.white70 : Colors.black54;
-    final cardBg = isDark
-        ? Colors.white.withValues(alpha: 0.05)
-        : Colors.black.withValues(alpha: 0.03);
-    final borderColor = isDark
-        ? Colors.white.withValues(alpha: 0.1)
-        : Colors.black.withValues(alpha: 0.08);
+    final blue = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    final cyan = isDark ? AppTheme.neonCyan : AppTheme.lightNeonCyan;
+    final amber = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
+    final green = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
+    final red = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
+    final textClr = AppTheme.textPrimaryOf(isDark);
+    final secClr = AppTheme.textSecondaryOf(isDark);
+    final mutedClr = AppTheme.textMutedOf(isDark);
+    final hairline = AppTheme.hairlineBorder(isDark);
+    final sheetSurface = AppTheme.sheetSurface(isDark);
 
-    return DraggableScrollableSheet(
-      initialChildSize: 0.85,
-      minChildSize: 0.5,
-      maxChildSize: 0.95,
-      builder: (ctx, scrollController) {
-        return Container(
-          decoration: BoxDecoration(
-            color: bgClr,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.3),
-                blurRadius: 20,
-                offset: const Offset(0, -4),
+    return DmxSheetContainer(
+      scrollable: false,
+      maxHeightFraction: 0.9,
+      isDark: isDark,
+      accentColor: blue,
+      padding: EdgeInsets.zero,
+      header: DmxSheetHeader(
+        title: 'Advanced Torrent Controls',
+        subtitle: 'Web seeds, proxy tunnel & SSL private trackers',
+        icon: Icons.tune_rounded,
+        accentColor: blue,
+        isDark: isDark,
+      ),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(
+          DmxTokens.sheetHorizontalPadding,
+          14,
+          DmxTokens.sheetHorizontalPadding,
+          24,
+        ),
+        children: [
+          // =================================================================
+          // SECTION A: Web Seeds (HTTP/FTP)
+          // =================================================================
+          DmxSheetSection(
+            title: 'Web Seeds (HTTP/FTP)',
+            accentColor: cyan,
+            isDark: isDark,
+            trailing: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: cyan.withValues(alpha: isDark ? 0.14 : 0.10),
+                borderRadius: BorderRadius.circular(DmxTokens.radiusFull),
               ),
-            ],
-          ),
-          child: Column(
-            children: [
-              // Handle bar
-              Center(
-                child: Container(
-                  margin: const EdgeInsets.only(top: 10, bottom: 6),
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: mutedClr.withValues(alpha: 0.4),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+              child: Text(
+                '${webSeeds.length}',
+                style: AppTheme.dataStyle(
+                  isDark: isDark,
+                  size: 11,
+                  color: cyan,
                 ),
               ),
-              // Header
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                child: Row(
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Add HTTP/FTP mirror URLs to accelerate download speed for this torrent.',
+                  style: TextStyle(
+                    fontFamily: AppTheme.fontBody,
+                    fontSize: 12,
+                    height: 1.4,
+                    color: secClr,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
                   children: [
-                    const Icon(Icons.tune, color: AppTheme.neonBlue, size: 22),
-                    const SizedBox(width: 10),
                     Expanded(
-                      child: Text(
-                        'Advanced Torrent Controls',
+                      child: TextField(
+                        controller: _webSeedController,
                         style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+                          fontFamily: AppTheme.fontBody,
+                          fontSize: 13,
                           color: textClr,
+                        ),
+                        decoration: _fieldDecoration(
+                          isDark: isDark,
+                          focusColor: cyan,
+                          hintText: 'https://example.com/file.iso',
                         ),
                       ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.close, size: 20),
-                      onPressed: () => Navigator.pop(context),
+                    const SizedBox(width: 8),
+                    FilledButton.icon(
+                      onPressed: () => _addWebSeed(provider),
+                      icon: const Icon(Icons.add_rounded, size: 17),
+                      label: const Text(
+                        'Add',
+                        style: TextStyle(
+                          fontFamily: AppTheme.fontDisplay,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                        ),
+                      ),
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size(0, 44),
+                        backgroundColor: cyan,
+                        foregroundColor: AppTheme.inkOn(cyan),
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.circular(DmxTokens.radiusMd),
+                        ),
+                      ),
                     ),
                   ],
                 ),
-              ),
-              const Divider(height: 1),
-              // Scrollable Content
-              Expanded(
-                child: ListView(
-                  controller: scrollController,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  children: [
-                    // =========================================================
-                    // SECTION A: Web Seeds (HTTP/FTP)
-                    // =========================================================
-                    _buildSectionHeader(
-                      icon: Icons.cloud_download_outlined,
-                      title: 'Web Seeds (HTTP/FTP)',
-                      color: AppTheme.neonCyan,
-                      textClr: textClr,
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: cardBg,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: borderColor),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Add HTTP/FTP mirror URLs to accelerate download speed for this torrent.',
-                            style: TextStyle(fontSize: 12, color: mutedClr),
-                          ),
-                          const SizedBox(height: 10),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: TextField(
-                                  controller: _webSeedController,
-                                  style:
-                                      TextStyle(fontSize: 13, color: textClr),
-                                  decoration: InputDecoration(
-                                    hintText: 'https://example.com/file.iso',
-                                    hintStyle: TextStyle(
-                                      fontSize: 12,
-                                      color: mutedClr.withValues(alpha: 0.6),
-                                    ),
-                                    isDense: true,
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 10,
-                                    ),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide:
-                                          BorderSide(color: borderColor),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              ElevatedButton.icon(
-                                onPressed: () => _addWebSeed(provider),
-                                icon: const Icon(Icons.add, size: 16),
-                                label: const Text('Add'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor:
-                                      AppTheme.neonCyan.withValues(alpha: 0.2),
-                                  foregroundColor: AppTheme.neonCyan,
-                                  elevation: 0,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 14,
-                                    vertical: 10,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                    side: BorderSide(
-                                      color: AppTheme.neonCyan
-                                          .withValues(alpha: 0.5),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Attached Web Seeds (${webSeeds.length})',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: textClr,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          if (webSeeds.isEmpty)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              child: Text(
-                                'No web seeds currently attached to this torrent.',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontStyle: FontStyle.italic,
-                                  color: mutedClr,
-                                ),
-                              ),
-                            )
-                          else
-                            ListView.separated(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              itemCount: webSeeds.length,
-                              separatorBuilder: (_, __) =>
-                                  const Divider(height: 1),
-                              itemBuilder: (ctx, idx) {
-                                final seed = webSeeds[idx];
-                                return ListTile(
-                                  dense: true,
-                                  contentPadding: EdgeInsets.zero,
-                                  leading: const Icon(
-                                    Icons.link,
-                                    size: 18,
-                                    color: AppTheme.neonCyan,
-                                  ),
-                                  title: Text(
-                                    seed,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: textClr,
-                                    ),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  trailing: IconButton(
-                                    icon: const Icon(
-                                      Icons.delete_outline,
-                                      size: 18,
-                                      color: AppTheme.neonRed,
-                                    ),
-                                    onPressed: () {
-                                      provider.removeWebSeed(
-                                        seed,
-                                        widget.torrentId,
-                                      );
-                                      setState(() {});
-                                    },
-                                  ),
-                                );
-                              },
-                            ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    // =========================================================
-                    // SECTION B: Proxy Configuration (Session-level)
-                    // =========================================================
-                    _buildSectionHeader(
-                      icon: Icons.shield_outlined,
-                      title: 'Proxy Configuration (Session-level)',
-                      color: AppTheme.neonAmber,
-                      textClr: textClr,
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: cardBg,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: borderColor),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Configure a proxy tunnel for all torrent peer traffic and tracker announces.',
-                            style: TextStyle(fontSize: 12, color: mutedClr),
-                          ),
-                          const SizedBox(height: 12),
-                          // Proxy Type Dropdown
-                          DropdownButtonFormField<ProxyType>(
-                            initialValue: _selectedProxyType,
-                            dropdownColor: bgClr,
-                            style: TextStyle(fontSize: 13, color: textClr),
-                            decoration: InputDecoration(
-                              labelText: 'Proxy Protocol',
-                              isDense: true,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            items: ProxyType.values.map((type) {
-                              return DropdownMenuItem<ProxyType>(
-                                value: type,
-                                child: Text(type.displayName),
-                              );
-                            }).toList(),
-                            onChanged: (val) {
-                              if (val != null) {
-                                setState(() => _selectedProxyType = val);
-                              }
-                            },
-                          ),
-                          if (_selectedProxyType != ProxyType.none) ...[
-                            const SizedBox(height: 10),
-                            Row(
-                              children: [
-                                Expanded(
-                                  flex: 3,
-                                  child: TextField(
-                                    controller: _proxyHostController,
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: textClr,
-                                    ),
-                                    decoration: InputDecoration(
-                                      labelText: 'Host / IP',
-                                      hintText: '127.0.0.1',
-                                      isDense: true,
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  flex: 2,
-                                  child: TextField(
-                                    controller: _proxyPortController,
-                                    keyboardType: TextInputType.number,
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: textClr,
-                                    ),
-                                    decoration: InputDecoration(
-                                      labelText: 'Port',
-                                      hintText: '1080',
-                                      isDense: true,
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: TextField(
-                                    controller: _proxyUserController,
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: textClr,
-                                    ),
-                                    decoration: InputDecoration(
-                                      labelText: 'Username (optional)',
-                                      isDense: true,
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: TextField(
-                                    controller: _proxyPassController,
-                                    obscureText: _obscurePassword,
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: textClr,
-                                    ),
-                                    decoration: InputDecoration(
-                                      labelText: 'Password (optional)',
-                                      isDense: true,
-                                      suffixIcon: IconButton(
-                                        icon: Icon(
-                                          _obscurePassword
-                                              ? Icons.visibility
-                                              : Icons.visibility_off,
-                                          size: 18,
-                                        ),
-                                        onPressed: () {
-                                          setState(() {
-                                            _obscurePassword =
-                                                !_obscurePassword;
-                                          });
-                                        },
-                                      ),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                          const SizedBox(height: 14),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed: _isSavingProxy
-                                  ? null
-                                  : () => _applyProxy(provider),
-                              icon: _isSavingProxy
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Icon(Icons.check, size: 18),
-                              label: const Text('Apply Proxy Settings'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor:
-                                    AppTheme.neonAmber.withValues(alpha: 0.2),
-                                foregroundColor: AppTheme.neonAmber,
-                                elevation: 0,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  side: BorderSide(
-                                    color: AppTheme.neonAmber
-                                        .withValues(alpha: 0.5),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    // =========================================================
-                    // SECTION C: SSL / Private Trackers (Session-level)
-                    // =========================================================
-                    _buildSectionHeader(
-                      icon: Icons.lock_outline,
-                      title: 'SSL / Private Trackers (Session-level)',
-                      color: AppTheme.neonGreen,
-                      textClr: textClr,
-                      trailing: settings.isSslActive
-                          ? Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color:
-                                    AppTheme.neonGreen.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color:
-                                      AppTheme.neonGreen.withValues(alpha: 0.4),
-                                ),
-                              ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.check_circle,
-                                    size: 14,
-                                    color: AppTheme.neonGreen,
-                                  ),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    'SSL Active',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppTheme.neonGreen,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            )
-                          : null,
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: cardBg,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: borderColor),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Attach client certificates for SSL/TLS encrypted private trackers and secure swarms.',
-                            style: TextStyle(fontSize: 12, color: mutedClr),
-                          ),
-                          const SizedBox(height: 12),
-                          // Certificate Picker
-                          _buildFilePickerRow(
-                            label: 'Certificate (.pem / .crt)',
-                            filePath: _selectedCertPath,
-                            icon: Icons.verified_user_outlined,
-                            onPick: _pickCertFile,
-                            onClear: () =>
-                                setState(() => _selectedCertPath = null),
-                            textClr: textClr,
-                            mutedClr: mutedClr,
-                            borderColor: borderColor,
-                          ),
-                          const SizedBox(height: 10),
-                          // Key Picker
-                          _buildFilePickerRow(
-                            label: 'Private Key (.pem / .key)',
-                            filePath: _selectedKeyPath,
-                            icon: Icons.key_outlined,
-                            onPick: _pickKeyFile,
-                            onClear: () =>
-                                setState(() => _selectedKeyPath = null),
-                            textClr: textClr,
-                            mutedClr: mutedClr,
-                            borderColor: borderColor,
-                          ),
-                          const SizedBox(height: 14),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed: _isSavingSsl
-                                  ? null
-                                  : () => _applySsl(provider),
-                              icon: _isSavingSsl
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Icon(Icons.security, size: 18),
-                              label: const Text('Apply SSL Certificates'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor:
-                                    AppTheme.neonGreen.withValues(alpha: 0.2),
-                                foregroundColor: AppTheme.neonGreen,
-                                elevation: 0,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  side: BorderSide(
-                                    color: AppTheme.neonGreen
-                                        .withValues(alpha: 0.5),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 30),
-                  ],
+                const SizedBox(height: 12),
+                Text(
+                  'Attached Web Seeds (${webSeeds.length})',
+                  style: TextStyle(
+                    fontFamily: AppTheme.fontDisplay,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: textClr,
+                  ),
                 ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildSectionHeader({
-    required IconData icon,
-    required String title,
-    required Color color,
-    required Color textClr,
-    Widget? trailing,
-  }) {
-    return Row(
-      children: [
-        Icon(icon, size: 18, color: color),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            title,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: textClr,
+                const SizedBox(height: 6),
+                if (webSeeds.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Text(
+                      'No web seeds currently attached to this torrent.',
+                      style: TextStyle(
+                        fontFamily: AppTheme.fontBody,
+                        fontSize: 12,
+                        fontStyle: FontStyle.italic,
+                        color: mutedClr,
+                      ),
+                    ),
+                  )
+                else
+                  ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: webSeeds.length,
+                    separatorBuilder: (_, __) =>
+                        Divider(height: 1, thickness: 0.8, color: hairline),
+                    itemBuilder: (ctx, idx) {
+                      final seed = webSeeds[idx];
+                      return ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(
+                          Icons.link_rounded,
+                          size: 18,
+                          color: cyan,
+                        ),
+                        title: Text(
+                          seed,
+                          style: TextStyle(
+                            fontFamily: AppTheme.fontBody,
+                            fontSize: 12,
+                            color: textClr,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: IconButton(
+                          icon: Icon(
+                            Icons.delete_outline_rounded,
+                            size: 18,
+                            color: red,
+                          ),
+                          onPressed: () {
+                            provider.removeWebSeed(seed, widget.torrentId);
+                            setState(() {});
+                          },
+                        ),
+                      );
+                    },
+                  ),
+              ],
             ),
           ),
-        ),
-        if (trailing != null) trailing,
-      ],
+
+          const SizedBox(height: 16),
+
+          // =================================================================
+          // SECTION B: Proxy Configuration (Session-level)
+          // =================================================================
+          DmxSheetSection(
+            title: 'Proxy Configuration (Session-level)',
+            accentColor: amber,
+            isDark: isDark,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Configure a proxy tunnel for all torrent peer traffic and tracker announces.',
+                  style: TextStyle(
+                    fontFamily: AppTheme.fontBody,
+                    fontSize: 12,
+                    height: 1.4,
+                    color: secClr,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<ProxyType>(
+                  initialValue: _selectedProxyType,
+                  dropdownColor: sheetSurface,
+                  style: TextStyle(
+                    fontFamily: AppTheme.fontBody,
+                    fontSize: 13,
+                    color: textClr,
+                  ),
+                  decoration: _fieldDecoration(
+                    isDark: isDark,
+                    focusColor: amber,
+                    labelText: 'Proxy Protocol',
+                  ),
+                  items: ProxyType.values.map((type) {
+                    return DropdownMenuItem<ProxyType>(
+                      value: type,
+                      child: Text(type.displayName),
+                    );
+                  }).toList(),
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() => _selectedProxyType = val);
+                    }
+                  },
+                ),
+                if (_selectedProxyType != ProxyType.none) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: TextField(
+                          controller: _proxyHostController,
+                          style: TextStyle(
+                            fontFamily: AppTheme.fontBody,
+                            fontSize: 13,
+                            color: textClr,
+                          ),
+                          decoration: _fieldDecoration(
+                            isDark: isDark,
+                            focusColor: amber,
+                            labelText: 'Host / IP',
+                            hintText: '127.0.0.1',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 2,
+                        child: TextField(
+                          controller: _proxyPortController,
+                          keyboardType: TextInputType.number,
+                          style: TextStyle(
+                            fontFamily: AppTheme.fontBody,
+                            fontSize: 13,
+                            color: textClr,
+                          ),
+                          decoration: _fieldDecoration(
+                            isDark: isDark,
+                            focusColor: amber,
+                            labelText: 'Port',
+                            hintText: '1080',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _proxyUserController,
+                          style: TextStyle(
+                            fontFamily: AppTheme.fontBody,
+                            fontSize: 13,
+                            color: textClr,
+                          ),
+                          decoration: _fieldDecoration(
+                            isDark: isDark,
+                            focusColor: amber,
+                            labelText: 'Username (optional)',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: _proxyPassController,
+                          obscureText: _obscurePassword,
+                          style: TextStyle(
+                            fontFamily: AppTheme.fontBody,
+                            fontSize: 13,
+                            color: textClr,
+                          ),
+                          decoration: _fieldDecoration(
+                            isDark: isDark,
+                            focusColor: amber,
+                            labelText: 'Password (optional)',
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscurePassword
+                                    ? Icons.visibility_rounded
+                                    : Icons.visibility_off_rounded,
+                                size: 18,
+                                color: mutedClr,
+                              ),
+                              onPressed: () => setState(
+                                () => _obscurePassword = !_obscurePassword,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed:
+                        _isSavingProxy ? null : () => _applyProxy(provider),
+                    icon: _isSavingProxy
+                        ? SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppTheme.inkOn(amber),
+                            ),
+                          )
+                        : const Icon(Icons.check_rounded, size: 18),
+                    label: const Text(
+                      'Apply Proxy Settings',
+                      style: TextStyle(
+                        fontFamily: AppTheme.fontDisplay,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
+                    ),
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(0, 46),
+                      backgroundColor: amber,
+                      foregroundColor: AppTheme.inkOn(amber),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(DmxTokens.radiusMd),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // =================================================================
+          // SECTION C: SSL / Private Trackers (Session-level)
+          // =================================================================
+          DmxSheetSection(
+            title: 'SSL / Private Trackers (Session-level)',
+            accentColor: green,
+            isDark: isDark,
+            trailing: settings.isSslActive
+                ? Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: green.withValues(alpha: isDark ? 0.16 : 0.12),
+                      borderRadius: BorderRadius.circular(DmxTokens.radiusFull),
+                      border: Border.all(
+                        color: green.withValues(alpha: 0.35),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.check_circle_rounded,
+                            size: 12, color: green),
+                        const SizedBox(width: 4),
+                        Text(
+                          'SSL Active',
+                          style: TextStyle(
+                            fontFamily: AppTheme.fontDisplay,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: green,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : null,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Attach client certificates for SSL/TLS encrypted private trackers and secure swarms.',
+                  style: TextStyle(
+                    fontFamily: AppTheme.fontBody,
+                    fontSize: 12,
+                    height: 1.4,
+                    color: secClr,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _buildFilePickerRow(
+                  label: 'Certificate (.pem / .crt)',
+                  filePath: _selectedCertPath,
+                  icon: Icons.verified_user_outlined,
+                  onPick: _pickCertFile,
+                  onClear: () => setState(() => _selectedCertPath = null),
+                  isDark: isDark,
+                  accent: blue,
+                ),
+                const SizedBox(height: 10),
+                _buildFilePickerRow(
+                  label: 'Private Key (.pem / .key)',
+                  filePath: _selectedKeyPath,
+                  icon: Icons.key_outlined,
+                  onPick: _pickKeyFile,
+                  onClear: () => setState(() => _selectedKeyPath = null),
+                  isDark: isDark,
+                  accent: blue,
+                ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _isSavingSsl ? null : () => _applySsl(provider),
+                    icon: _isSavingSsl
+                        ? SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppTheme.inkOn(green),
+                            ),
+                          )
+                        : const Icon(Icons.security_rounded, size: 18),
+                    label: const Text(
+                      'Apply SSL Certificates',
+                      style: TextStyle(
+                        fontFamily: AppTheme.fontDisplay,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
+                    ),
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(0, 46),
+                      backgroundColor: green,
+                      foregroundColor: AppTheme.inkOn(green),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(DmxTokens.radiusMd),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -791,19 +721,24 @@ class _TorrentAdvancedSettingsSheetState
     required IconData icon,
     required VoidCallback onPick,
     required VoidCallback onClear,
-    required Color textClr,
-    required Color mutedClr,
-    required Color borderColor,
+    required bool isDark,
+    required Color accent,
   }) {
+    final textClr = AppTheme.textPrimaryOf(isDark);
+    final mutedClr = AppTheme.textMutedOf(isDark);
+    final hairline = AppTheme.hairlineBorder(isDark);
+    final hasFile = filePath != null && filePath.isNotEmpty;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: borderColor),
+        color: AppTheme.surfaceColor(isDark, elevated: false),
+        borderRadius: BorderRadius.circular(DmxTokens.radiusMd),
+        border: Border.all(color: hairline, width: 0.8),
       ),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: AppTheme.neonBlue),
+          Icon(icon, size: 18, color: accent),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -811,19 +746,22 @@ class _TorrentAdvancedSettingsSheetState
               children: [
                 Text(
                   label,
-                  style: TextStyle(fontSize: 11, color: mutedClr),
+                  style: TextStyle(
+                    fontFamily: AppTheme.fontBody,
+                    fontSize: 11,
+                    color: mutedClr,
+                  ),
                 ),
+                const SizedBox(height: 1),
                 Text(
-                  filePath != null && filePath.isNotEmpty
+                  hasFile
                       ? filePath.split(RegExp(r'[\\/]')).last
                       : 'None selected',
                   style: TextStyle(
-                    fontSize: 12,
-                    fontWeight:
-                        filePath != null ? FontWeight.w600 : FontWeight.normal,
-                    color: filePath != null
-                        ? textClr
-                        : mutedClr.withValues(alpha: 0.6),
+                    fontFamily: AppTheme.fontBody,
+                    fontSize: 12.5,
+                    fontWeight: hasFile ? FontWeight.w600 : FontWeight.normal,
+                    color: hasFile ? textClr : mutedClr,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -831,22 +769,35 @@ class _TorrentAdvancedSettingsSheetState
               ],
             ),
           ),
-          if (filePath != null && filePath.isNotEmpty)
+          if (hasFile)
             IconButton(
-              icon: const Icon(Icons.clear, size: 16),
+              icon: Icon(Icons.close_rounded, size: 16, color: mutedClr),
               onPressed: onClear,
-              constraints: const BoxConstraints(),
-              padding: const EdgeInsets.all(4),
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              padding: EdgeInsets.zero,
             ),
           const SizedBox(width: 4),
           OutlinedButton(
             onPressed: onPick,
             style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              foregroundColor: accent,
+              side:
+                  BorderSide(color: accent.withValues(alpha: 0.45), width: 0.8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(DmxTokens.radiusSm),
+              ),
             ),
-            child: const Text('Browse', style: TextStyle(fontSize: 11)),
+            child: const Text(
+              'Browse',
+              style: TextStyle(
+                fontFamily: AppTheme.fontDisplay,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),

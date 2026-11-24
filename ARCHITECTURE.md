@@ -16,7 +16,7 @@
 ```
 
 ### Layer Constraints (Non-Negotiable)
-1. **Domain Layer**: Must be pure Dart. Zero imports from `flutter/material.dart`, `flutter_inappwebview`, or other UI/platform packages.
+1. **Domain Layer**: Must be pure Dart. Zero imports from `material_ui/material_ui.dart`, `flutter_inappwebview`, or other UI/platform packages.
 2. **Provider Layer**: Orchestrates domain business logic and exposes reactive state via ChangeNotifier. Must never leak direct database handles to presentation widgets.
 3. **Presentation Layer**: Exclusively handles layout rendering and user interaction. All actions dispatch through Providers.
 4. **Data Layer**: Implements ports defined in the domain layer and handles data serialization/deserialization.

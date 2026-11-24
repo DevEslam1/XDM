@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../core/domain/subscription/subscription_plan.dart';
 import '../../../core/domain/subscription/subscription_status.dart';

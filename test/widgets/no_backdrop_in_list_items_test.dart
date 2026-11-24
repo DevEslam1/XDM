@@ -7,9 +7,9 @@ import 'package:dmx/features/downloads/widgets/download_card.dart';
 import 'package:dmx/features/downloads/widgets/filter_chips_bar.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
 import 'package:dmx/shared/widgets/dmx_backdrop_filter.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

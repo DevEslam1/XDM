@@ -2,8 +2,8 @@ import 'package:battery_plus/battery_plus.dart';
 import 'package:dmx/core/services/background_gate.dart';
 import 'package:dmx/core/services/power_monitor.dart';
 import 'package:dmx/shared/widgets/glass_card.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

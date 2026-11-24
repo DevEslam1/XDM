@@ -260,6 +260,42 @@ class SsrfGuard {
       return _isBlockedIpv4([b[12], b[13], b[14], b[15]],
           allowPrivate: allowPrivate);
     }
+    // Deprecated IPv4-compatible IPv6 (::a.b.c.d, excluding ::1 loopback handled elsewhere).
+    if (prefixZero && b[10] == 0x00 && b[11] == 0x00) {
+      final isLoopback = b[12] == 0 && b[13] == 0 && b[14] == 0 && b[15] == 1;
+      if (!isLoopback &&
+          _isBlockedIpv4([b[12], b[13], b[14], b[15]],
+              allowPrivate: allowPrivate)) {
+        return true;
+      }
+    }
+    // NAT64 well-known prefix (64:ff9b::/96) — validate embedded IPv4 in bytes 12..15.
+    if (b[0] == 0x00 &&
+        b[1] == 0x64 &&
+        b[2] == 0xFF &&
+        b[3] == 0x9B &&
+        b[4] == 0 &&
+        b[5] == 0 &&
+        b[6] == 0 &&
+        b[7] == 0 &&
+        b[8] == 0 &&
+        b[9] == 0 &&
+        b[10] == 0 &&
+        b[11] == 0) {
+      return _isBlockedIpv4([b[12], b[13], b[14], b[15]],
+          allowPrivate: allowPrivate);
+    }
+    // 6to4 (2002::/16) — embedded IPv4 in bytes 2..5.
+    if (b[0] == 0x20 && b[1] == 0x02) {
+      return _isBlockedIpv4([b[2], b[3], b[4], b[5]],
+          allowPrivate: allowPrivate);
+    }
+    // Teredo (2001:0000::/32) — obfuscated IPv4 client in bytes 12..15 (XOR 0xFF).
+    if (b[0] == 0x20 && b[1] == 0x01 && b[2] == 0x00 && b[3] == 0x00) {
+      return _isBlockedIpv4(
+          [b[12] ^ 0xFF, b[13] ^ 0xFF, b[14] ^ 0xFF, b[15] ^ 0xFF],
+          allowPrivate: allowPrivate);
+    }
     if (allowPrivate) return false;
     // fc00::/7 unique-local (first 7 bits 1111 110x).
     if ((b[0] & 0xFE) == 0xFC) return true;

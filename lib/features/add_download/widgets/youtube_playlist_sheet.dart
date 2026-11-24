@@ -1,5 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
@@ -9,7 +9,8 @@ import '../../../core/services/youtube_service.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
-import '../../../shared/widgets/neon_glow_button.dart';
+import '../../../shared/design/dmx_tokens.dart';
+import '../../../shared/widgets/dmx_bottom_sheet.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
 import '../../downloads/models/download_task.dart';
 import '../../downloads/provider/download_provider.dart';
@@ -39,14 +40,8 @@ class YoutubePlaylistSheet extends StatefulWidget {
     try {
       final settings = Provider.of<SettingsProvider>(context, listen: false);
       runHaptic(settings);
-      return await showModalBottomSheet<PlaylistDownloadResult>(
+      return await showDmxModalBottomSheet<PlaylistDownloadResult>(
         context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        barrierColor: Colors.black.withValues(alpha: 0.1),
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        ),
         builder: (_) => YoutubePlaylistSheet(playlistUrl: playlistUrl),
       );
     } finally {
@@ -59,6 +54,7 @@ class YoutubePlaylistSheet extends StatefulWidget {
 }
 
 class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
+  final TextEditingController _searchController = TextEditingController();
   Map<String, dynamic>? _playlistInfo;
   List<Map<String, dynamic>> _videos = [];
   bool _isLoading = true;
@@ -101,10 +97,17 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
     {'value': 'best_muxed', 'label': 'Best Compatible (.mp4)'},
     {'value': 'audio_only', 'label': 'Audio Only'},
   ];
+
   @override
   void initState() {
     super.initState();
     _fetchPlaylist();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadMoreVideos() async {
@@ -135,7 +138,6 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
       setState(() => _isLoadingMore = false);
       final isDark = context.read<SettingsProvider>().isDarkMode;
       if (!mounted) return;
-      // Surface the failure so the user can retry by scrolling again.
       ThemedSnackbar.show(
         context,
         message: L10n.isRtl(context)
@@ -195,6 +197,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
 
   int get _selectedCount =>
       _filteredVideos.where((v) => v['selected'] == true).length;
+
   void _toggleAll(bool selected) {
     setState(() {
       for (int i = 0; i < _filteredVideos.length; i++) {
@@ -205,6 +208,19 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
       }
       _filterCacheDirty = true;
     });
+  }
+
+  void _toggleVideo(Map<String, dynamic> video, bool newVal) {
+    final originalIndex = _videos.indexOf(video);
+    if (originalIndex != -1) {
+      setState(() {
+        _videos[originalIndex] = {
+          ...video,
+          'selected': newVal,
+        };
+        _filterCacheDirty = true;
+      });
+    }
   }
 
   Future<void> _startBatchDownload() async {
@@ -306,779 +322,756 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
     final isDark = settings.isDarkMode;
+    final isAmoled = settings.isAmoledMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-    final secClr =
-        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
-    final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+    final amber = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
     final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
-    final glassBorder =
-        isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.85,
-      maxChildSize: 0.95,
-      minChildSize: 0.5,
-      builder: (context, scrollController) {
-        return ClipRRect(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-          child: Container(
-            decoration: BoxDecoration(
-              color: isDark ? AppTheme.surface : AppTheme.lightSurface,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(28),
-              ),
-              border: Border(top: BorderSide(color: glassBorder, width: 0.8)),
+    final textClr = AppTheme.textPrimaryOf(isDark);
+    final secClr = AppTheme.textSecondaryOf(isDark);
+    final mutedClr = AppTheme.textMutedOf(isDark);
+    final hairline = AppTheme.hairlineBorder(isDark, isAmoled: isAmoled);
+    final panelBg = AppTheme.panelBg(isDark, isAmoled: isAmoled);
+    final showFooter = !_isLoading && _errorMessage == null;
+
+    return DmxSheetContainer(
+      scrollable: false,
+      maxHeightFraction: 0.92,
+      isDark: isDark,
+      isAmoled: isAmoled,
+      accentColor: redClr,
+      padding: EdgeInsets.zero,
+      header: DmxSheetHeader(
+        title: L10n.of(context, 'yt_playlist'),
+        subtitle: _playlistInfo?['title'] as String?,
+        icon: Icons.playlist_play_rounded,
+        accentColor: redClr,
+        isDark: isDark,
+      ),
+      footer: showFooter
+          ? _buildStickyFooter(
+              context: context,
+              isDark: isDark,
+              isAmoled: isAmoled,
+              accent: accent,
+              amber: amber,
+              textClr: textClr,
+              secClr: secClr,
+              mutedClr: mutedClr,
+              hairline: hairline,
+              panelBg: panelBg,
+            )
+          : null,
+      child: Column(
+        children: [
+          // Legal warning banner
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              DmxTokens.sheetHorizontalPadding,
+              10,
+              DmxTokens.sheetHorizontalPadding,
+              6,
             ),
-            child: Column(
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    margin: const EdgeInsets.only(top: 12, bottom: 8),
-                    decoration: BoxDecoration(
-                      color: mutedClr.withValues(alpha: 0.4),
-                      borderRadius: BorderRadius.circular(2),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: amber.withValues(alpha: isDark ? 0.10 : 0.08),
+                borderRadius: BorderRadius.circular(DmxTokens.radiusSm),
+                border: Border.all(
+                  color: amber.withValues(alpha: 0.28),
+                  width: 0.8,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.gavel_rounded, size: 14, color: amber),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      L10n.of(context, 'yt_legal_warning'),
+                      style: TextStyle(
+                        fontFamily: AppTheme.fontBody,
+                        color: secClr,
+                        fontSize: 11,
+                        height: 1.35,
+                      ),
                     ),
                   ),
+                ],
+              ),
+            ),
+          ),
+
+          if (_isLoading)
+            Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: accent,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      L10n.of(context, 'loading_playlist'),
+                      style: TextStyle(
+                        fontFamily: AppTheme.fontBody,
+                        fontSize: 12.5,
+                        color: secClr,
+                      ),
+                    ),
+                  ],
                 ),
-                Padding(
+              ),
+            )
+          else if (_errorMessage != null)
+            Expanded(
+              child: Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(28),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 52,
+                        height: 52,
+                        decoration: BoxDecoration(
+                          color: redClr.withValues(alpha: 0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.error_outline_rounded,
+                          color: redClr,
+                          size: 28,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        _errorMessage!,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontFamily: AppTheme.fontBody,
+                          color: secClr,
+                          fontSize: 12.5,
+                          height: 1.45,
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      FilledButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            _isLoading = true;
+                            _errorMessage = null;
+                            _videos = [];
+                            _playlistInfo = null;
+                            _filterCacheDirty = true;
+                          });
+                          _fetchPlaylist();
+                        },
+                        icon: const Icon(Icons.refresh_rounded, size: 17),
+                        label: Text(
+                          L10n.of(context, 'retry_btn'),
+                          style: const TextStyle(
+                            fontFamily: AppTheme.fontDisplay,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.6,
+                          ),
+                        ),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: accent,
+                          foregroundColor: AppTheme.inkOn(accent),
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(DmxTokens.radiusMd),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            )
+          else ...[
+            if (_note != null && _note!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  DmxTokens.sheetHorizontalPadding,
+                  2,
+                  DmxTokens.sheetHorizontalPadding,
+                  4,
+                ),
+                child: Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
+                    horizontal: 12,
                     vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: amber.withValues(alpha: isDark ? 0.14 : 0.10),
+                    borderRadius: BorderRadius.circular(DmxTokens.radiusSm),
+                    border: Border.all(
+                      color: amber.withValues(alpha: 0.35),
+                      width: 0.8,
+                    ),
                   ),
                   child: Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.red.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: const Icon(
-                          Icons.playlist_play_rounded,
-                          color: Colors.red,
-                          size: 22,
+                      Icon(Icons.info_outline_rounded, size: 16, color: amber),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _note!,
+                          style: TextStyle(
+                            fontFamily: AppTheme.fontBody,
+                            fontSize: 12,
+                            color: amber,
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              L10n.of(context, 'yt_playlist'),
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
-                                  ?.copyWith(
+                    ],
+                  ),
+                ),
+              ),
+
+            // Playlist metadata & Select All bar
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                DmxTokens.sheetHorizontalPadding,
+                4,
+                14,
+                4,
+              ),
+              child: Row(
+                children: [
+                  if (_playlistInfo?['author'] != null) ...[
+                    Icon(Icons.person_outline_rounded,
+                        size: 14, color: mutedClr),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        _playlistInfo!['author'] as String,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: AppTheme.fontBody,
+                          color: mutedClr,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                  ],
+                  Icon(
+                    Icons.video_library_outlined,
+                    size: 14,
+                    color: mutedClr,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${_filteredVideos.length}${_searchQuery.isNotEmpty ? ' / ${_videos.length}' : ''} videos',
+                    style: AppTheme.dataStyle(
+                      isDark: isDark,
+                      size: 11,
+                      color: mutedClr,
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: () {
+                      runHaptic(settings);
+                      _toggleAll(_selectedCount < _filteredVideos.length);
+                    },
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    icon: Icon(
+                      _selectedCount == _filteredVideos.length &&
+                              _filteredVideos.isNotEmpty
+                          ? Icons.deselect_rounded
+                          : Icons.select_all_rounded,
+                      size: 15,
+                      color: accent,
+                    ),
+                    label: Text(
+                      _selectedCount == _filteredVideos.length &&
+                              _filteredVideos.isNotEmpty
+                          ? L10n.of(context, 'deselect_all')
+                          : L10n.of(context, 'select_all'),
+                      style: TextStyle(
+                        fontFamily: AppTheme.fontDisplay,
+                        color: accent,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Search bar
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                DmxTokens.sheetHorizontalPadding,
+                4,
+                DmxTokens.sheetHorizontalPadding,
+                10,
+              ),
+              child: TextField(
+                controller: _searchController,
+                onChanged: (val) => setState(() {
+                  _searchQuery = val;
+                  _filterCacheDirty = true;
+                }),
+                decoration: InputDecoration(
+                  hintText: L10n.of(context, 'search_videos'),
+                  hintStyle: TextStyle(
+                    fontFamily: AppTheme.fontBody,
+                    color: mutedClr,
+                    fontSize: 13,
+                  ),
+                  prefixIcon: Icon(
+                    Icons.search_rounded,
+                    size: 18,
+                    color: mutedClr,
+                  ),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: Icon(Icons.clear, size: 17, color: mutedClr),
+                          onPressed: () => setState(() {
+                            _searchController.clear();
+                            _searchQuery = '';
+                            _filterCacheDirty = true;
+                          }),
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: panelBg,
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(DmxTokens.radiusMd),
+                    borderSide: BorderSide(color: hairline, width: 0.8),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(DmxTokens.radiusMd),
+                    borderSide: BorderSide(color: hairline, width: 0.8),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(DmxTokens.radiusMd),
+                    borderSide: BorderSide(color: accent, width: 1.2),
+                  ),
+                ),
+                style: TextStyle(
+                  fontFamily: AppTheme.fontBody,
+                  color: textClr,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+
+            Divider(height: 1, thickness: 0.8, color: hairline),
+
+            // Video list
+            Expanded(
+              child: NotificationListener<ScrollNotification>(
+                onNotification: (ScrollNotification scrollInfo) {
+                  if (scrollInfo.metrics.pixels >=
+                      scrollInfo.metrics.maxScrollExtent - 200) {
+                    _loadMoreVideos();
+                  }
+                  return false;
+                },
+                child: ListView.builder(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(
+                    DmxTokens.sheetHorizontalPadding,
+                    10,
+                    DmxTokens.sheetHorizontalPadding,
+                    12,
+                  ),
+                  itemCount: _filteredVideos.length +
+                      (_hasMoreVideos && _searchQuery.isEmpty ? 1 : 0),
+                  itemBuilder: (context, index) {
+                    if (index == _filteredVideos.length) {
+                      return _isLoadingMore
+                          ? Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Center(
+                                child: SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
                                     color: accent,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 1.0,
-                                    fontSize: 14,
                                   ),
-                            ),
-                            if (_playlistInfo != null)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 4),
+                                ),
+                              ),
+                            )
+                          : const SizedBox.shrink();
+                    }
+                    final video = _filteredVideos[index];
+                    return _buildVideoRow(
+                      video: video,
+                      index: index,
+                      isDark: isDark,
+                      isAmoled: isAmoled,
+                      accent: accent,
+                      textClr: textClr,
+                      secClr: secClr,
+                      mutedClr: mutedClr,
+                      hairline: hairline,
+                      panelBg: panelBg,
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVideoRow({
+    required Map<String, dynamic> video,
+    required int index,
+    required bool isDark,
+    required bool isAmoled,
+    required Color accent,
+    required Color textClr,
+    required Color secClr,
+    required Color mutedClr,
+    required Color hairline,
+    required Color panelBg,
+  }) {
+    final isSelected = video['selected'] as bool? ?? true;
+    final title = video['title'] as String? ?? 'Video ${index + 1}';
+    final duration = video['duration'] as int? ?? 0;
+    final author = video['author'] as String? ?? '';
+    final thumbnailUrl = video['thumbnailUrl'] as String?;
+
+    return RepaintBoundary(
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppTheme.surfaceColor(isDark,
+                  isAmoled: isAmoled, elevated: false)
+              : panelBg.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(DmxTokens.radiusMd),
+          border: Border.all(
+            color: isSelected
+                ? accent.withValues(alpha: isDark ? 0.32 : 0.28)
+                : hairline,
+            width: 0.8,
+          ),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(DmxTokens.radiusMd),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: () => _toggleVideo(video, !isSelected),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: Checkbox(
+                      value: isSelected,
+                      activeColor: accent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                      side: BorderSide(color: hairline, width: 1.2),
+                      onChanged: (val) {
+                        if (val != null) _toggleVideo(video, val);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(DmxTokens.radiusSm),
+                    child: SizedBox(
+                      width: 72,
+                      height: 42,
+                      child: thumbnailUrl != null && thumbnailUrl.isNotEmpty
+                          ? CachedNetworkImage(
+                              imageUrl: thumbnailUrl.startsWith('//')
+                                  ? 'https:$thumbnailUrl'
+                                  : thumbnailUrl,
+                              fit: BoxFit.cover,
+                              memCacheWidth: 144,
+                              memCacheHeight: 84,
+                              placeholder: (_, __) =>
+                                  _thumbPlaceholder(panelBg, mutedClr),
+                              errorWidget: (_, __, ___) =>
+                                  _thumbPlaceholder(panelBg, mutedClr),
+                            )
+                          : _thumbPlaceholder(panelBg, mutedClr),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: TextStyle(
+                            fontFamily: AppTheme.fontDisplay,
+                            color: isSelected ? textClr : secClr,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            decoration:
+                                isSelected ? null : TextDecoration.lineThrough,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 3),
+                        Row(
+                          children: [
+                            if (author.isNotEmpty) ...[
+                              Flexible(
                                 child: Text(
-                                  _playlistInfo!['title'] as String? ?? '',
+                                  author,
                                   style: TextStyle(
-                                    color: secClr,
+                                    fontFamily: AppTheme.fontBody,
+                                    color: mutedClr,
                                     fontSize: 11,
                                   ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
+                              const SizedBox(width: 8),
+                            ],
+                            Icon(
+                              Icons.access_time_rounded,
+                              size: 11,
+                              color: mutedClr,
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              YoutubeService.formatDuration(duration),
+                              style: AppTheme.dataStyle(
+                                isDark: isDark,
+                                size: 11,
+                                color: mutedClr,
+                              ),
+                            ),
                           ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '#${index + 1}',
+                    style: AppTheme.dataStyle(
+                      isDark: isDark,
+                      size: 11,
+                      color: mutedClr,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _thumbPlaceholder(Color bg, Color mutedClr) {
+    return Container(
+      color: bg,
+      alignment: Alignment.center,
+      child: Icon(Icons.play_circle_outline_rounded, color: mutedClr, size: 22),
+    );
+  }
+
+  Widget _buildStickyFooter({
+    required BuildContext context,
+    required bool isDark,
+    required bool isAmoled,
+    required Color accent,
+    required Color amber,
+    required Color textClr,
+    required Color secClr,
+    required Color mutedClr,
+    required Color hairline,
+    required Color panelBg,
+  }) {
+    final sheetSurface = AppTheme.sheetSurface(isDark, isAmoled: isAmoled);
+    final isRtl = L10n.isRtl(context);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Divider(height: 1, thickness: 0.8, color: hairline),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            DmxTokens.sheetHorizontalPadding,
+            12,
+            DmxTokens.sheetHorizontalPadding,
+            16,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    L10n.of(context, 'quality_label'),
+                    style: AppTheme.microLabel(isDark: isDark, color: secClr),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: panelBg,
+                        borderRadius: BorderRadius.circular(DmxTokens.radiusMd),
+                        border: Border.all(color: hairline, width: 0.8),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          dropdownColor: sheetSurface,
+                          menuMaxHeight: 250,
+                          value: _qualityPreset,
+                          isExpanded: true,
+                          icon: Icon(
+                            Icons.keyboard_arrow_down_rounded,
+                            color: secClr,
+                            size: 20,
+                          ),
+                          style: TextStyle(
+                            fontFamily: AppTheme.fontDisplay,
+                            color: textClr,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          items: _qualityOptions.map((opt) {
+                            return DropdownMenuItem<String>(
+                              value: opt['value'],
+                              child: Text(
+                                opt['label']!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (val) {
+                            if (val != null) {
+                              setState(() => _qualityPreset = val);
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (_qualityPreset == 'best_muxed' ||
+                  _qualityPreset == 'best_combined')
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline_rounded, size: 13, color: amber),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          _qualityPreset == 'best_combined'
+                              ? (isRtl
+                                  ? 'ملاحظة: سيتم دمج أفضل جودة صوت وصورة تلقائياً.'
+                                  : 'Note: Best video and audio will be auto-merged.')
+                              : (isRtl
+                                  ? 'ملاحظة: سيتم تحميل أفضل جودة مدمجة (غالباً 360p).'
+                                  : 'Note: Best merged quality will be downloaded (usually 360p).'),
+                          style: TextStyle(
+                            fontFamily: AppTheme.fontBody,
+                            color: amber,
+                            fontSize: 11,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 4,
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: _selectedCount == 0 ? null : _startBatchDownload,
+                icon: const Icon(Icons.download_rounded, size: 18),
+                label: Text(
+                  isRtl
+                      ? 'تحميل $_selectedCount فيديو'
+                      : 'DOWNLOAD $_selectedCount VIDEO${_selectedCount != 1 ? 'S' : ''}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: AppTheme.fontDisplay,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
                   ),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.amber.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: Colors.amber.withValues(alpha: 0.3),
-                        width: 0.8,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.gavel_rounded,
-                          size: 14,
-                          color: Colors.amber,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            L10n.of(context, 'yt_legal_warning'),
-                            style: TextStyle(color: secClr, fontSize: 10),
-                          ),
-                        ),
-                      ],
+                ),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 48),
+                  backgroundColor: accent,
+                  foregroundColor: AppTheme.inkOn(accent),
+                  disabledBackgroundColor: accent.withValues(alpha: 0.35),
+                  disabledForegroundColor:
+                      AppTheme.inkOn(accent).withValues(alpha: 0.7),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(DmxTokens.radiusMd),
+                  ),
+                ),
+              ),
+              if (_selectedCount == 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    isRtl
+                        ? 'يرجى تحديد فيديو واحد على الأقل للتحميل'
+                        : 'Select at least 1 video to start download',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: AppTheme.fontBody,
+                      color: mutedClr,
+                      fontSize: 11,
                     ),
                   ),
                 ),
-                if (_isLoading)
-                  Expanded(
-                    child: Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const SizedBox(
-                            width: 28,
-                            height: 28,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            L10n.of(context, 'loading_playlist'),
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                else if (_errorMessage != null)
-                  Expanded(
-                    child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(32),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.error_outline,
-                              color: redClr,
-                              size: 40,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              _errorMessage!,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: secClr, fontSize: 12),
-                            ),
-                            const SizedBox(height: 20),
-                            TextButton.icon(
-                              onPressed: () {
-                                setState(() {
-                                  _isLoading = true;
-                                  _errorMessage = null;
-                                  _videos = [];
-                                  _playlistInfo = null;
-                                });
-                                _fetchPlaylist();
-                              },
-                              icon: Icon(
-                                Icons.refresh_rounded,
-                                size: 16,
-                                color: accent,
-                              ),
-                              label: Text(
-                                L10n.of(context, 'retry_btn'),
-                                style: TextStyle(
-                                  color: accent,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1.0,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  )
-                else ...[
-                  if (_note != null && _note!.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 4,
-                      ),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? AppTheme.neonAmber.withValues(alpha: 0.15)
-                              : AppTheme.lightNeonAmber.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: isDark
-                                ? AppTheme.neonAmber.withValues(alpha: 0.4)
-                                : AppTheme.lightNeonAmber
-                                    .withValues(alpha: 0.4),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.info_outline,
-                              size: 16,
-                              color: isDark
-                                  ? AppTheme.neonAmber
-                                  : AppTheme.lightNeonAmber,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                _note!,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: isDark
-                                      ? AppTheme.neonAmber
-                                      : AppTheme.lightNeonAmber,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 4,
-                    ),
-                    child: Row(
-                      children: [
-                        if (_playlistInfo?['author'] != null) ...[
-                          Icon(
-                            Icons.person_outline,
-                            size: 13,
-                            color: mutedClr,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            _playlistInfo!['author'] as String,
-                            style: TextStyle(color: mutedClr, fontSize: 10),
-                          ),
-                          const SizedBox(width: 12),
-                        ],
-                        Icon(
-                          Icons.video_library_outlined,
-                          size: 13,
-                          color: mutedClr,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${_filteredVideos.length}${_searchQuery.isNotEmpty ? ' / ${_videos.length}' : ''} videos',
-                          style: TextStyle(color: mutedClr, fontSize: 10),
-                        ),
-                        const Spacer(),
-                        TextButton.icon(
-                          onPressed: () {
-                            runHaptic(settings);
-                            _toggleAll(
-                              _selectedCount < _filteredVideos.length,
-                            );
-                          },
-                          icon: Icon(
-                            _selectedCount == _filteredVideos.length &&
-                                    _filteredVideos.isNotEmpty
-                                ? Icons.deselect
-                                : Icons.select_all,
-                            size: 14,
-                            color: accent,
-                          ),
-                          label: Text(
-                            _selectedCount == _filteredVideos.length &&
-                                    _filteredVideos.isNotEmpty
-                                ? L10n.of(context, 'deselect_all')
-                                : L10n.of(context, 'select_all'),
-                            style: TextStyle(
-                              color: accent,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-                    child: TextField(
-                      onChanged: (val) => setState(() => _searchQuery = val),
-                      decoration: InputDecoration(
-                        hintText: L10n.of(context, 'search_videos'),
-                        hintStyle: TextStyle(color: mutedClr, fontSize: 13),
-                        prefixIcon: Icon(
-                          Icons.search,
-                          size: 16,
-                          color: mutedClr,
-                        ),
-                        suffixIcon: _searchQuery.isNotEmpty
-                            ? IconButton(
-                                icon: Icon(
-                                  Icons.clear,
-                                  size: 16,
-                                  color: mutedClr,
-                                ),
-                                onPressed: () =>
-                                    setState(() => _searchQuery = ''),
-                              )
-                            : null,
-                        filled: true,
-                        fillColor:
-                            (isDark ? AppTheme.surface : AppTheme.lightSurface)
-                                .withValues(alpha: 0.6),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide(color: glassBorder),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide(color: glassBorder),
-                        ),
-                      ),
-                      style: TextStyle(color: textClr, fontSize: 13),
-                    ),
-                  ),
-                  const Divider(height: 1, thickness: 0.5),
-                  Expanded(
-                    child: NotificationListener<ScrollNotification>(
-                      onNotification: (ScrollNotification scrollInfo) {
-                        if (scrollInfo.metrics.pixels >=
-                            scrollInfo.metrics.maxScrollExtent - 200) {
-                          _loadMoreVideos();
-                        }
-                        return false;
-                      },
-                      child: ListView.builder(
-                        controller: scrollController,
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        itemCount: _filteredVideos.length +
-                            (_hasMoreVideos && _searchQuery.isEmpty ? 1 : 0),
-                        itemBuilder: (context, index) {
-                          if (index == _filteredVideos.length) {
-                            return _isLoadingMore
-                                ? const Padding(
-                                    padding: EdgeInsets.all(16),
-                                    child: Center(
-                                      child: SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      ),
-                                    ),
-                                  )
-                                : const SizedBox.shrink();
-                          }
-                          final video = _filteredVideos[index];
-                          final isSelected = video['selected'] as bool? ?? true;
-                          final title =
-                              video['title'] as String? ?? 'Video ${index + 1}';
-                          final duration = video['duration'] as int? ?? 0;
-                          final author = video['author'] as String? ?? '';
-                          final thumbnailUrl = video['thumbnailUrl'] as String?;
-                          return RepaintBoundary(
-                            child: Container(
-                              margin: const EdgeInsets.only(bottom: 6),
-                              decoration: BoxDecoration(
-                                color: (isDark
-                                        ? AppTheme.background
-                                        : AppTheme.lightBackground)
-                                    .withValues(
-                                  alpha: isSelected ? 0.6 : 0.2,
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: isSelected
-                                      ? accent.withValues(alpha: 0.3)
-                                      : glassBorder.withValues(alpha: 0.4),
-                                  width: 0.8,
-                                ),
-                              ),
-                              child: Material(
-                                color: Colors.transparent,
-                                borderRadius: BorderRadius.circular(12),
-                                child: InkWell(
-                                  borderRadius: BorderRadius.circular(12),
-                                  onTap: () {
-                                    final originalIndex =
-                                        _videos.indexOf(video);
-                                    if (originalIndex != -1) {
-                                      setState(() {
-                                        _videos[originalIndex] = {
-                                          ...video,
-                                          'selected': !isSelected,
-                                        };
-                                      });
-                                    }
-                                  },
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 8,
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        SizedBox(
-                                          width: 24,
-                                          height: 24,
-                                          child: Checkbox(
-                                            value: isSelected,
-                                            activeColor: accent,
-                                            side: BorderSide(
-                                              color: glassBorder,
-                                              width: 0.8,
-                                            ),
-                                            onChanged: (val) {
-                                              if (val != null) {
-                                                final originalIndex =
-                                                    _videos.indexOf(video);
-                                                if (originalIndex != -1) {
-                                                  setState(() {
-                                                    _videos[originalIndex] = {
-                                                      ...video,
-                                                      'selected': val,
-                                                    };
-                                                  });
-                                                }
-                                              }
-                                            },
-                                          ),
-                                        ),
-                                        const SizedBox(width: 10),
-                                        ClipRRect(
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                          child: SizedBox(
-                                            width: 72,
-                                            height: 42,
-                                            child: thumbnailUrl != null &&
-                                                    thumbnailUrl.isNotEmpty
-                                                ? CachedNetworkImage(
-                                                    imageUrl: thumbnailUrl
-                                                            .startsWith('//')
-                                                        ? 'https:$thumbnailUrl'
-                                                        : thumbnailUrl,
-                                                    fit: BoxFit.cover,
-                                                    memCacheWidth: 144,
-                                                    memCacheHeight: 84,
-                                                    placeholder: (
-                                                      context,
-                                                      url,
-                                                    ) =>
-                                                        Container(
-                                                      color: (isDark
-                                                              ? AppTheme
-                                                                  .background
-                                                              : AppTheme
-                                                                  .lightBackground)
-                                                          .withValues(
-                                                        alpha: 0.6,
-                                                      ),
-                                                      child: Icon(
-                                                        Icons
-                                                            .play_circle_outline,
-                                                        color: mutedClr,
-                                                        size: 24,
-                                                      ),
-                                                    ),
-                                                    errorWidget: (
-                                                      context,
-                                                      url,
-                                                      error,
-                                                    ) =>
-                                                        Container(
-                                                      color: (isDark
-                                                              ? AppTheme
-                                                                  .background
-                                                              : AppTheme
-                                                                  .lightBackground)
-                                                          .withValues(
-                                                        alpha: 0.6,
-                                                      ),
-                                                      child: Icon(
-                                                        Icons
-                                                            .play_circle_outline,
-                                                        color: mutedClr,
-                                                        size: 24,
-                                                      ),
-                                                    ),
-                                                  )
-                                                : Container(
-                                                    color: (isDark
-                                                            ? AppTheme
-                                                                .background
-                                                            : AppTheme
-                                                                .lightBackground)
-                                                        .withValues(
-                                                      alpha: 0.6,
-                                                    ),
-                                                    child: Icon(
-                                                      Icons.play_circle_outline,
-                                                      color: mutedClr,
-                                                      size: 24,
-                                                    ),
-                                                  ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 10),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                title,
-                                                style: TextStyle(
-                                                  color: isSelected
-                                                      ? textClr
-                                                      : secClr,
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.bold,
-                                                  decoration: isSelected
-                                                      ? null
-                                                      : TextDecoration
-                                                          .lineThrough,
-                                                ),
-                                                maxLines: 2,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                              const SizedBox(height: 3),
-                                              Row(
-                                                children: [
-                                                  if (author.isNotEmpty) ...[
-                                                    Flexible(
-                                                      child: Text(
-                                                        author,
-                                                        style: TextStyle(
-                                                          color: mutedClr,
-                                                          fontSize: 9,
-                                                        ),
-                                                        maxLines: 1,
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                      ),
-                                                    ),
-                                                    const SizedBox(width: 8),
-                                                  ],
-                                                  Icon(
-                                                    Icons.access_time,
-                                                    size: 10,
-                                                    color: mutedClr,
-                                                  ),
-                                                  const SizedBox(width: 3),
-                                                  Text(
-                                                    YoutubeService
-                                                        .formatDuration(
-                                                      duration,
-                                                    ),
-                                                    style: TextStyle(
-                                                      color: mutedClr,
-                                                      fontSize: 9,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        Text(
-                                          '#${index + 1}',
-                                          style: TextStyle(
-                                            color: mutedClr,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                    decoration: BoxDecoration(
-                      color: (isDark ? AppTheme.surface : AppTheme.lightSurface)
-                          .withValues(alpha: 0.9),
-                      border: Border(
-                        top: BorderSide(color: glassBorder, width: 0.6),
-                      ),
-                    ),
-                    child: SafeArea(
-                      top: false,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Row(
-                            children: [
-                              Text(
-                                L10n.of(context, 'quality_label'),
-                                style: TextStyle(
-                                  color: secClr,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: (isDark
-                                            ? AppTheme.background
-                                            : AppTheme.lightBackground)
-                                        .withValues(alpha: 0.6),
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: glassBorder,
-                                      width: 0.8,
-                                    ),
-                                  ),
-                                  child: DropdownButtonHideUnderline(
-                                    child: DropdownButton<String>(
-                                      dropdownColor: isDark
-                                          ? AppTheme.surface
-                                          : AppTheme.lightSurface,
-                                      menuMaxHeight: 250,
-                                      value: _qualityPreset,
-                                      isExpanded: true,
-                                      icon: Icon(
-                                        Icons.arrow_drop_down,
-                                        color: secClr,
-                                      ),
-                                      style: TextStyle(
-                                        color: textClr,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                      items: _qualityOptions.map((opt) {
-                                        return DropdownMenuItem<String>(
-                                          value: opt['value'],
-                                          child: Text(opt['label']!),
-                                        );
-                                      }).toList(),
-                                      onChanged: (val) {
-                                        if (val != null) {
-                                          setState(
-                                            () => _qualityPreset = val,
-                                          );
-                                        }
-                                      },
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          if (_qualityPreset == 'best_muxed' ||
-                              _qualityPreset == 'best_combined')
-                            Padding(
-                              padding: const EdgeInsets.only(
-                                top: 8,
-                                left: 60,
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.info_outline,
-                                    size: 12,
-                                    color: isDark
-                                        ? AppTheme.neonAmber
-                                        : AppTheme.lightNeonAmber,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Expanded(
-                                    child: Text(
-                                      _qualityPreset == 'best_combined'
-                                          ? (L10n.isRtl(context)
-                                              ? 'ملاحظة: سيتم دمج أفضل جودة صوت وصورة تلقائياً.'
-                                              : 'Note: Best video and audio will be auto-merged.')
-                                          : (L10n.isRtl(context)
-                                              ? 'ملاحظة: سيتم تحميل أفضل جودة مدمجة (غالباً 360p).'
-                                              : 'Note: Best merged quality will be downloaded (usually 360p).'),
-                                      style: TextStyle(
-                                        color: isDark
-                                            ? AppTheme.neonAmber
-                                            : AppTheme.lightNeonAmber,
-                                        fontSize: 10,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          const SizedBox(height: 12),
-                          NeonGlowButton(
-                            isExpanded: true,
-                            isFilled: true,
-                            onPressed: _selectedCount == 0
-                                ? null
-                                : _startBatchDownload,
-                            text: L10n.isRtl(context)
-                                ? 'تحميل $_selectedCount فيديو'
-                                : 'DOWNLOAD $_selectedCount VIDEO${_selectedCount != 1 ? 'S' : ''}',
-                            icon: Icons.download_rounded,
-                            color: accent,
-                            glowColor: accent,
-                          ),
-                          if (_selectedCount == 0)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 6),
-                              child: Text(
-                                L10n.isRtl(context)
-                                    ? 'يرجى تحديد فيديو واحد على الأقل للتحميل'
-                                    : 'Select at least 1 video to start download',
-                                style: TextStyle(
-                                  color: mutedClr,
-                                  fontSize: 10,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
+            ],
           ),
-        );
-      },
+        ),
+      ],
     );
   }
 }

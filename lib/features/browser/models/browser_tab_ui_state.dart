@@ -1,5 +1,5 @@
 import 'dart:typed_data';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Encapsulates the UI-specific visual state, favicon cache, preview image,
 /// theme color, and scroll offset of a browser tab.

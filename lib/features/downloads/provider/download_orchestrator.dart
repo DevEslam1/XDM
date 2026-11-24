@@ -152,7 +152,7 @@ class DownloadOrchestrator {
 
   Timer? _periodicResumeSaveTimer;
   Timer? _orphanCleanupTimer;
-  String _currentCookieString = '';
+  final Map<String, String> _resolvedTaskCookies = {};
   final Map<String, int> _sessionCachedTotalSize = {};
 
   void _startPeriodicResumeSave() {
@@ -589,18 +589,16 @@ class DownloadOrchestrator {
   bool isTaskPendingStart(String taskId) => _startingTaskIds.contains(taskId);
 
   bool startTask(DownloadTask task) {
-    bool canStart = false;
-    _orchLock.synchronized(() {
-      if (_host.cancelTokens.containsKey(task.id)) return;
-      if (!_startingTaskIds.add(task.id)) return; // atomic
-      canStart = true;
-    });
-    if (!canStart) return false;
+    // Synchronous check+insert is atomic within the single-threaded Dart isolate
+    // and avoids the unawaited _orchLock race that could strand task.id in
+    // _startingTaskIds when the lock is contended.
+    if (_host.cancelTokens.containsKey(task.id)) return false;
+    if (!_startingTaskIds.add(task.id)) return false;
     try {
       unawaited(_runStartTaskBody(task)
           .catchError((e) => debugPrint('[DMX] startTaskBody failed: $e')));
     } catch (_) {
-      _orchLock.synchronized(() => _startingTaskIds.remove(task.id));
+      _startingTaskIds.remove(task.id);
       rethrow;
     }
     return true;
@@ -749,7 +747,7 @@ class DownloadOrchestrator {
     if (cookieString.isEmpty && YoutubeService.currentCookies != null) {
       cookieString = YoutubeService.currentCookies!;
     }
-    _currentCookieString = cookieString;
+    _resolvedTaskCookies[task.id] = cookieString;
 
     // FIX-INTEL: Use site intelligence to guide resolution and headers
     final analysis = SiteIntelligenceService().analyzeUrl(task.url);
@@ -3883,7 +3881,7 @@ class DownloadOrchestrator {
         );
       }
       task = resolved;
-      final cookieString = _currentCookieString;
+      final cookieString = _resolvedTaskCookies.remove(task.id) ?? '';
 
       final cancelToken = CancelToken();
       _host.cancelTokens[task.id] = cancelToken;

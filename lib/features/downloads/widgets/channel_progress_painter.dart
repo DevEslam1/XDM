@@ -1,7 +1,7 @@
 // FIX-H7: Numeric comparison in shouldRepaint and RepaintBoundary
 import 'package:dmx/core/app_theme.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../../core/services/engine/engine_models.dart';
 
