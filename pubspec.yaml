@@ -51,10 +51,8 @@ dependencies:
   flutter_inappwebview: ^6.1.5
 
   # Media / torrent
-  # Exact pin. 1.9.2's Dart bindings and its prebuilt .so ship from the same
-  # GitHub Release, so the struct layout cannot drift (see
-  # docs/ROLLBACK_LIBTORRENT_1.9.2_PLAN.md §2.2).
-  libtorrent_flutter: 1.9.2
+  # Native libtorrent 2.0.11 bindings via Dart Native Assets (code_assets/hooks).
+  libtorrent_dart: ^1.2.0
   ffmpeg_kit_flutter_new_min: ^3.5.5
 
   # UI / utils
@@ -99,6 +97,7 @@ dev_dependencies:
   fake_async: ^1.3.3
 
   sqlite3: any
+  flutter_local_notifications_platform_interface: any
 flutter_launcher_icons:
   android: "ic_launcher"
   ios: true

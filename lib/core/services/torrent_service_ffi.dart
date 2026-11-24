@@ -14,6 +14,7 @@ import '../../features/settings/provider/settings_provider.dart';
 import '../domain/torrent_models.dart';
 import '../interfaces/i_torrent_native.dart';
 import '../interfaces/i_torrent_service.dart';
+import '../utils/bencode_decoder.dart';
 import '../utils/url_utils.dart';
 import 'download_engine.dart';
 import 'power_monitor.dart';
@@ -44,6 +45,7 @@ class TorrentService {
   static Completer<void>? _initCompleter;
   static Completer<void>? _disposeCompleter;
   static Set<int> _activeTorrentIds = {};
+  static final Set<String> _registeredInfoHashes = {};
   static StreamSubscription? _updatesSub;
   static StreamSubscription? _alertsSub;
   static StreamController<Map<int, TorrentUpdateInfo>>? _updateController;
@@ -65,6 +67,9 @@ class TorrentService {
 
   static void _startPeriodicResumeSave() {
     _stopPeriodicResumeSave();
+    if (Platform.environment.containsKey('FLUTTER_TEST')) {
+      return;
+    }
     // Nothing to save without the export — the timer would wake every 30s only
     // to have every call report unavailable.
     if (!resumeDataSupported) {
@@ -575,7 +580,8 @@ class TorrentService {
                   totalPayloadUpload: value.totalUploaded,
                   currentTracker: () {
                     final src = _torrentSources[value.id];
-                    if (src != null && src.toLowerCase().startsWith('magnet:')) {
+                    if (src != null &&
+                        src.toLowerCase().startsWith('magnet:')) {
                       final uri = Uri.tryParse(src);
                       final tr = uri?.queryParametersAll['tr'];
                       if (tr != null && tr.isNotEmpty) return tr.first;
@@ -585,6 +591,9 @@ class TorrentService {
                         : '';
                   }(),
                   nextAnnounceSeconds: 30,
+                  infoHash: value.infoHashV1.isNotEmpty
+                      ? value.infoHashV1
+                      : value.infoHashV2,
                   infoHashV1: value.infoHashV1,
                   infoHashV2: value.infoHashV2,
                   distributedCopies: value.distributedCopies,
@@ -595,6 +604,18 @@ class TorrentService {
                   pieces: value.pieces,
                 );
                 _latestStats[value.id] = info;
+                final source = _torrentSources[value.id];
+                if (source != null && value.infoHashV1.isNotEmpty) {
+                  final regKey = '$source|${value.infoHashV1}';
+                  if (_registeredInfoHashes.add(regKey)) {
+                    unawaited(
+                      TorrentResumeStore.registerInfoHash(
+                        source,
+                        value.infoHashV1,
+                      ),
+                    );
+                  }
+                }
 
                 // B5: complete a pauseTorrent waiter inline. Completing a
                 // completer is synchronous and needs no lock re-entry, so the
@@ -603,7 +624,8 @@ class TorrentService {
                 final pauseEntry = _pauseConfirmWaiters[value.id];
                 if (pauseEntry != null && !pauseEntry.completer.isCompleted) {
                   final label = info.stateLabel.toLowerCase();
-                  if (label.contains('paused') ||
+                  if (info.isPaused ||
+                      label.contains('paused') ||
                       label.contains('stopped') ||
                       label.contains('pausing')) {
                     _pauseConfirmWaiters.remove(value.id);
@@ -685,10 +707,35 @@ class TorrentService {
         _latestResumeBlobs[torrentId] = uint8Data;
         final source = _torrentSources[torrentId];
         if (source != null) {
+          List<Map<String, dynamic>>? torrentFiles;
+          try {
+            final items = getFiles(torrentId);
+            if (items.isNotEmpty) {
+              torrentFiles = items
+                  .map((f) => {
+                        'name': f.name,
+                        'length': f.size,
+                        'lengthKnown': f.size > 0,
+                        'size': f.size,
+                        'priority': f.priority,
+                        'selected': f.selected,
+                        'downloadedBytes': f.safeDownloadedBytes,
+                        'isComplete':
+                            f.size > 0 && f.safeDownloadedBytes >= f.size,
+                      })
+                  .toList();
+            }
+          } catch (_) {}
+          final stats = _latestStats[torrentId];
           await TorrentResumeStore.saveAndWait(
             torrentId: torrentId,
             sourceUrl: source,
             fetchResumeData: () => uint8Data,
+            files: torrentFiles,
+            pieceBitfield: stats?.pieces,
+            piecesTotal: stats?.piecesTotal,
+            piecesDone: stats?.piecesHave,
+            infoHash: stats?.infoHashV1,
           );
         }
       }
@@ -769,6 +816,7 @@ class TorrentService {
     _latestProgress.clear();
     _latestStats.clear();
     _metadataProbeAt.clear();
+    _registeredInfoHashes.clear();
     _cachedPrioritiesSnapshot.clear();
     _filesCache.clear();
     _latestResumeBlobs.clear();
@@ -790,7 +838,9 @@ class TorrentService {
   // or behind NAT without bootstrap nodes.  See tracker_manager defaultTrackers.
   static String _enrichMagnetWithTrackersIfNeeded(String magnetUri) {
     if (!magnetUri.toLowerCase().startsWith('magnet:')) return magnetUri;
-    if (magnetUri.contains('&tr=') || magnetUri.contains('?tr=')) return magnetUri;
+    if (magnetUri.contains('&tr=') || magnetUri.contains('?tr=')) {
+      return magnetUri;
+    }
     final buffer = StringBuffer(magnetUri);
     for (final tr in TrackerManager.defaultTrackers.take(5)) {
       buffer.write('&tr=${Uri.encodeComponent(tr)}');
@@ -835,7 +885,8 @@ class TorrentService {
     }
     final enrichedUri = _enrichMagnetWithTrackersIfNeeded(magnetUri);
     try {
-      final id = _native.addMagnet(enrichedUri, savePath, resumeData: resumeData);
+      final id =
+          _native.addMagnet(enrichedUri, savePath, resumeData: resumeData);
       if (id >= 0) {
         _torrentLock.synchronized(() {
           _activeTorrentIds.add(id);
@@ -1088,10 +1139,13 @@ class TorrentService {
         torrentFiles = items
             .map((f) => {
                   'name': f.name,
+                  'length': f.size,
+                  'lengthKnown': f.size > 0,
                   'size': f.size,
                   'priority': f.priority,
                   'selected': f.selected,
                   'downloadedBytes': f.safeDownloadedBytes,
+                  'isComplete': f.size > 0 && f.safeDownloadedBytes >= f.size,
                 })
             .toList();
       }
@@ -1120,6 +1174,7 @@ class TorrentService {
           piecesTotal: stats?.piecesTotal,
           piecesDone: stats?.piecesHave,
           degradedFallback: uint8 == null || uint8.isEmpty,
+          infoHash: stats?.infoHashV1,
         );
       }
     } catch (e) {
@@ -1653,6 +1708,102 @@ class TorrentService {
     return _webSeeds[torrentId]?.toList() ?? const [];
   }
 
+  /// Updates the tracked source URL for an active [torrentId], merging any
+  /// newly supplied trackers/web-seeds without removing or resetting progress.
+  static void updateTorrentSource(int torrentId, String newSourceUrl) {
+    final cleanUrl = newSourceUrl.trim();
+    if (cleanUrl.isEmpty || torrentId < 0) return;
+
+    _torrentSources[torrentId] = cleanUrl;
+    TorrentResumeStore.registerSource(torrentId, cleanUrl);
+    if (!isInitialized) return;
+
+    final newTrackers = <String>{};
+    final newWebSeeds = <String>{};
+
+    if (cleanUrl.toLowerCase().startsWith('magnet:')) {
+      final parsed = parseMagnetUrl(cleanUrl);
+      final hash = parsed['infoHashV1'] ?? parsed['infoHash'] ?? '';
+      if (hash.isNotEmpty) {
+        unawaited(TorrentResumeStore.registerInfoHash(cleanUrl, hash));
+      }
+      final uri = Uri.tryParse(cleanUrl);
+      if (uri != null) {
+        for (final tr in uri.queryParametersAll['tr'] ?? const <String>[]) {
+          final t = tr.trim();
+          if (t.isNotEmpty) newTrackers.add(t);
+        }
+        for (final ws in uri.queryParametersAll['ws'] ?? const <String>[]) {
+          final w = ws.trim();
+          if (w.isNotEmpty) newWebSeeds.add(w);
+        }
+      }
+    } else {
+      final file = File(cleanUrl);
+      if (file.existsSync() && file.lengthSync() < 4 * 1024 * 1024) {
+        try {
+          final bytes = file.readAsBytesSync();
+          final meta = BencodeDecoder.parseTorrentBytes(bytes);
+          final hash =
+              meta?['infoHashV1'] as String? ?? meta?['infoHash'] as String?;
+          if (hash != null && hash.isNotEmpty) {
+            unawaited(TorrentResumeStore.registerInfoHash(cleanUrl, hash));
+          }
+          final decoded = BencodeDecoder(bytes).decode();
+          final normalized = BencodeDecoder.toNormalTypes(decoded);
+          if (normalized is Map) {
+            final announce = normalized['announce'];
+            if (announce is String && announce.trim().isNotEmpty) {
+              newTrackers.add(announce.trim());
+            }
+            final announceList = normalized['announce-list'];
+            if (announceList is List) {
+              for (final tier in announceList) {
+                if (tier is List) {
+                  for (final tr in tier) {
+                    final s = tr?.toString().trim() ?? '';
+                    if (s.isNotEmpty) newTrackers.add(s);
+                  }
+                }
+              }
+            }
+            final urlList = normalized['url-list'];
+            if (urlList is String && urlList.trim().isNotEmpty) {
+              newWebSeeds.add(urlList.trim());
+            } else if (urlList is List) {
+              for (final ws in urlList) {
+                final s = ws?.toString().trim() ?? '';
+                if (s.isNotEmpty) newWebSeeds.add(s);
+              }
+            }
+          }
+        } catch (_) {}
+      }
+    }
+
+    if (newTrackers.isNotEmpty) {
+      final existing = getTrackers(torrentId).map((t) => t.url.trim()).toSet();
+      for (final tr in newTrackers) {
+        if (!existing.contains(tr)) {
+          addTracker(torrentId, tr, tier: 0);
+        }
+      }
+    }
+
+    if (newWebSeeds.isNotEmpty) {
+      final existing = getWebSeeds(torrentId).map((w) => w.trim()).toSet();
+      for (final ws in newWebSeeds) {
+        if (!existing.contains(ws)) {
+          addWebSeed(torrentId, ws);
+        }
+      }
+    }
+
+    if (isTorrentAlive(torrentId)) {
+      announceNow(torrentId);
+    }
+  }
+
   static Future<void> setProxy({
     required String host,
     required int port,
@@ -1916,8 +2067,11 @@ class TorrentServiceImpl implements ITorrentService {
   Map<String, dynamic>? getTorrentSnapshot(int id) => null;
   @override
 
-  /// Native core version bundled by libtorrent_flutter 1.9.2.
-  String get nativeVersion => '1.9.2';
+  /// Native core version bundled by libtorrent_dart (libtorrent 2.0.11).
+  @override
+  String get nativeVersion => TorrentService._native.isInitialized
+      ? TorrentService._native.libraryVersion
+      : '2.0.11';
   @override
   void configureSession([TorrentSessionSettings? settings]) =>
       TorrentService.configureSession(settings);
@@ -2044,6 +2198,9 @@ class TorrentServiceImpl implements ITorrentService {
   @override
   List<String> getWebSeeds(int torrentId) =>
       TorrentService.getWebSeeds(torrentId);
+  @override
+  void updateTorrentSource(int torrentId, String newSourceUrl) =>
+      TorrentService.updateTorrentSource(torrentId, newSourceUrl);
 
   @override
   bool shouldStopSeeding({
@@ -2274,6 +2431,8 @@ class TorrentServiceStub implements ITorrentService {
   void removeWebSeed(int torrentId, String url) {}
   @override
   List<String> getWebSeeds(int torrentId) => const [];
+  @override
+  void updateTorrentSource(int torrentId, String newSourceUrl) {}
 
   @override
   bool shouldStopSeeding({

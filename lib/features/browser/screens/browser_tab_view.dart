@@ -173,6 +173,17 @@ class _BrowserTabViewState extends State<_BrowserTabView> {
                             injectionTime:
                                 UserScriptInjectionTime.AT_DOCUMENT_START,
                           ),
+                          UserScript(
+                            source: ScriptInjector.kMediaSnifferEarlyJs,
+                            injectionTime:
+                                UserScriptInjectionTime.AT_DOCUMENT_START,
+                            forMainFrameOnly: false,
+                          ),
+                          UserScript(
+                            source: ScriptInjector.kWindowOpenDefuserJs,
+                            injectionTime:
+                                UserScriptInjectionTime.AT_DOCUMENT_START,
+                          ),
                         ]),
                         initialSettings: InAppWebViewSettings(
                           useShouldOverrideUrlLoading: true,
@@ -503,6 +514,26 @@ class _BrowserTabViewState extends State<_BrowserTabView> {
                           }
 
                           final url = request.url.toString();
+
+                          // 1DM Parity: Real-time network stream sniffer
+                          final lowerUrl = url.toLowerCase();
+                          if (lowerUrl.contains('.m3u8') ||
+                              lowerUrl.contains('.mpd') ||
+                              lowerUrl.contains('.ts') ||
+                              lowerUrl.endsWith('.mp4') ||
+                              lowerUrl.endsWith('.mkv') ||
+                              lowerUrl.endsWith('.webm')) {
+                            widget.state._sniffer.recordDetectedMedia(
+                              tab.id,
+                              url: url,
+                              label: lowerUrl.contains('.m3u8')
+                                  ? 'HLS Stream'
+                                  : (lowerUrl.contains('.mpd')
+                                      ? 'DASH Stream'
+                                      : 'Network Video Stream'),
+                            );
+                          }
+
                           // Never block downloadable files or media
                           if (AdBlockerService.isLikelyDownloadUrl(url) ||
                               BrowserDetector.isAutoDownloadable(url)) {

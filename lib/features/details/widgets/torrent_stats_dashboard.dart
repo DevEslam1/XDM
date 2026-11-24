@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/app_theme.dart';
-import '../../../core/domain/torrent_models.dart';
+import '../../../core/services/torrent_service.dart';
 import '../../downloads/models/download_task.dart';
 
 class TorrentStatsDashboard extends StatelessWidget {
@@ -92,15 +92,14 @@ class TorrentStatsDashboard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                // Piece counts are estimated from total size / 256 KB on the
-                // 1.9.2 bridge (no real bitfield export), so they are labelled
-                // estimated rather than presented as an exact piece map.
-                // "Availability" (distributedCopies) is hardcoded 0.0 by the
-                // bridge, so it is omitted instead of shown as a fake 0.00x.
                 Expanded(
                   child: _buildStat(
-                    'Pieces (est.)',
-                    '~${stats!.piecesHave}/${stats!.piecesTotal}',
+                    TorrentService.fileProgressSupported
+                        ? 'Pieces'
+                        : 'Pieces (est.)',
+                    TorrentService.fileProgressSupported
+                        ? '${stats!.piecesHave}/${stats!.piecesTotal}'
+                        : '~${stats!.piecesHave}/${stats!.piecesTotal}',
                   ),
                 ),
               ],

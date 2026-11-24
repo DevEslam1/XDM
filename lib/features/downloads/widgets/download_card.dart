@@ -87,6 +87,9 @@ class _DownloadCardState extends State<DownloadCard>
 
     final isSelectionMode =
         context.select((DownloadProvider p) => p.isSelectionMode);
+    final isSelected = context.select(
+      (DownloadProvider p) => p.selectedTaskIds.contains(task.id),
+    );
     final provider = context.read<DownloadProvider>();
 
     final statusLabel = L10n.translateStatusName(context, task.status);
@@ -98,20 +101,27 @@ class _DownloadCardState extends State<DownloadCard>
 
     final Widget cardWidget = Semantics(
       label: semanticLabel,
+      selected: isSelected,
       child: RepaintBoundary(
         child: task.isTorrent
             ? _TorrentCard(
                 task: task,
                 compact: compact,
+                isSelected: isSelected,
+                isSelectionMode: isSelectionMode,
               )
             : (task.youtubeQualityPreset != null || task.mergedAudioUrl != null)
                 ? _MediaCard(
                     task: task,
                     compact: compact,
+                    isSelected: isSelected,
+                    isSelectionMode: isSelectionMode,
                   )
                 : _FileCard(
                     task: task,
                     compact: compact,
+                    isSelected: isSelected,
+                    isSelectionMode: isSelectionMode,
                   ),
       ),
     );
@@ -127,8 +137,8 @@ class _DownloadCardState extends State<DownloadCard>
               alignment: AlignmentDirectional.centerStart,
               padding: const EdgeInsetsDirectional.only(start: 20),
               decoration: BoxDecoration(
-                color: AppTheme.neonGreen.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(12),
+                color: AppTheme.neonGreen.withValues(alpha: 0.16),
+                borderRadius: BorderRadius.circular(16),
               ),
               child: Icon(
                 task.status == DownloadStatus.paused
@@ -143,8 +153,8 @@ class _DownloadCardState extends State<DownloadCard>
               alignment: AlignmentDirectional.centerEnd,
               padding: const EdgeInsetsDirectional.only(end: 20),
               decoration: BoxDecoration(
-                color: AppTheme.neonRed.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(12),
+                color: AppTheme.neonRed.withValues(alpha: 0.16),
+                borderRadius: BorderRadius.circular(16),
               ),
               child: const Icon(Icons.delete_outline_rounded,
                   color: AppTheme.neonRed),
@@ -296,6 +306,7 @@ class _CardShell extends StatelessWidget {
   final Widget child;
   final Color? accent;
   final bool isDark;
+  final bool isSelected;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
 
@@ -303,6 +314,7 @@ class _CardShell extends StatelessWidget {
     required this.child,
     this.accent,
     required this.isDark,
+    this.isSelected = false,
     this.onTap,
     this.onLongPress,
   });
@@ -313,14 +325,48 @@ class _CardShell extends StatelessWidget {
     return RepaintBoundary(
       child: Semantics(
         container: true,
+        selected: isSelected,
         hint: 'Double tap to view details',
-        child: DmxCardShell(
-          accent: effectiveAccent,
-          radius: 16,
-          showRail: true,
-          onTap: onTap,
-          onLongPress: onLongPress,
-          child: child,
+        child: AnimatedContainer(
+          duration: AppTheme.motionFast,
+          curve: AppTheme.motionCurve,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(17),
+            border: isSelected
+                ? Border.all(
+                    color: effectiveAccent,
+                    width: 1.6,
+                  )
+                : Border.all(color: Colors.transparent, width: 1.6),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: effectiveAccent.withValues(
+                        alpha: isDark ? 0.22 : 0.14,
+                      ),
+                      blurRadius: 14,
+                      offset: const Offset(0, 3),
+                    ),
+                  ]
+                : null,
+          ),
+          child: DmxCardShell(
+            accent: effectiveAccent,
+            radius: 16,
+            showRail: true,
+            onTap: onTap,
+            onLongPress: onLongPress,
+            child: isSelected
+                ? DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: effectiveAccent.withValues(
+                        alpha: isDark ? 0.10 : 0.06,
+                      ),
+                    ),
+                    child: child,
+                  )
+                : child,
+          ),
         ),
       ),
     );
@@ -631,47 +677,44 @@ class _StatusChipState extends State<_StatusChip> {
 
     Widget buildChipContainer(double pulseVal) {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(12),
+          color: color.withValues(alpha: isDark ? 0.12 : 0.09),
+          borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: color.withValues(alpha: 0.45 * pulseVal),
+            color: color.withValues(alpha: (isDark ? 0.38 : 0.30) * pulseVal),
             width: 0.8,
           ),
-          boxShadow: [
-            BoxShadow(
-              color: color.withValues(alpha: 0.08 * pulseVal),
-              blurRadius: 6.0,
-              spreadRadius: 0.5,
-            ),
-          ],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (isFetchingMeta) ...[
+            if (isFetchingMeta || isPulseActive) ...[
               Container(
                 width: 6,
                 height: 6,
-                margin: const EdgeInsets.only(right: 6),
+                margin: const EdgeInsetsDirectional.only(end: 5),
                 decoration: BoxDecoration(
-                  color: color,
+                  color: color.withValues(alpha: pulseVal.clamp(0.45, 1.0)),
                   shape: BoxShape.circle,
                 ),
               ),
             ] else ...[
-              Icon(_icon, size: 14, color: color),
+              Icon(_icon, size: 12, color: color),
               const SizedBox(width: 4),
             ],
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: color,
-                fontSize: responsiveFontSize(context, 12),
-                fontWeight: FontWeight.w500,
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: color,
+                  fontFamily: 'Space Grotesk',
+                  fontSize: responsiveFontSize(context, 10.5),
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.15,
+                ),
               ),
             ),
           ],
@@ -687,40 +730,47 @@ class _StatusChipState extends State<_StatusChip> {
         : buildChipContainer(1.0);
 
     return RepaintBoundary(
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           chipContent,
-          if (isScheduled) ...[
-            const SizedBox(width: 6),
+          if (isScheduled)
             Tooltip(
               message: formatLocalizedDateTime(context, task.scheduledAt!),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                 decoration: AppTheme.chipDecoration(
-                  color: AppTheme.neonAmber,
+                  color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
                   isDark: isDark,
-                  radius: 8,
+                  radius: 20,
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.schedule_rounded,
-                        size: 12, color: AppTheme.neonAmber),
+                    Icon(
+                      Icons.schedule_rounded,
+                      size: 11,
+                      color:
+                          isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+                    ),
                     const SizedBox(width: 3),
                     Text(
                       formatLocalizedTime(context, task.scheduledAt!),
                       style: TextStyle(
-                        fontSize: responsiveFontSize(context, 10.5),
-                        color: AppTheme.neonAmber,
-                        fontWeight: FontWeight.w600,
+                        fontSize: responsiveFontSize(context, 10),
+                        fontFamily: 'Space Grotesk',
+                        color: isDark
+                            ? AppTheme.neonAmber
+                            : AppTheme.lightNeonAmber,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ],
                 ),
               ),
             ),
-          ],
         ],
       ),
     );

@@ -16,7 +16,9 @@ void main() {
   });
 
   group('Browser Functional Fixes Unit Tests', () {
-    test('BrowserTab and BrowserTabWebViewState onFindResultReceived callback wires cleanly', () {
+    test(
+        'BrowserTab and BrowserTabWebViewState onFindResultReceived callback wires cleanly',
+        () {
       final tab = BrowserTab(id: 'tab-find', url: 'https://example.com');
       int tabOrdinal = -1;
       int tabTotal = -1;
@@ -88,7 +90,8 @@ void main() {
       tabManager.dispose();
     });
 
-    test('BrowserTab incognito tab properties prevent accidental state leakage', () {
+    test('BrowserTab incognito tab properties prevent accidental state leakage',
+        () {
       final incognitoTab = BrowserTab(
         id: 'incog-1',
         url: 'https://secret.example.com',

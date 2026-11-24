@@ -1,7 +1,7 @@
 import 'package:dmx/core/domain/download_data_status.dart';
-import 'package:dmx/core/domain/torrent_models.dart' hide TorrentState;
+import 'package:dmx/core/domain/torrent_models.dart';
+import 'package:dmx/core/interfaces/i_torrent_native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:libtorrent_flutter/libtorrent_flutter.dart';
 
 void main() {
   group('Torrent Status Normalization & UI Labels Tests', () {
@@ -93,19 +93,21 @@ void main() {
     });
 
     test(
-        'TorrentInfo model properly maps and normalizes progress and swarm counts',
+        'NativeTorrentStatus model properly maps and normalizes progress and swarm counts',
         () {
-      const info = TorrentInfo(
+      const info = NativeTorrentStatus(
         id: 1,
         name: 'ubuntu.iso',
         savePath: '/downloads',
         errorMsg: '',
-        state: TorrentState.downloading,
+        state: 2,
+        stateLabel: 'Downloading',
         progress: 0.75,
         downloadRate: 1024 * 1024,
         uploadRate: 0,
         totalDone: 750,
         totalWanted: 1000,
+        totalWantedDone: 750,
         totalUploaded: 0,
         numPeers: 15,
         numSeeds: 30,
@@ -119,6 +121,7 @@ void main() {
       expect(info.numSeeds, equals(30));
       expect(info.numPeers, equals(15));
       expect(info.totalDone, equals(750));
+      expect(info.totalWantedDone, equals(750));
     });
   });
 }

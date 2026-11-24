@@ -277,6 +277,11 @@ class DomainStateMachine {
     return true;
   }
 
+  /// Synchronizes the tracked state without firing transition hooks or asserting.
+  void syncState(DomainDownloadState state) {
+    _currentState = state;
+  }
+
   void dispose() {
     _stateController.close();
     _transitionController.close();

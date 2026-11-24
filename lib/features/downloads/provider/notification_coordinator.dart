@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:dmx/core/services/logging_service.dart';
 // ignore_for_file: prefer_initializing_formals
@@ -125,6 +126,8 @@ class NotificationCoordinator {
     }
   }
 
+  final Set<String> _activeHandles = {};
+
   /// Issues an opaque handle for [taskId] to embed in a notification payload.
   String opaqueHandleFor(String taskId) {
     final existing = _taskToHandle[taskId];
@@ -133,8 +136,12 @@ class NotificationCoordinator {
     _opaqueHandles[handle] = taskId;
     _taskToHandle[taskId] = handle;
     while (_opaqueHandles.length > 50) {
-      final firstKey = _opaqueHandles.keys.first;
-      final mappedTask = _opaqueHandles.remove(firstKey);
+      final evictKey = _opaqueHandles.keys.firstWhere(
+        (k) => !_activeHandles.contains(k),
+        orElse: () => '',
+      );
+      if (evictKey.isEmpty) break;
+      final mappedTask = _opaqueHandles.remove(evictKey);
       if (mappedTask != null) _taskToHandle.remove(mappedTask);
     }
     unawaited(_persistHandles().catchError((e) {
@@ -186,6 +193,7 @@ class NotificationCoordinator {
     }
     final handle = _taskToHandle.remove(taskId);
     if (handle != null) {
+      _activeHandles.remove(handle);
       _opaqueHandles.remove(handle);
     }
     unawaited(_persistHandles().catchError(
@@ -197,6 +205,7 @@ class NotificationCoordinator {
   int? removeId(String taskId) {
     final handle = _taskToHandle.remove(taskId);
     if (handle != null) {
+      _activeHandles.remove(handle);
       _opaqueHandles.remove(handle);
     }
     unawaited(_persistHandles()
@@ -256,14 +265,20 @@ class NotificationCoordinator {
       }
     }
 
+    final now = DateTime.now();
+    _lastNotifActionTime.removeWhere((_, time) => now.difference(time).inSeconds > 10);
+    if (_lastNotifActionTime.length > 200) {
+      final sortedKeys = _lastNotifActionTime.keys.toList()
+        ..sort((a, b) => _lastNotifActionTime[a]!.compareTo(_lastNotifActionTime[b]!));
+      for (int i = 0; i < min(50, sortedKeys.length); i++) {
+        _lastNotifActionTime.remove(sortedKeys[i]);
+      }
+    }
+
     if (taskId != null &&
         (action == 'pause' || action == 'resume' || action == 'cancel')) {
       final key = '$taskId:$action';
       final lastTime = _lastNotifActionTime[key];
-      final now = DateTime.now();
-      // Periodically prune action timestamps older than 5 seconds to prevent memory leak
-      _lastNotifActionTime
-          .removeWhere((_, time) => now.difference(time).inSeconds > 5);
       if (lastTime != null &&
           now.difference(lastTime) < const Duration(milliseconds: 500)) {
         debugPrint(
@@ -348,6 +363,10 @@ class NotificationCoordinator {
         payload: opaqueHandleFor(task.id),
       );
     }
+    final handle = _taskToHandle[task.id];
+    if (handle != null) {
+      _activeHandles.remove(handle);
+    }
   }
 
   /// SCHED-FIX-5: Shows notification when a scheduled download starts.
@@ -402,6 +421,9 @@ class NotificationCoordinator {
       _lastProgressPostTimes.remove(oldestKey);
     }
     _lastProgressPostTimes[notificationId] = now;
+    if (payload.isNotEmpty) {
+      _activeHandles.add(payload);
+    }
 
     final activeCount = _downloadingTasksCount();
     final multiple = activeCount > 1;
@@ -497,6 +519,7 @@ class NotificationCoordinator {
     }
     final handle = _taskToHandle.remove(taskId);
     if (handle != null) {
+      _activeHandles.remove(handle);
       _opaqueHandles.remove(handle);
     }
     unawaited(_persistHandles().catchError(
@@ -511,6 +534,7 @@ class NotificationCoordinator {
     _lastNotifActionTime.clear();
     _opaqueHandles.clear();
     _taskToHandle.clear();
+    _activeHandles.clear();
     _notificationService.stopPollingPendingActions();
   }
 }

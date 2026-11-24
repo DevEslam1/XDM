@@ -1,19 +1,20 @@
-import 'package:dmx/core/services/torrent_service.dart';
+import 'package:dmx/core/domain/torrent_models.dart';
+import 'package:dmx/core/services/torrent/fake_torrent_native.dart';
+import 'package:dmx/core/services/torrent/libtorrent_native_impl.dart';
+import 'package:dmx/core/services/torrent_service_ffi.dart';
 import 'package:dmx/features/details/widgets/torrent_stats_dashboard.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../helpers/test_helpers.dart';
 
-/// Guards the "honest degrade" contract for torrent UI on the libtorrent 1.9.2
-/// bridge, where native symbols are stubbed and several stat fields are
-/// synthetic (distributedCopies hardcoded 0.0, pieces estimated from size).
-/// These tests fail if any widget starts presenting fabricated data as real or
-/// if a capability that the bridge cannot honor is re-flagged as supported.
+/// Verifies UI truthfulness on both the real libtorrent 2.0.11 native bridge
+/// (exact piece bitfields & full resume/priorities/web-seeds/create support)
+/// and degraded bridges (FakeTorrentNative v192).
 void main() {
-  // A distributedCopies value distinct from every other stat the dashboard can
-  // render, so a match on "7.77" can only mean the fabricated field leaked
-  // into the UI. The 1.9.2 bridge always reports 0.0; we force non-zero here to
-  // prove the widget drops it regardless.
+  tearDown(() {
+    TorrentService.setNativeForTesting(LibtorrentNativeImpl());
+  });
+
   TorrentUpdateInfo buildStats({
     double distributedCopies = 7.77,
     int piecesHave = 10,
@@ -37,7 +38,26 @@ void main() {
   }
 
   group('TorrentStatsDashboard truthfulness', () {
-    testWidgets('labels piece counts as estimated', (tester) async {
+    testWidgets('labels exact piece counts on libtorrent 2.0.11',
+        (tester) async {
+      TorrentService.setNativeForTesting(LibtorrentNativeImpl());
+
+      await tester.pumpWidget(createTestApp(
+        child: TorrentStatsDashboard(
+          task: createTestTask(isTorrent: true),
+          stats: buildStats(),
+          isDark: true,
+        ),
+      ));
+
+      expect(find.text('Pieces'), findsOneWidget);
+      expect(find.text('10/100'), findsOneWidget);
+    });
+
+    testWidgets('labels piece counts as estimated on degraded bridges',
+        (tester) async {
+      TorrentService.setNativeForTesting(FakeTorrentNative());
+
       await tester.pumpWidget(createTestApp(
         child: TorrentStatsDashboard(
           task: createTestTask(isTorrent: true),
@@ -75,21 +95,24 @@ void main() {
         ),
       ));
 
+      expect(find.text('Pieces'), findsNothing);
       expect(find.text('Pieces (est.)'), findsNothing);
     });
   });
 
-  group('Torrent capability flags gated false on the 1.9.2 bridge', () {
-    // Locks the honest-degrade gating: these features map to logged no-ops in
-    // the native bridge, so the UI hides their controls. If a future build
-    // wires them up, flip the flag AND drop the UI guard together.
-    test('advanced and creation features report unsupported', () {
-      expect(TorrentService.webSeedsSupported, isFalse);
-      expect(TorrentService.proxySupported, isFalse);
+  group('Torrent capability flags on libtorrent_dart 1.2.0 (2.0.11)', () {
+    test('supported features report true and unexposed features report false',
+        () {
+      TorrentService.setNativeForTesting(LibtorrentNativeImpl());
+      expect(TorrentService.resumeDataSupported, isTrue);
+      expect(TorrentService.fileProgressSupported, isTrue);
+      expect(TorrentService.filePrioritiesSupported, isTrue);
+      expect(TorrentService.webSeedsSupported, isTrue);
+      expect(TorrentService.proxySupported, isTrue);
+      expect(TorrentService.sequentialDownloadSupported, isTrue);
+      expect(TorrentService.createTorrentSupported, isTrue);
       expect(TorrentService.sslSupported, isFalse);
       expect(TorrentService.ipFilterSupported, isFalse);
-      expect(TorrentService.sequentialDownloadSupported, isFalse);
-      expect(TorrentService.createTorrentSupported, isFalse);
     });
   });
 }

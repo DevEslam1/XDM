@@ -20,10 +20,6 @@ android {
         isCoreLibraryDesugaringEnabled = true
     }
 
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
-    }
-
     defaultConfig {
         applicationId = "com.xdm.downloadmanager"
         // You can update the following values to match your application needs.
@@ -117,14 +113,20 @@ android {
     }
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
 flutter {
     source = "../.."
 }
 
 dependencies {
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
-    implementation("com.github.teamnewpipe:newpipeextractor:v0.26.5")
-    implementation("androidx.work:work-runtime-ktx:2.9.1")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+    implementation("com.github.teamnewpipe:newpipeextractor:v0.27.1")
+    implementation("androidx.work:work-runtime-ktx:2.12.0")
 }
 
 if (file("google-services.json").exists()) {

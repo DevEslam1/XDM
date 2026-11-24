@@ -238,6 +238,8 @@ class DownloadCommand {
         stalledTimeoutMinutes:
             (m['stalledTimeoutMinutes'] as num?)?.toInt() ?? 5,
         resumeIntegrityCheck: m['resumeIntegrityCheck'] as bool? ?? true,
+        initialDownloadedBytes:
+            (m['initialDownloadedBytes'] as num?)?.toInt() ?? 0,
       );
 }
 

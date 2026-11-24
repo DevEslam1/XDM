@@ -130,12 +130,16 @@ class TorrentSubscriptionRegistry {
   }
 
   void unregister(int torrentId, TorrentDownloadHandler handler) {
+    _TorrentSubEntry? removed;
     _lock.synchronized(() {
       final entry = _registry[torrentId];
       if (entry != null && identical(entry.handler, handler)) {
-        _registry.remove(torrentId);
+        removed = _registry.remove(torrentId);
       }
     });
+    try {
+      removed?.subscription.cancel();
+    } catch (_) {}
   }
 
   void unregisterAll(TorrentDownloadHandler handler) {
@@ -288,7 +292,7 @@ class TorrentRuntime {
   bool _closed = false;
   bool get isClosed => _closed;
 
-  void close() {
+  void close({bool preservePauseGuard = false}) {
     if (_closed) return;
     _closed = true;
     try {
@@ -301,7 +305,9 @@ class TorrentRuntime {
       completionGuard!.future.catchError((_) {});
       completionGuard!.completeError(err);
     }
-    if (pauseCompleter != null && !pauseCompleter!.isCompleted) {
+    if (!preservePauseGuard &&
+        pauseCompleter != null &&
+        !pauseCompleter!.isCompleted) {
       pauseCompleter!.future.catchError((_) {});
       pauseCompleter!.completeError(err);
     }
@@ -471,16 +477,13 @@ class TorrentDownloadHandler {
     _removedTorrentIds.add(id);
     TorrentSubscriptionRegistry.instance.unregister(id, this);
     final rt = _runtime.remove(id);
-    rt?.close();
+    rt?.close(preservePauseGuard: true);
 
     if (!_torrentService.isTorrentAlive(id)) {
       _activeTorrentIds.remove(id);
       return;
     }
 
-    // A torrent without metadata cannot reliably transition to "paused" via the
-    // graceful path (libtorrent stays in downloading_metadata). Skip straight to
-    // forceStopTorrent to avoid burning the entire budget on guaranteed timeouts.
     final hasMetadata = _torrentService.latestStats[id]?.hasMetadata ?? false;
     if (!hasMetadata) {
       _log.fine(
@@ -541,42 +544,36 @@ class TorrentDownloadHandler {
     _activeTorrentIds.remove(id);
   }
 
-  // FIX(C6, H2): Cap resume-save at hard 8-second budget; fall back to degraded snapshot if native resume unsupported
+  // FIX(C6, H2): Cap resume-save at hard 8-second budget; always prefer fresh
+  // native resume data + current file snapshot before falling back to cache.
   Future<void> _saveResumeDataBeforePause(int id, String sourceUrl) async {
-    // If the torrent has no metadata yet, libtorrent has nothing to serialize.
-    // Skip the native save entirely to avoid spurious timeouts and CRITICAL logs.
     final cachedBlob = _torrentService.resumeBlobFor(id);
-    final hasMetadata =
-        (_torrentService.latestStats[id]?.hasMetadata ?? false) ||
-            (cachedBlob != null && cachedBlob.isNotEmpty) ||
-            (_torrentService.getFiles(id).isNotEmpty);
+    final stats = _torrentService.latestStats[id];
+    final files = _torrentService.getFiles(id);
+    final hasMetadata = (stats?.hasMetadata ?? false) ||
+        (cachedBlob != null && cachedBlob.isNotEmpty) ||
+        files.isNotEmpty;
     if (!hasMetadata && (cachedBlob == null || cachedBlob.isEmpty)) {
       _log.fine(
           'Skipping saveResumeData for torrent $id — no metadata yet, nothing to save.');
       return;
     }
-    if (cachedBlob != null && cachedBlob.isNotEmpty) {
-      _log.fine(
-          'saveResumeData for $id: reusing cached blob (${cachedBlob.length} bytes).');
-      try {
-        await TorrentResumeStore.saveAndWait(
-          torrentId: id,
-          sourceUrl: sourceUrl,
-          fetchResumeData: () async => cachedBlob,
-        ).timeout(
-          const Duration(seconds: 3),
-          onTimeout: () {
-            _log.warning(
-                'saveAndWait with cached blob timed out for torrent $id');
-            return false;
-          },
-        );
-      } catch (e, st) {
-        _log.warning(
-            'saveAndWait with cached blob failed for torrent $id: $e', e, st);
-      }
-      return;
-    }
+
+    final hasUsableLengths = files.any((f) => f.size > 0);
+    final currentFileRows = files.isNotEmpty && hasUsableLengths
+        ? files
+            .map((f) => {
+                  'name': f.name,
+                  'length': f.size,
+                  'lengthKnown': f.size > 0,
+                  'size': f.size,
+                  'priority': f.priority,
+                  'selected': f.selected,
+                  'downloadedBytes': f.safeDownloadedBytes,
+                  'isComplete': f.size > 0 && f.safeDownloadedBytes >= f.size,
+                })
+            .toList()
+        : null;
 
     final deadline = DateTime.now().add(const Duration(seconds: 8));
     var savedSuccessfully = false;
@@ -603,8 +600,17 @@ class TorrentDownloadHandler {
               );
           final blob = _torrentService.resumeBlobFor(id);
           if (blob != null && blob.isNotEmpty) {
-            savedSuccessfully = true;
-            break;
+            savedSuccessfully = await TorrentResumeStore.saveAndWait(
+              torrentId: id,
+              sourceUrl: sourceUrl,
+              fetchResumeData: () async => blob,
+              files: currentFileRows,
+              pieceBitfield: _torrentService.latestStats[id]?.pieces,
+              piecesTotal: _torrentService.latestStats[id]?.piecesTotal,
+              piecesDone: _torrentService.latestStats[id]?.piecesHave,
+              infoHash: _torrentService.latestStats[id]?.infoHashV1,
+            );
+            if (savedSuccessfully) break;
           }
         } catch (e, st) {
           _log.warning(
@@ -617,6 +623,35 @@ class TorrentDownloadHandler {
             remainingBudget() > const Duration(milliseconds: 500)) {
           await Future.delayed(Duration(milliseconds: 500 * (1 << attempt)));
         }
+      }
+    }
+
+    // Fallback to pre-existing cached blob if fresh save could not complete
+    if (!savedSuccessfully &&
+        cachedBlob != null &&
+        cachedBlob.isNotEmpty &&
+        remainingBudget() > Duration.zero) {
+      try {
+        savedSuccessfully = await TorrentResumeStore.saveAndWait(
+          torrentId: id,
+          sourceUrl: sourceUrl,
+          fetchResumeData: () async => cachedBlob,
+          files: currentFileRows,
+          pieceBitfield: _torrentService.latestStats[id]?.pieces,
+          piecesTotal: _torrentService.latestStats[id]?.piecesTotal,
+          piecesDone: _torrentService.latestStats[id]?.piecesHave,
+          infoHash: _torrentService.latestStats[id]?.infoHashV1,
+        ).timeout(
+          const Duration(seconds: 3),
+          onTimeout: () {
+            _log.warning(
+                'saveAndWait with cached blob timed out for torrent $id');
+            return false;
+          },
+        );
+      } catch (e, st) {
+        _log.warning(
+            'saveAndWait with cached blob failed for torrent $id: $e', e, st);
       }
     }
 
@@ -710,7 +745,8 @@ class TorrentDownloadHandler {
       final stats = _torrentService.latestStats[id];
       if (stats != null) {
         final label = stats.stateLabel.toLowerCase();
-        if (label.contains('paused') ||
+        if (stats.isPaused ||
+            label.contains('paused') ||
             label.contains('stopped') ||
             label.contains('pausing')) {
           return true;
@@ -1570,20 +1606,22 @@ class TorrentDownloadHandler {
       } on DioException catch (e) {
         if (e.type == DioExceptionType.cancel) {
           if (!pauseGuard.isCompleted) {
-            await pauseGuard.future.timeout(
-              const Duration(seconds: 5),
-              onTimeout: () {
-                _log.severe(
-                    'CRASH-TELEMETRY: Pause handler timed out (5s) for torrent $id; forcing stop.');
-                _torrentService
-                    .forceStopTorrent(id)
-                    .catchError((Object err, StackTrace st) {
+            try {
+              await pauseGuard.future.timeout(
+                const Duration(seconds: 5),
+                onTimeout: () {
                   _log.severe(
-                      'forceStopTorrent on timeout failed for $id', err, st);
-                });
-                return null;
-              },
-            );
+                      'CRASH-TELEMETRY: Pause handler timed out (5s) for torrent $id; forcing stop.');
+                  _torrentService
+                      .forceStopTorrent(id)
+                      .catchError((Object err, StackTrace st) {
+                    _log.severe(
+                        'forceStopTorrent on timeout failed for $id', err, st);
+                  });
+                  return null;
+                },
+              );
+            } catch (_) {}
           }
         }
         rethrow;
@@ -1721,20 +1759,49 @@ class TorrentDownloadHandler {
     List<Map<String, dynamic>> currentList,
     List<TorrentFileItem> nativeFiles,
   ) {
-    String normKey(String name) => name.toLowerCase().replaceAll('\\', '/');
-    final oldByName = <String, Map<String, dynamic>>{
-      for (final item in currentList)
-        if (item['name'] is String) normKey(item['name'] as String): item,
-    };
+    String normKey(String name) =>
+        name.toLowerCase().replaceAll('\\', '/').trim();
+    String stripLeadingFolder(String key) {
+      final slash = key.indexOf('/');
+      return (slash >= 0 && slash < key.length - 1)
+          ? key.substring(slash + 1)
+          : key;
+    }
+
+    final oldByName = <String, Map<String, dynamic>>{};
+    final oldByRel = <String, Map<String, dynamic>>{};
+    for (final item in currentList) {
+      final name = item['name'];
+      if (name is! String || name.isEmpty) continue;
+      final nk = normKey(name);
+      oldByName[nk] = item;
+      oldByRel.putIfAbsent(stripLeadingFolder(nk), () => item);
+    }
+
+    Map<String, dynamic>? matchOld(int i, TorrentFileItem f) {
+      if (i < currentList.length &&
+          normKey((currentList[i]['name'] as String?) ?? '') ==
+              normKey(f.name)) {
+        return currentList[i];
+      }
+      final nk = normKey(f.name);
+      final stripped = stripLeadingFolder(nk);
+      return oldByName[nk] ??
+          oldByName[stripped] ??
+          oldByRel[nk] ??
+          oldByRel[stripped] ??
+          (i < currentList.length && currentList.length == nativeFiles.length
+              ? currentList[i]
+              : (i < currentList.length && nativeFiles.isNotEmpty
+                  ? currentList[i]
+                  : null));
+    }
 
     if (currentList.length != nativeFiles.length) {
       return nativeFiles.asMap().entries.map((entry) {
         final i = entry.key;
         final f = entry.value;
-        final old = (i < currentList.length && currentList[i]['name'] == f.name)
-            ? currentList[i]
-            : (oldByName[normKey(f.name)] ??
-                (i < currentList.length ? currentList[i] : null));
+        final old = matchOld(i, f);
         // The engine reports 0 for a size it cannot determine; the length we
         // already parsed from the torrent metadata stays authoritative.
         final len = TorrentFileNormalizer.resolveFileLength(
@@ -1773,10 +1840,7 @@ class TorrentDownloadHandler {
     final updated = List<Map<String, dynamic>>.from(currentList);
     for (int i = 0; i < nativeFiles.length; i++) {
       final f = nativeFiles[i];
-      final old = (i < currentList.length && currentList[i]['name'] == f.name)
-          ? currentList[i]
-          : (oldByName[normKey(f.name)] ??
-              (i < currentList.length ? currentList[i] : null));
+      final old = matchOld(i, f);
       final len = TorrentFileNormalizer.resolveFileLength(
         f.size,
         previousLength: (old?['length'] as num?)?.toInt(),
@@ -2008,7 +2072,7 @@ class TorrentDownloadHandler {
       rethrow;
     } finally {
       await alertSub.cancel();
-      await _cleanup(id, sub);
+      await _cleanup(id, sub, preservePauseGuard: cancelToken.isCancelled);
     }
   }
 
@@ -3001,9 +3065,13 @@ class TorrentDownloadHandler {
     }
   }
 
-  Future<void> _cleanup(int id, StreamSubscription? sub) async {
+  Future<void> _cleanup(
+    int id,
+    StreamSubscription? sub, {
+    bool preservePauseGuard = false,
+  }) async {
     final rt = _runtime.remove(id);
-    rt?.close();
+    rt?.close(preservePauseGuard: preservePauseGuard);
     await sub?.cancel();
     // B19: the registry may hold a NEWER subscription than the stale local
     // `sub` (stream-error replacement) — cancel it too, or it leaks. Covers

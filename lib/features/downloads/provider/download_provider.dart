@@ -15,10 +15,13 @@ import '../../../core/services/diagnostic_service.dart';
 import '../../../core/services/download_engine.dart' hide DownloadCommand;
 import '../../../core/services/download_journal.dart';
 import '../../../core/services/download_metrics.dart';
+import '../../../core/services/engine/http_transfer_job.dart'
+    show HttpTransferJob;
 import '../../../core/services/logging_service.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/services/permission_service.dart';
 import '../../../core/services/power_monitor.dart';
+import '../../../core/services/torrent_resume_store.dart';
 import '../../../core/services/torrent_service.dart';
 import '../../../core/services/update_service.dart';
 import '../../../core/services/youtube_service.dart';
@@ -487,22 +490,81 @@ class DownloadProvider extends ChangeNotifier
                   taskId: task.id,
                 );
                 final state = stateResult.state;
-                if (state.downloadedBytes > 0) {
+                if (!stateResult.created ||
+                    stateResult.diskAdjusted ||
+                    state.downloadedBytes > 0) {
                   reconciled = reconciled.copyWith(
                     downloadedBytes: state.downloadedBytes,
+                    fileSize: state.totalSize > 0
+                        ? state.totalSize
+                        : reconciled.fileSize,
+                    chunks: state.chunks.isNotEmpty
+                        ? state.chunkRatios
+                        : reconciled.chunks,
                   );
-                  DiagnosticService.instance.recordTelemetryAlert(
-                    'journal_reconciled',
-                    taskId: task.id,
-                    details: 'bytes=${state.downloadedBytes}',
-                  );
+                  if (state.downloadedBytes > 0) {
+                    DiagnosticService.instance.recordTelemetryAlert(
+                      'journal_reconciled',
+                      taskId: task.id,
+                      details: 'bytes=${state.downloadedBytes}',
+                    );
+                  }
                 }
               } catch (e) {
                 debugPrint(
                     '[DownloadProvider] Startup reconciliation error for ${task.id}: $e');
               }
             }
-          } else if (task.status == DownloadStatus.completed) {
+          } else if (task.isTorrent && !task.isCancelled) {
+            try {
+              final snap =
+                  await TorrentResumeStore.loadTaskReconciliationSnapshot(
+                task.url,
+                infoHash: task.infoHash,
+              );
+              if (snap != null) {
+                final restoredFiles =
+                    snap.files.isNotEmpty ? snap.files : task.torrentFiles;
+                final restoredSize = snap.selectedTotalBytes > 0
+                    ? snap.selectedTotalBytes
+                    : task.fileSize;
+                final rawDone =
+                    snap.selectedDownloadedBytes > task.downloadedBytes
+                        ? snap.selectedDownloadedBytes
+                        : task.downloadedBytes;
+                final restoredDone =
+                    restoredSize > 0 ? rawDone.clamp(0, restoredSize) : rawDone;
+                final resolvedComplete =
+                    snap.isComplete && task.status != DownloadStatus.failed;
+                reconciled = reconciled.copyWith(
+                  fileSize: restoredSize,
+                  downloadedBytes: resolvedComplete && restoredSize > 0
+                      ? restoredSize
+                      : restoredDone,
+                  torrentFiles: restoredFiles,
+                  chunks: buildChunks(
+                    task.threadCount > 0 ? task.threadCount : 1,
+                    restoredSize,
+                    resolvedComplete && restoredSize > 0
+                        ? restoredSize
+                        : restoredDone,
+                  ),
+                  status: resolvedComplete
+                      ? DownloadStatus.completed
+                      : reconciled.status,
+                  resumeDataSaved: snap.hasNativeResumeBlob
+                      ? true
+                      : reconciled.resumeDataSaved,
+                  clearError: resolvedComplete,
+                );
+              }
+            } catch (e) {
+              debugPrint(
+                '[DownloadProvider] Torrent reconciliation error for ${task.id}: $e',
+              );
+            }
+          }
+          if (task.status == DownloadStatus.completed) {
             // FIX(M-28 / P0-3): Reconcile completed tasks with disk and pin bytes to 100%
             final targetPath = task.localFilePath.isNotEmpty
                 ? task.localFilePath
@@ -534,6 +596,15 @@ class DownloadProvider extends ChangeNotifier
               status: DownloadStatus.paused,
               pauseReason: PauseReason.appRestarted,
               pausedByUser: false,
+              speed: 0,
+              clearEta: true,
+              clearStatusMessage: true,
+            );
+          } else if (reconciled.status != DownloadStatus.downloading &&
+              reconciled.speed > 0) {
+            reconciled = reconciled.copyWith(
+              speed: 0,
+              clearEta: true,
             );
           }
 
@@ -552,6 +623,9 @@ class DownloadProvider extends ChangeNotifier
         _tasks.addAll(reconciledTasks);
         for (final task in reconciledTasks) {
           _taskIndex[task.id] = task;
+          _executor
+              .stateMachineFor(task.id)
+              .syncState(DownloadStateMachine.fromStatus(task.status));
         }
         filteredTasksDirty = true;
       });
@@ -586,7 +660,7 @@ class DownloadProvider extends ChangeNotifier
         _networkMonitor.init();
       }
       if (autoResume) {
-        _autoResumeIncomplete();
+        await _autoResumeIncomplete();
       }
       if (_settingsProvider.globalTorrentSeeding) {
         _autoResumeSeeding();
@@ -601,11 +675,15 @@ class DownloadProvider extends ChangeNotifier
     }
   }
 
-  void _autoResumeIncomplete() {
-    for (final task in _tasks) {
-      if (task.isCancelled || task.pausedByUser) continue;
+  Future<void> _autoResumeIncomplete() async {
+    for (final task in List<DownloadTask>.from(_tasks)) {
+      if (task.isCancelled ||
+          task.pausedByUser ||
+          task.pauseReason == PauseReason.user) {
+        continue;
+      }
       if (task.status == DownloadStatus.downloading) {
-        resumeTask(task.id);
+        await resumeTask(task.id);
       } else if (task.status == DownloadStatus.paused) {
         final isWaitingWifi =
             task.errorMessage?.toLowerCase().contains('waiting for wifi') ==
@@ -614,11 +692,15 @@ class DownloadProvider extends ChangeNotifier
             task.errorMessage?.toLowerCase().contains('waiting for network') ==
                 true;
         if (isWaitingWifi) {
-          if (_networkMonitor.hasWifiOrEthernet) resumeTask(task.id);
+          if (_networkMonitor.hasWifiOrEthernet) {
+            await resumeTask(task.id);
+          }
         } else if (isWaitingNet) {
-          if (_networkMonitor.hasConnection) resumeTask(task.id);
+          if (_networkMonitor.hasConnection) {
+            await resumeTask(task.id);
+          }
         } else if (_settingsProvider.autoStart) {
-          resumeTask(task.id);
+          await resumeTask(task.id);
         }
       }
     }
@@ -800,91 +882,163 @@ class DownloadProvider extends ChangeNotifier
               final status = TorrentService.latestStats[torrentId];
 
               if (status != null) {
-                List<double>? updatedChunks;
-                final count = task.threadCount > 0 ? task.threadCount : 1;
-                if (status.piecesTotal > 0 && status.piecesHave >= 0) {
-                  final overallRatio =
-                      (status.piecesHave / status.piecesTotal).clamp(0.0, 1.0);
-                  updatedChunks = List.filled(count, overallRatio);
-                }
+                final liveHash = status.infoHash.isNotEmpty
+                    ? status.infoHash
+                    : status.infoHashV1;
+                final effectiveHash =
+                    liveHash.isNotEmpty ? liveHash : task.infoHash;
 
-                List<Map<String, dynamic>>? updatedFiles;
-                int selectedFileDownloaded = 0;
-                bool hasSelectedFileProgress = false;
-                if (task.torrentFiles != null &&
-                    task.torrentFiles!.isNotEmpty) {
-                  updatedFiles = List<Map<String, dynamic>>.from(
-                    task.torrentFiles!.map((f) => Map<String, dynamic>.from(f)),
+                if (status.isChecking) {
+                  var checkedFileSize = task.fileSize;
+                  if (checkedFileSize <= 0 &&
+                      status.hasMetadata &&
+                      status.totalWanted > 0) {
+                    checkedFileSize = status.totalWanted;
+                  }
+                  final checkingTask = task.copyWith(
+                    torrentId: torrentId,
+                    infoHash: effectiveHash,
+                    fileSize: checkedFileSize,
+                    speed: 0,
+                    statusMessage: 'Checking files...',
                   );
-                  for (int fIdx = 0; fIdx < updatedFiles.length; fIdx++) {
-                    final f = updatedFiles[fIdx];
-                    final len = (f['length'] as num?)?.toInt() ??
-                        (f['size'] as num?)?.toInt() ??
-                        0;
-                    int dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-                    if (fIdx < status.fileProgress.length &&
-                        status.fileProgress[fIdx] >= 0) {
-                      dl = status.fileProgress[fIdx];
-                      f['downloadedBytes'] = dl;
-                      f['progressEstimated'] = false;
+                  if (checkingTask != task) {
+                    _tasks[i] = checkingTask;
+                    _taskIndex[task.id] = checkingTask;
+                    task = checkingTask;
+                    tasksModified = true;
+                  }
+                } else {
+                  List<double>? updatedChunks;
+                  final count = task.threadCount > 0 ? task.threadCount : 1;
+                  if (status.piecesTotal > 0 && status.piecesHave >= 0) {
+                    final overallRatio =
+                        (status.piecesHave / status.piecesTotal)
+                            .clamp(0.0, 1.0);
+                    updatedChunks = List.filled(count, overallRatio);
+                  }
+
+                  List<Map<String, dynamic>>? updatedFiles;
+                  int selectedFileDownloaded = 0;
+                  int selectedFilesTotal = 0;
+                  bool allSelectedLengthsKnown = false;
+                  bool hasSelectedFileProgress = false;
+                  if (task.torrentFiles != null &&
+                      task.torrentFiles!.isNotEmpty) {
+                    updatedFiles = List<Map<String, dynamic>>.from(
+                      task.torrentFiles!
+                          .map((f) => Map<String, dynamic>.from(f)),
+                    );
+                    allSelectedLengthsKnown = true;
+                    var anySelected = false;
+                    for (int fIdx = 0; fIdx < updatedFiles.length; fIdx++) {
+                      final f = updatedFiles[fIdx];
+                      final len = (f['length'] as num?)?.toInt() ??
+                          (f['size'] as num?)?.toInt() ??
+                          0;
+                      int dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+                      if (fIdx < status.filePriorities.length &&
+                          status.filePriorities[fIdx] >= 0) {
+                        final prio = status.filePriorities[fIdx];
+                        f['priority'] = prio;
+                        f['selected'] = prio > 0;
+                      }
                       final selected = (f['selected'] as bool?) ?? true;
                       final priority = (f['priority'] as num?)?.toInt() ?? 4;
-                      if (selected && priority > 0) {
-                        selectedFileDownloaded += dl;
-                        hasSelectedFileProgress = true;
+                      final isSel = selected && priority > 0;
+                      if (fIdx < status.fileProgress.length &&
+                          status.fileProgress[fIdx] >= 0) {
+                        dl = status.fileProgress[fIdx];
+                        if (len > 0 && dl > len) dl = len;
+                        f['downloadedBytes'] = dl;
+                        f['progressEstimated'] = false;
+                        if (isSel) {
+                          selectedFileDownloaded += dl;
+                          hasSelectedFileProgress = true;
+                        }
                       }
+                      final bool lengthKnown =
+                          len > 0 || f['lengthKnown'] == true;
+                      if (isSel) {
+                        anySelected = true;
+                        selectedFilesTotal += len;
+                        if (!lengthKnown) {
+                          allSelectedLengthsKnown = false;
+                        }
+                      }
+                      final bool isComp = lengthKnown &&
+                          ((dl >= len) || f['isComplete'] == true);
+                      f['isComplete'] = isComp;
+                      f['progress'] = len > 0
+                          ? (dl / len).clamp(0.0, 1.0)
+                          : (isComp ? 1.0 : 0.0);
                     }
-                    final bool lengthKnown =
-                        len > 0 || f['lengthKnown'] == true;
-                    final bool isComp =
-                        lengthKnown && ((dl >= len) || f['isComplete'] == true);
-                    f['isComplete'] = isComp;
-                    f['progress'] = len > 0
-                        ? (dl / len).clamp(0.0, 1.0)
-                        : (isComp ? 1.0 : 0.0);
+                    if (!anySelected) {
+                      allSelectedLengthsKnown = false;
+                    }
                   }
-                }
 
-                final newFileSize = task.fileSize > 0
-                    ? task.fileSize
-                    : (status.totalWanted > 0
-                        ? status.totalWanted
-                        : task.fileSize);
-                final newDownloaded = isCompleted && newFileSize > 0
-                    ? newFileSize
-                    : (hasSelectedFileProgress
-                        ? selectedFileDownloaded
-                        : (status.totalWantedDone > 0
-                            ? status.totalWantedDone
-                            : (status.totalDone > 0
-                                ? status.totalDone
-                                : task.downloadedBytes)));
+                  final int newFileSize;
+                  if (updatedFiles != null &&
+                      updatedFiles.isNotEmpty &&
+                      allSelectedLengthsKnown &&
+                      selectedFilesTotal > 0) {
+                    newFileSize = selectedFilesTotal;
+                  } else if (status.hasMetadata && status.totalWanted > 0) {
+                    newFileSize = status.totalWanted;
+                  } else {
+                    newFileSize = task.fileSize;
+                  }
 
-                final updatedTask = task.copyWith(
-                  torrentId: torrentId,
-                  fileSize: newFileSize,
-                  downloadedBytes: newDownloaded,
-                  uploadedBytes: status.totalPayloadUpload > 0
-                      ? status.totalPayloadUpload
-                      : task.uploadedBytes,
-                  speed: isDownloading
-                      ? status.downloadRate.toDouble()
-                      : (isSeeding ? status.uploadRate.toDouble() : task.speed),
-                  completedPieces: status.piecesHave > 0
-                      ? status.piecesHave
-                      : task.completedPieces,
-                  totalPieces: status.piecesTotal > 0
-                      ? status.piecesTotal
-                      : task.totalPieces,
-                  chunks: updatedChunks ?? task.chunks,
-                  torrentFiles: updatedFiles ?? task.torrentFiles,
-                );
+                  int resolvedDone;
+                  if (isCompleted && newFileSize > 0) {
+                    resolvedDone = newFileSize;
+                  } else if (status.totalWantedDone > 0) {
+                    resolvedDone = status.totalWantedDone;
+                  } else if (hasSelectedFileProgress &&
+                      selectedFileDownloaded > 0) {
+                    resolvedDone = selectedFileDownloaded;
+                  } else if (status.progress <= 0 && task.downloadedBytes > 0) {
+                    resolvedDone = task.downloadedBytes;
+                  } else {
+                    resolvedDone = 0;
+                  }
+                  if (newFileSize > 0 && resolvedDone > newFileSize) {
+                    resolvedDone = newFileSize;
+                  }
 
-                if (updatedTask != task) {
-                  _tasks[i] = updatedTask;
-                  _taskIndex[task.id] = updatedTask;
-                  task = updatedTask;
-                  tasksModified = true;
+                  final clearCheckMsg =
+                      task.statusMessage == 'Checking files...';
+                  final updatedTask = task.copyWith(
+                    torrentId: torrentId,
+                    infoHash: effectiveHash,
+                    fileSize: newFileSize,
+                    downloadedBytes: resolvedDone,
+                    uploadedBytes: status.totalPayloadUpload > 0
+                        ? status.totalPayloadUpload
+                        : task.uploadedBytes,
+                    speed: isDownloading
+                        ? status.downloadRate.toDouble()
+                        : (isSeeding
+                            ? status.uploadRate.toDouble()
+                            : task.speed),
+                    completedPieces: status.piecesHave > 0
+                        ? status.piecesHave
+                        : task.completedPieces,
+                    totalPieces: status.piecesTotal > 0
+                        ? status.piecesTotal
+                        : task.totalPieces,
+                    chunks: updatedChunks ?? task.chunks,
+                    torrentFiles: updatedFiles ?? task.torrentFiles,
+                    clearStatusMessage: clearCheckMsg,
+                  );
+
+                  if (updatedTask != task) {
+                    _tasks[i] = updatedTask;
+                    _taskIndex[task.id] = updatedTask;
+                    task = updatedTask;
+                    tasksModified = true;
+                  }
                 }
               }
 
@@ -964,7 +1118,14 @@ class DownloadProvider extends ChangeNotifier
           return;
         }
       }
+      final hasMetadataTransition = existing != null &&
+          (existing.fileSize != task.fileSize ||
+              existing.fileName != task.fileName ||
+              existing.infoHash != task.infoHash ||
+              (existing.torrentFiles?.length ?? 0) !=
+                  (task.torrentFiles?.length ?? 0));
       final isProgressOnly = existing != null &&
+          !hasMetadataTransition &&
           existing.status == task.status &&
           existing.status == DownloadStatus.downloading &&
           existing.downloadedBytes != task.downloadedBytes;
@@ -1121,13 +1282,13 @@ class DownloadProvider extends ChangeNotifier
       if (_disposed) return;
       final task = _findTask(id);
       if (task == null) return;
-      DownloadStateMachine(
-              taskId: id,
-              initialState: DownloadStateMachine.fromStatus(task.status))
+      final fromState = DownloadStateMachine.fromStatus(task.status);
+      DownloadStateMachine(taskId: id, initialState: fromState)
           .transition(toState, reason: reason ?? errorMessage);
+      _executor.stateMachineFor(id, initialState: fromState).syncState(toState);
       await _snapshotStore.onTaskStateChanged(
         id,
-        DownloadStateMachine.fromStatus(task.status),
+        fromState,
         toState,
         cmd,
         errorMessage: errorMessage,
@@ -1161,7 +1322,8 @@ class DownloadProvider extends ChangeNotifier
     if (!isZeroProgress) {
       await _deleteFileSafely(task.tempFilePath);
       await _deleteFileSafely('${task.tempFilePath}.dmxstate');
-      await _deleteFileSafely(StateStore.pathFor(task.tempFilePath, taskId: task.id));
+      await _deleteFileSafely(
+          StateStore.pathFor(task.tempFilePath, taskId: task.id));
       await _deleteFileSafely('${task.tempFilePath}.journal');
     }
     await _setTask(task.copyWith(
@@ -1383,7 +1545,17 @@ class DownloadProvider extends ChangeNotifier
     return ids;
   }
 
-  Future<void> startTask(String id) => _executor.dispatch(StartTask(id));
+  Future<void> startTask(String id) async {
+    if (_disposed) return;
+    final task = _findTask(id);
+    if (task != null &&
+        (task.status == DownloadStatus.paused ||
+            task.status == DownloadStatus.failed)) {
+      await resumeTask(id);
+      return;
+    }
+    await _executor.dispatch(StartTask(id));
+  }
 
   @override
   Future<void> pauseTask(
@@ -1423,37 +1595,72 @@ class DownloadProvider extends ChangeNotifier
       } catch (_) {}
     }
 
-    if (wasActive) {
-      // BUG3: flush any pending progress-only DB update first so the row
-      // reflects the latest bytes, then re-read the task so the paused
-      // state carries the newest in-memory receivedBytes/chunks.
-      await flushPendingProgress(id);
-      final liveToPause = _findTask(id);
-      if (liveToPause == null) return;
+    await flushPendingProgress(id);
+    final liveToPause = _findTask(id);
+    if (liveToPause != null && liveToPause.status == DownloadStatus.completed) {
+      if (liveToPause.isTorrent && liveToPause.seedingEnabled) {
+        await updateTaskSeeding(id, enabled: false);
+      }
+      _executor.stateMachineFor(id).syncState(DomainDownloadState.completed);
+      updateTelemetryWidget();
+      return;
+    }
+    TransferState? durableState;
+    if (liveToPause != null &&
+        !liveToPause.isTorrent &&
+        !liveToPause.hasMergedAudio &&
+        liveToPause.tempFilePath.isNotEmpty) {
+      durableState =
+          await StateStore.load(liveToPause.tempFilePath, taskId: id);
+      if (durableState == null &&
+          !await File(liveToPause.tempFilePath).exists() &&
+          liveToPause.localFilePath.isNotEmpty &&
+          liveToPause.fileSize > 0) {
+        final finalFile = File(liveToPause.localFilePath);
+        if (await finalFile.exists()) {
+          final finalLen = await finalFile.length();
+          if (finalLen >= liveToPause.fileSize) {
+            await setTaskState(liveToPause.copyWith(
+              status: DownloadStatus.completed,
+              fileSize: finalLen,
+              downloadedBytes: finalLen,
+              chunks: List<double>.filled(liveToPause.threadCount, 1.0),
+              speed: 0,
+              clearEta: true,
+              clearError: true,
+              clearStatusMessage: true,
+              pausedByUser: false,
+              isCancelled: false,
+            ));
+            _executor
+                .stateMachineFor(id)
+                .syncState(DomainDownloadState.completed);
+            updateTelemetryWidget();
+            return;
+          }
+        }
+      }
+    }
+
+    if (liveToPause != null && (wasActive || durableState != null)) {
       await setTaskState(liveToPause.copyWith(
         status: DownloadStatus.paused,
+        downloadedBytes:
+            durableState?.downloadedBytes ?? liveToPause.downloadedBytes,
+        fileSize: (durableState != null && durableState.totalSize > 0)
+            ? durableState.totalSize
+            : liveToPause.fileSize,
+        chunks: (durableState != null && durableState.chunks.isNotEmpty)
+            ? durableState.chunkRatios
+            : liveToPause.chunks,
         speed: 0,
         clearEta: true,
         pausedByUser: reason == PauseReason.userRequested,
         pauseReason: reason,
+        isCancelled: false,
       ));
-    }
-    // Synchronize TaskExecutor state machine so subsequent StartTask/ResumeTask are not dropped
-    final sm = _executor.stateMachineFor(id);
-    if (sm.currentState != DomainDownloadState.paused) {
-      try {
-        sm.transition(
-          DomainDownloadState.paused,
-          command: PauseTask(id,
-              reason: reason.name,
-              userInitiated: reason == PauseReason.userRequested),
-          reason: reason.name,
-          caller: 'DownloadProvider.pauseTask',
-          engine: 'DownloadEngine',
-        );
-      } catch (_) {}
-    }
-    if (!wasActive) {
+      _executor.stateMachineFor(id).syncState(DomainDownloadState.paused);
+    } else {
       await _applyStateChange(
         id,
         DomainDownloadState.paused,
@@ -1461,6 +1668,7 @@ class DownloadProvider extends ChangeNotifier
             reason: reason.name,
             userInitiated: reason == PauseReason.userRequested),
         pausedByUser: reason == PauseReason.userRequested,
+        pauseReason: reason.name,
         isCancelled: false,
       );
     }
@@ -1481,14 +1689,17 @@ class DownloadProvider extends ChangeNotifier
       return;
     }
     // BUG-14 & BUG-6: verify state file or temp file before queueing
-    if (!isTorrent &&
-        task.downloadedBytes > 0 &&
-        task.tempFilePath.isNotEmpty) {
+    TransferState? durableState;
+    if (!isTorrent && task.tempFilePath.isNotEmpty) {
+      if (!task.hasMergedAudio) {
+        durableState = await StateStore.load(task.tempFilePath, taskId: id);
+      }
       final stateFile =
           File(StateStore.pathFor(task.tempFilePath, taskId: task.id));
       final legacyState = File('${task.tempFilePath}.dmxstate');
       final tempFile = File(task.tempFilePath);
-      if (!stateFile.existsSync() &&
+      if (task.downloadedBytes > 0 &&
+          !stateFile.existsSync() &&
           !legacyState.existsSync() &&
           !tempFile.existsSync()) {
         debugPrint(
@@ -1496,14 +1707,254 @@ class DownloadProvider extends ChangeNotifier
         );
       }
     }
+    if (durableState != null ||
+        task.failureCategory != null ||
+        task.recoveryHint != null) {
+      await _setTask(task.copyWith(
+        downloadedBytes: durableState?.downloadedBytes ?? task.downloadedBytes,
+        fileSize: (durableState != null && durableState.totalSize > 0)
+            ? durableState.totalSize
+            : task.fileSize,
+        chunks: (durableState != null && durableState.chunks.isNotEmpty)
+            ? durableState.chunkRatios
+            : task.chunks,
+        clearError: true,
+        clearFailureCategory: true,
+        clearRecoveryHint: true,
+        clearStatusMessage: true,
+        pausedByUser: false,
+        isCancelled: false,
+      ));
+    }
     await _applyStateChange(
       id,
       DomainDownloadState.queued,
       ResumeTask(id),
       pausedByUser: false,
+      pauseReason: '',
       isCancelled: false,
     );
     _startTorrentPollingTimer();
+    updateTelemetryWidget();
+  }
+
+  Future<void> stopTask(String id, {bool deletePartialFiles = false}) async {
+    if (_disposed) return;
+    _retryTimers.remove(id)?.cancel();
+    _retryCounts.remove(id);
+    _pendingProgressUpdates.remove(id);
+
+    final token = _cancelTokens.remove(id);
+    if (token != null && !token.isCancelled) {
+      token.cancel('stopped');
+    }
+    final orchTokens = _orchestratorTokens.remove(id);
+    if (orchTokens != null) {
+      if (!orchTokens.video.isCancelled) {
+        orchTokens.video.cancel('stopped');
+      }
+      if (!orchTokens.audio.isCancelled) {
+        orchTokens.audio.cancel('stopped');
+      }
+    }
+    final future = _activeFutures.remove(id);
+    if (future != null) {
+      try {
+        await future.timeout(const Duration(seconds: 5), onTimeout: () {});
+      } catch (_) {}
+    }
+
+    _notifications.cancelForTask(id);
+    unawaited(ScheduleManager.cancelAlarm(id));
+    _orchestrator.cleanupTaskState(id);
+
+    final live = _findTask(id);
+    if (live == null) return;
+    if (live.isTorrent) {
+      final tid = _torrentIds.remove(id) ?? live.torrentId;
+      var latestBytes = live.downloadedBytes;
+      var latestSize = live.fileSize;
+      final latestFiles = live.torrentFiles;
+
+      if (deletePartialFiles) {
+        if (tid != null && tid >= 0 && TorrentService.isTorrentAlive(tid)) {
+          try {
+            TorrentService.removeTorrent(
+              tid,
+              deleteFiles: true,
+              deleteResumeData: true,
+            );
+          } catch (_) {}
+        } else if (live.savePath.isNotEmpty) {
+          // Safely remove only known payload files/root folder, never the parent savePath.
+          if (live.torrentFiles != null && live.torrentFiles!.isNotEmpty) {
+            for (final f in live.torrentFiles!) {
+              final rel = (f['name'] as String?) ?? '';
+              if (rel.isEmpty) continue;
+              final normalizedRel = rel.replaceAll('/', Platform.pathSeparator);
+              await _deleteFileSafely(
+                '${live.savePath}${Platform.pathSeparator}$normalizedRel',
+              );
+              if (live.fileName.isNotEmpty) {
+                await _deleteFileSafely(
+                  '${live.savePath}${Platform.pathSeparator}${live.fileName}${Platform.pathSeparator}$normalizedRel',
+                );
+              }
+            }
+          } else if (live.localFilePath.isNotEmpty &&
+              live.localFilePath != live.savePath) {
+            await _deleteFileSafely(live.localFilePath);
+          }
+          if (live.fileName.isNotEmpty &&
+              live.torrentFiles != null &&
+              live.torrentFiles!.length > 1) {
+            try {
+              final rootDir = Directory(
+                '${live.savePath}${Platform.pathSeparator}${live.fileName}',
+              );
+              if (await rootDir.exists()) {
+                await rootDir.delete(recursive: true);
+              }
+            } catch (_) {}
+          }
+        }
+        await TorrentResumeStore.deleteResumeDataForSource(
+          live.url,
+          infoHash: live.infoHash,
+        );
+        final resetFiles = live.torrentFiles
+            ?.map((f) => {
+                  ...f,
+                  'downloadedBytes': 0,
+                  'progress': 0.0,
+                  'isComplete': false,
+                })
+            .toList();
+        await _setTask(live.copyWith(
+          status: DownloadStatus.paused,
+          downloadedBytes: 0,
+          torrentFiles: resetFiles,
+          chunks: List<double>.filled(
+            live.threadCount > 0 ? live.threadCount : 1,
+            0.0,
+          ),
+          clearTorrentId: true,
+          resumeDataSaved: false,
+          pausedByUser: true,
+          pauseReason: PauseReason.userRequested,
+          isCancelled: false,
+          speed: 0,
+          clearEta: true,
+          clearError: true,
+          clearStatusMessage: true,
+        ));
+      } else {
+        if (tid != null && tid >= 0 && TorrentService.isTorrentAlive(tid)) {
+          try {
+            await TorrentService.pauseTorrent(tid);
+          } catch (_) {}
+          try {
+            await TorrentService.saveResumeData(tid);
+          } catch (_) {}
+          final st = TorrentService.latestStats[tid];
+          if (st != null && !st.isChecking) {
+            if (st.hasMetadata && st.totalWanted > 0) {
+              latestSize = st.totalWanted;
+            }
+            if (st.totalWantedDone > 0) {
+              latestBytes = latestSize > 0
+                  ? st.totalWantedDone.clamp(0, latestSize)
+                  : st.totalWantedDone;
+            }
+          }
+          try {
+            TorrentService.removeTorrent(
+              tid,
+              deleteFiles: false,
+              deleteResumeData: false,
+            );
+          } catch (_) {}
+        }
+        await _setTask(live.copyWith(
+          status: DownloadStatus.paused,
+          downloadedBytes: latestBytes,
+          fileSize: latestSize,
+          torrentFiles: latestFiles,
+          clearTorrentId: true,
+          resumeDataSaved: true,
+          pausedByUser: true,
+          pauseReason: PauseReason.userRequested,
+          isCancelled: false,
+          speed: 0,
+          clearEta: true,
+          clearStatusMessage: true,
+        ));
+      }
+      _executor.stateMachineFor(id).syncState(DomainDownloadState.paused);
+      pumpQueue();
+      updateTelemetryWidget();
+      return;
+    }
+    if (!deletePartialFiles &&
+        !live.isTorrent &&
+        live.status == DownloadStatus.completed) {
+      _executor.stateMachineFor(id).syncState(DomainDownloadState.completed);
+      pumpQueue();
+      updateTelemetryWidget();
+      return;
+    }
+
+    if (deletePartialFiles) {
+      await _deleteFileSafely(live.tempFilePath);
+      await _deleteFileSafely(
+          StateStore.pathFor(live.tempFilePath, taskId: id));
+      await _deleteFileSafely('${live.tempFilePath}.dmxstate');
+      await _deleteFileSafely('${live.tempFilePath}.journal');
+      await _deleteFileSafely(
+          StateStore.journalPathFor(live.tempFilePath, taskId: id));
+      await _deleteFileSafely('${live.tempFilePath}.audio');
+      await _deleteFileSafely(
+          StateStore.pathFor('${live.tempFilePath}.audio', taskId: id));
+      await _deleteFileSafely('${live.tempFilePath}.audio.dmxstate');
+      await _deleteFileSafely('${live.tempFilePath}.audio.journal');
+      await _setTask(live.copyWith(
+        status: DownloadStatus.paused,
+        downloadedBytes: 0,
+        chunks: List<double>.filled(live.threadCount, 0.0),
+        pausedByUser: true,
+        pauseReason: PauseReason.userRequested,
+        isCancelled: false,
+        speed: 0,
+        clearEta: true,
+        clearError: true,
+        clearStatusMessage: true,
+      ));
+    } else {
+      TransferState? durableState;
+      if (!live.isTorrent &&
+          !live.hasMergedAudio &&
+          live.tempFilePath.isNotEmpty) {
+        durableState = await StateStore.load(live.tempFilePath, taskId: id);
+      }
+      await _setTask(live.copyWith(
+        status: DownloadStatus.paused,
+        downloadedBytes: durableState?.downloadedBytes ?? live.downloadedBytes,
+        fileSize: (durableState != null && durableState.totalSize > 0)
+            ? durableState.totalSize
+            : live.fileSize,
+        chunks: (durableState != null && durableState.chunks.isNotEmpty)
+            ? durableState.chunkRatios
+            : live.chunks,
+        pausedByUser: true,
+        pauseReason: PauseReason.userRequested,
+        isCancelled: false,
+        speed: 0,
+        clearEta: true,
+        clearStatusMessage: true,
+      ));
+    }
+    _executor.stateMachineFor(id).syncState(DomainDownloadState.paused);
+    pumpQueue();
     updateTelemetryWidget();
   }
 
@@ -1513,10 +1964,50 @@ class DownloadProvider extends ChangeNotifier
     // right after a cancel isn't silently swallowed by the queue pump's
     // waiting-for-retry filter.
     _retryTimers.remove(id)?.cancel();
-    _cancelTokens.remove(id)?.cancel('cancelled');
+    _retryCounts.remove(id);
+    _pendingProgressUpdates.remove(id);
+    final token = _cancelTokens.remove(id);
+    if (token != null && !token.isCancelled) {
+      token.cancel('cancelled');
+    }
+    final orchTokens = _orchestratorTokens.remove(id);
+    if (orchTokens != null) {
+      if (!orchTokens.video.isCancelled) {
+        orchTokens.video.cancel('cancelled');
+      }
+      if (!orchTokens.audio.isCancelled) {
+        orchTokens.audio.cancel('cancelled');
+      }
+    }
+    final future = _activeFutures.remove(id);
+    if (future != null) {
+      try {
+        await future.timeout(const Duration(seconds: 5), onTimeout: () {});
+      } catch (_) {}
+    }
     _notifications.cancelForTask(id);
     // BG-09: a cancelled task must not leave a pending OS schedule alarm.
     unawaited(ScheduleManager.cancelAlarm(id));
+    final live = _findTask(id);
+    if (live != null &&
+        !live.isTorrent &&
+        !live.hasMergedAudio &&
+        live.tempFilePath.isNotEmpty) {
+      final durableState = await StateStore.load(live.tempFilePath, taskId: id);
+      if (durableState != null) {
+        await _setTask(live.copyWith(
+          downloadedBytes: durableState.downloadedBytes,
+          fileSize: durableState.totalSize > 0
+              ? durableState.totalSize
+              : live.fileSize,
+          chunks: durableState.chunks.isNotEmpty
+              ? durableState.chunkRatios
+              : live.chunks,
+          speed: 0,
+          clearEta: true,
+        ));
+      }
+    }
     await _applyStateChange(
       id,
       DomainDownloadState.failed,
@@ -1526,6 +2017,7 @@ class DownloadProvider extends ChangeNotifier
       pausedByUser: true,
       isCancelled: true,
     );
+    _orchestrator.cleanupTaskState(id);
     updateTelemetryWidget();
   }
 
@@ -1574,11 +2066,13 @@ class DownloadProvider extends ChangeNotifier
               await _deleteFileSafely('$tempPath.dmx_meta');
               await _deleteFileSafely('$tempPath.parts');
               await _deleteFileSafely('$tempPath.journal');
-              await _deleteFileSafely(StateStore.pathFor(tempPath, taskId: task.id));
+              await _deleteFileSafely(
+                  StateStore.pathFor(tempPath, taskId: task.id));
               await _deleteFileSafely('$tempPath.dmxstate');
               await _deleteFileSafely('$tempPath.audio');
               await _deleteFileSafely('$tempPath.audio.journal');
-              await _deleteFileSafely(StateStore.pathFor('$tempPath.audio', taskId: task.id));
+              await _deleteFileSafely(
+                  StateStore.pathFor('$tempPath.audio', taskId: task.id));
               await _deleteFileSafely('$tempPath.audio.dmxstate');
               await deleteDownloadParts(tempPath);
               await DownloadJournal.deleteJournalFor(tempPath);
@@ -1596,6 +2090,7 @@ class DownloadProvider extends ChangeNotifier
           await _databaseService.deleteTask(id);
           _tasks.removeWhere((t) => t.id == id);
           _taskIndex.remove(id);
+          _retryCounts.remove(id);
           _speedHistories.remove(id);
           _uploadSpeedHistories.remove(id);
           _lastProgressUpdateTimes.remove(id);
@@ -1607,6 +2102,8 @@ class DownloadProvider extends ChangeNotifier
           _resumeRejectionRestarts.remove(id);
           _downloadMetrics.remove(id);
           _reservedTaskIds.remove(id);
+          disposeTaskNotifier(id);
+          _orchestrator.cleanupTaskState(id);
           filteredTasksDirty = true;
           safeNotify();
           return true;
@@ -1656,11 +2153,13 @@ class DownloadProvider extends ChangeNotifier
     if (shouldResetProgress) {
       downloadedBytes = 0;
       await _deleteFileSafely(task.tempFilePath);
-      await _deleteFileSafely(StateStore.pathFor(task.tempFilePath, taskId: task.id));
+      await _deleteFileSafely(
+          StateStore.pathFor(task.tempFilePath, taskId: task.id));
       await _deleteFileSafely('${task.tempFilePath}.dmxstate');
       await _deleteFileSafely('${task.tempFilePath}.journal');
       await _deleteFileSafely('${task.tempFilePath}.audio');
-      await _deleteFileSafely(StateStore.pathFor('${task.tempFilePath}.audio', taskId: task.id));
+      await _deleteFileSafely(
+          StateStore.pathFor('${task.tempFilePath}.audio', taskId: task.id));
       await _deleteFileSafely('${task.tempFilePath}.audio.dmxstate');
       await _deleteFileSafely('${task.tempFilePath}.audio.journal');
     } else {
@@ -1670,7 +2169,7 @@ class DownloadProvider extends ChangeNotifier
       }
     }
     await _applyStateChange(id, DomainDownloadState.queued, RetryTask(id),
-        pausedByUser: false, isCancelled: false);
+        pausedByUser: false, pauseReason: '', isCancelled: false);
     final updated = _findTask(id);
     if (updated != null) {
       await _setTask(updated.copyWith(
@@ -1775,23 +2274,115 @@ class DownloadProvider extends ChangeNotifier
   @override
   Future<void> updateTaskUrlAndResume(String id, String url,
       {String? newAudioUrl}) async {
-    if (_disposed) return;
+    final cleanUrl = url.trim();
+    if (_disposed || cleanUrl.isEmpty) return;
     final task = _findTask(id);
     if (task == null) return;
+
+    if (task.isTorrent) {
+      final oldHash = TorrentResumeStore.extractCanonicalInfoHash(
+        task.url,
+        infoHash: task.infoHash,
+      );
+      final newHash = TorrentResumeStore.extractCanonicalInfoHash(cleanUrl);
+      if (oldHash != null &&
+          oldHash.isNotEmpty &&
+          newHash != null &&
+          newHash.isNotEmpty &&
+          oldHash != newHash) {
+        await _setTask(task.copyWith(
+          errorMessage:
+              'Updated link belongs to a different torrent (info-hash mismatch). Existing partial data was preserved.',
+          updatedAt: DateTime.now(),
+        ));
+        return;
+      }
+
+      final effectiveHash = newHash ?? oldHash;
+      await TorrentResumeStore.migrateSourceKey(
+        task.url,
+        cleanUrl,
+        infoHash: effectiveHash,
+      );
+
+      final liveTid = _torrentIds[id] ?? task.torrentId;
+      if (liveTid != null &&
+          liveTid >= 0 &&
+          TorrentService.isTorrentAlive(liveTid)) {
+        TorrentService.updateTorrentSource(liveTid, cleanUrl);
+        final updated = task.copyWith(
+          url: cleanUrl,
+          infoHash: effectiveHash ?? task.infoHash,
+          updatedAt: DateTime.now(),
+          clearError: true,
+          clearFailureCategory: true,
+          clearRecoveryHint: true,
+          clearStatusMessage: true,
+          pausedByUser: false,
+          isCancelled: false,
+        );
+        await _setTask(updated);
+        if (task.status != DownloadStatus.downloading &&
+            task.status != DownloadStatus.completed) {
+          await resumeTask(id);
+        }
+        return;
+      }
+
+      final wasOrchestrated = _cancelTokens.containsKey(id) ||
+          _orchestratorTokens.containsKey(id) ||
+          _activeFutures.containsKey(id);
+      if (wasOrchestrated) {
+        await pauseTask(id, reason: PauseReason.userRequested);
+      }
+      final current = _findTask(id) ?? task;
+      await _setTask(current.copyWith(
+        url: cleanUrl,
+        infoHash: effectiveHash ?? current.infoHash,
+        updatedAt: DateTime.now(),
+        clearError: true,
+        clearFailureCategory: true,
+        clearRecoveryHint: true,
+        clearStatusMessage: true,
+        pausedByUser: false,
+        isCancelled: false,
+      ));
+      await resumeTask(id);
+      return;
+    }
+
     final isRunning = task.status == DownloadStatus.downloading ||
         task.status == DownloadStatus.queued ||
-        _cancelTokens.containsKey(id);
+        _cancelTokens.containsKey(id) ||
+        _orchestratorTokens.containsKey(id) ||
+        _activeFutures.containsKey(id);
     if (isRunning) {
       await pauseTask(id, reason: PauseReason.userRequested);
-      await Future<void>.delayed(const Duration(milliseconds: 100));
     }
     final current = _findTask(id) ?? task;
+    HttpTransferJob.invalidateIdentityCacheForUrl(current.url);
+    HttpTransferJob.invalidateIdentityCacheForUrl(cleanUrl);
+    TransferState? durableState;
+    if (!current.hasMergedAudio && current.tempFilePath.isNotEmpty) {
+      durableState = await StateStore.load(current.tempFilePath, taskId: id);
+    }
     final updated = current.copyWith(
-      url: url,
+      url: cleanUrl,
       mergedAudioUrl: newAudioUrl ?? current.mergedAudioUrl,
+      downloadedBytes: durableState?.downloadedBytes ?? current.downloadedBytes,
+      fileSize: (durableState != null && durableState.totalSize > 0)
+          ? durableState.totalSize
+          : current.fileSize,
+      chunks: (durableState != null && durableState.chunks.isNotEmpty)
+          ? durableState.chunkRatios
+          : current.chunks,
       updatedAt: DateTime.now(),
-      errorMessage: null,
+      clearError: true,
+      clearFailureCategory: true,
+      clearRecoveryHint: true,
       clearStatusMessage: true,
+      pausedByUser: false,
+      isCancelled: false,
     );
     await _setTask(updated);
     await resumeTask(id);
@@ -1815,6 +2406,7 @@ class DownloadProvider extends ChangeNotifier
       ));
     });
   }
+
   @override
   void providerStartWidgetTimer() {
     _startTorrentPollingTimer();
@@ -1892,23 +2484,29 @@ class DownloadProvider extends ChangeNotifier
     final taskNow = _findTask(id) ?? t;
     if (deleteTempFiles) {
       await _deleteFileSafely(taskNow.tempFilePath);
-      await _deleteFileSafely(StateStore.pathFor(taskNow.tempFilePath, taskId: taskNow.id));
+      await _deleteFileSafely(
+          StateStore.pathFor(taskNow.tempFilePath, taskId: taskNow.id));
       await _deleteFileSafely('${taskNow.tempFilePath}.dmxstate');
       await _deleteFileSafely('${taskNow.tempFilePath}.journal');
       await _deleteFileSafely('${taskNow.tempFilePath}.audio');
-      await _deleteFileSafely(StateStore.pathFor('${taskNow.tempFilePath}.audio', taskId: taskNow.id));
+      await _deleteFileSafely(StateStore.pathFor(
+          '${taskNow.tempFilePath}.audio',
+          taskId: taskNow.id));
       await _deleteFileSafely('${taskNow.tempFilePath}.audio.dmxstate');
       await _deleteFileSafely('${taskNow.tempFilePath}.audio.journal');
     }
     final updated = taskNow.copyWith(
       url: url,
-      mergedAudioUrl: clearAudioUrl ? null : (newAudioUrl ?? taskNow.mergedAudioUrl),
+      mergedAudioUrl:
+          clearAudioUrl ? null : (newAudioUrl ?? taskNow.mergedAudioUrl),
       fileSize: newFileSize ?? (deleteTempFiles ? 0 : taskNow.fileSize),
       audioSize: newAudioSize ?? (deleteTempFiles ? 0 : taskNow.audioSize),
       downloadedBytes: deleteTempFiles ? 0 : taskNow.downloadedBytes,
       audioDownloadedBytes: deleteTempFiles ? 0 : taskNow.audioDownloadedBytes,
       audioProgress: deleteTempFiles ? 0.0 : taskNow.audioProgress,
-      chunks: deleteTempFiles ? List.filled(taskNow.threadCount, 0.0) : taskNow.chunks,
+      chunks: deleteTempFiles
+          ? List.filled(taskNow.threadCount, 0.0)
+          : taskNow.chunks,
       status: DownloadStatus.queued,
       errorMessage: null,
       updatedAt: DateTime.now(),
@@ -1933,6 +2531,12 @@ class DownloadProvider extends ChangeNotifier
       t.cancel();
     }
     _retryTimers.clear();
+    _retryCounts.clear();
+    _pendingProgressUpdates.clear();
+    effectiveThreadOverrides.clear();
+    _resumeRejectionRestarts.clear();
+    _downloadMetrics.clear();
+    _reservedTaskIds.clear();
     _notifications.dispose();
     _scheduleManager.dispose();
     _networkMonitor.dispose();
@@ -1943,6 +2547,8 @@ class DownloadProvider extends ChangeNotifier
     _ytThrottlingRefreshing.clear();
     _speedHistories.clear();
     _uploadSpeedHistories.clear();
+    _lastProgressUpdateTimes.clear();
+    _lastTorrentFileDiskSync.clear();
     for (final n in _progressNotifiers.values) {
       n.dispose();
     }

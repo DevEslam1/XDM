@@ -157,6 +157,7 @@ abstract class ITorrentTrackers {
   void removeWebSeed(int torrentId, String url);
   List<String> getWebSeeds(int torrentId);
   int? idForSource(String source);
+  void updateTorrentSource(int torrentId, String newSourceUrl);
 }
 
 /// Composite interface contract for Torrent client operations.

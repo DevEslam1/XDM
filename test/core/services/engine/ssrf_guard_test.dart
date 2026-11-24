@@ -126,7 +126,9 @@ void main() {
           reason: '017700000001 (octal) == 127.0.0.1');
     });
 
-    test('shorthand BSD dotted forms (127.1, 127.0.1, 0x7f.1) map to dotted quad', () {
+    test(
+        'shorthand BSD dotted forms (127.1, 127.0.1, 0x7f.1) map to dotted quad',
+        () {
       expect(SsrfGuard.isBlockedHost('127.1'), isTrue,
           reason: '127.1 == 127.0.0.1');
       expect(SsrfGuard.isBlockedHost('127.0.1'), isTrue,
@@ -230,7 +232,8 @@ void main() {
   });
 
   group('SsrfGuard.validateAsync — DNS rebinding protection', () {
-    test('blocks hostname resolving to cloud metadata IP (169.254.169.254)', () async {
+    test('blocks hostname resolving to cloud metadata IP (169.254.169.254)',
+        () async {
       expect(
         () => SsrfGuard.validateAsync(
           Uri.parse('http://rebind.attacker.com/secret'),
@@ -240,7 +243,8 @@ void main() {
       );
     });
 
-    test('blocks hostname resolving to 127.0.0.1 when allowPrivate is false', () async {
+    test('blocks hostname resolving to 127.0.0.1 when allowPrivate is false',
+        () async {
       expect(
         () => SsrfGuard.validateAsync(
           Uri.parse('http://local.attacker.com/secret'),

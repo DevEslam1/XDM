@@ -54,5 +54,59 @@ void main() {
       expect(CycleState.fromName('invalid_unknown'), isNull);
       expect(CycleState.fromName(null), isNull);
     });
+
+    test('fromName handles snake_case, empties and fallback', () {
+      expect(CycleState.fromName('fetching_metadata'),
+          CycleState.fetchingMetadata);
+      expect(
+          CycleState.fromName('fetchingmetadata'), CycleState.fetchingMetadata);
+      expect(CycleState.fromName('updating_links'), CycleState.updatingLinks);
+      expect(CycleState.fromName('updatinglinks'), CycleState.updatingLinks);
+      expect(CycleState.fromName('checking'), CycleState.verifying);
+      expect(CycleState.fromName(''), isNull);
+      expect(CycleState.fromName('   '), isNull);
+      expect(CycleState.fromName('nope', fallback: CycleState.failed),
+          CycleState.failed);
+    });
+
+    test('fromLibtorrent matches remaining map entries and starting states',
+        () {
+      expect(CycleState.fromLibtorrent('fetching_metadata'),
+          CycleState.fetchingMetadata);
+      expect(
+          CycleState.fromLibtorrent('metadata'), CycleState.fetchingMetadata);
+      expect(CycleState.fromLibtorrent('queued_for_checking'),
+          CycleState.verifying);
+      expect(CycleState.fromLibtorrent('checking'), CycleState.verifying);
+      expect(CycleState.fromLibtorrent('failed'), CycleState.failed);
+      expect(CycleState.fromLibtorrent('stopped'), CycleState.paused);
+      expect(CycleState.fromLibtorrent('updating_links'),
+          CycleState.updatingLinks);
+      expect(
+          CycleState.fromLibtorrent('updatinglinks'), CycleState.updatingLinks);
+      expect(CycleState.fromLibtorrent('muxing'), CycleState.merging);
+      expect(CycleState.fromLibtorrent('starting'), CycleState.starting);
+      expect(CycleState.fromLibtorrent('queued'), CycleState.starting);
+      expect(CycleState.fromLibtorrent('waiting_for_counterpart'),
+          CycleState.starting);
+      expect(
+          CycleState.fromLibtorrent('stalled_downloading'), CycleState.stalled);
+    });
+
+    test('fromLibtorrent unknown states fall back to stalled', () {
+      expect(
+          CycleState.fromLibtorrent('some_unknown_state'), CycleState.stalled);
+    });
+
+    test('TorrentSourceException toString', () {
+      const withUrl = TorrentSourceException('boom', url: 'https://x');
+      expect(
+          withUrl.toString(), 'TorrentSourceException: boom (url: https://x)');
+
+      const noUrl = TorrentSourceException('boom');
+      expect(noUrl.toString(), 'TorrentSourceException: boom');
+      expect(noUrl.message, 'boom');
+      expect(noUrl.url, isNull);
+    });
   });
 }

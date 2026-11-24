@@ -36,10 +36,11 @@ void main() {
   test('PathAccessException (errno 13) is a permanent write failure', () {
     const e = PathAccessException(
       "Cannot open file, path = '/x/y.dmxstate' "
-      '(OS Error: Permission denied, errno = 13)',
+          '(OS Error: Permission denied, errno = 13)',
       OSError('Permission denied', 13),
       '/x/y.dmxstate',
-    );    expect(e, isA<FileSystemException>());
+    );
+    expect(e, isA<FileSystemException>());
     expect(StateStore.isPermanentWriteFailure(e), isTrue);
     expect(StateStore.isPermanentWriteFailure('nope'), isFalse);
     expect(
@@ -76,7 +77,8 @@ void main() {
 
     // A subsequent successful save clears the recorded failure.
     final goodPath = '${tempDir.path}/good.bin.dmxpart';
-    await StateStore.save(goodPath, stateFor(1000), durable: true, taskId: 'f26');
+    await StateStore.save(goodPath, stateFor(1000),
+        durable: true, taskId: 'f26');
     expect(
       StateStore.hasPermanentSaveFailure(goodPath, taskId: 'f26'),
       isFalse,

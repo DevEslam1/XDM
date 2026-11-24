@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+
 import '../../../../core/app_theme.dart';
 import '../../../../core/utils/localization.dart';
 import '../../../../core/utils/responsive.dart';
+import '../../../../shared/design/dmx_tokens.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../models/download_task.dart';
 import '../provider/download_provider.dart';
@@ -60,73 +62,115 @@ class FilterChipsBar extends StatelessWidget {
         return Selector<DownloadProvider, _FilterState>(
           selector: (_, p) {
             final activeFilters = p.categoryFilters;
-            // FIX-P3: Only tally per-category counts when a category filter is
-            // active (that is the only consumer). Avoids a full-task scan on
-            // every progress tick when the filter list is empty.
-            final counts = <String, int>{};
-            if (activeFilters.isNotEmpty) {
-              for (final task in p.tasks) {
-                if (isHistory &&
-                    task.status != DownloadStatus.completed &&
-                    task.status != DownloadStatus.failed) {
-                  continue;
+            final categoryCounts = <String, int>{};
+            final statusCounts = <String, int>{};
+            final now = DateTime.now();
+
+            int allCount = 0;
+            int downloadingCount = 0;
+            int pausedCount = 0;
+            int scheduledCount = 0;
+            int torrentsCount = 0;
+            int completedCount = 0;
+            int failedCount = 0;
+
+            for (final task in p.tasks) {
+              final isTaskHistory = task.status == DownloadStatus.completed ||
+                  task.status == DownloadStatus.failed;
+              if (isHistory) {
+                if (!isTaskHistory) continue;
+                allCount++;
+                if (task.status == DownloadStatus.completed) completedCount++;
+                if (task.status == DownloadStatus.failed) failedCount++;
+              } else {
+                if (isTaskHistory) continue;
+                allCount++;
+                if (task.status == DownloadStatus.downloading ||
+                    task.status == DownloadStatus.queued ||
+                    task.status == DownloadStatus.merging) {
+                  downloadingCount++;
                 }
+                if (task.status == DownloadStatus.paused) pausedCount++;
+                if (task.status == DownloadStatus.paused &&
+                    task.scheduledAt != null &&
+                    task.scheduledAt!.isAfter(now)) {
+                  scheduledCount++;
+                }
+                if (task.isTorrent) torrentsCount++;
+              }
+
+              if (activeFilters.isNotEmpty) {
                 final cat = task.category.toLowerCase();
-                counts[cat] = (counts[cat] ?? 0) + 1;
+                categoryCounts[cat] = (categoryCounts[cat] ?? 0) + 1;
               }
             }
+
+            if (isHistory) {
+              statusCounts['All'] = allCount;
+              statusCounts['Completed'] = completedCount;
+              statusCounts['Failed'] = failedCount;
+            } else {
+              statusCounts['All'] = allCount;
+              statusCounts['Downloading'] = downloadingCount;
+              statusCounts['Paused'] = pausedCount;
+              statusCounts['Scheduled'] = scheduledCount;
+              statusCounts['Torrents'] = torrentsCount;
+            }
+
             return _FilterState(
               activeFilter: p.statusFilter,
               categoryFilters: activeFilters.toList(),
-              categoryCounts: counts,
+              categoryCounts: categoryCounts,
+              statusCounts: statusCounts,
             );
           },
           builder: (context, state, _) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                // ── Active category filter chips (removable) ──
+                // Active category filter pills (removable)
                 if (state.categoryFilters.isNotEmpty)
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.only(bottom: DmxTokens.spaceSm),
                     child: SizedBox(
-                      height: 32,
-                      child: ListView.builder(
+                      height: 34,
+                      child: ListView.separated(
                         scrollDirection: Axis.horizontal,
+                        physics: const BouncingScrollPhysics(),
                         itemCount: state.categoryFilters.length,
+                        separatorBuilder: (_, __) =>
+                            const SizedBox(width: DmxTokens.spaceSm),
                         itemBuilder: (context, index) {
                           final category = state.categoryFilters[index];
                           final count =
                               state.categoryCounts[category.toLowerCase()] ?? 0;
-                          final catColor = isDark
-                              ? AppTheme.neonGreen
-                              : AppTheme.lightNeonGreen;
-                          return Padding(
-                            padding: const EdgeInsetsDirectional.only(end: 8.0),
-                            child: _CategoryChip(
-                              label:
-                                  '${L10n.of(context, 'cat_filter_label')}${category.toUpperCase()} ($count)',
-                              color: catColor,
-                              isDark: isDark,
-                              classicUi: classicUi,
-                              glow: glow,
-                              onRemove: () {
-                                if (vibration) HapticFeedback.lightImpact();
-                                context
-                                    .read<DownloadProvider>()
-                                    .toggleCategoryFilter(category);
-                              },
-                            ),
+                          final catColor = _colorForCategory(category, isDark);
+                          return _CategoryChip(
+                            label:
+                                '${L10n.of(context, 'cat_filter_label')}${category.toUpperCase()}',
+                            count: count,
+                            color: catColor,
+                            isDark: isDark,
+                            classicUi: classicUi,
+                            glow: glow,
+                            onRemove: () {
+                              if (vibration) HapticFeedback.lightImpact();
+                              context
+                                  .read<DownloadProvider>()
+                                  .toggleCategoryFilter(category);
+                            },
                           );
                         },
                       ),
                     ),
                   ),
 
-                // ── Status filter standalone buttons ──
-                _StatusFilterButtons(
+                // Status filter pill bar
+                _StatusFilterPills(
                   filters: filters,
                   activeFilter: state.activeFilter,
+                  statusCounts: state.statusCounts,
                   isDark: isDark,
                   vibration: vibration,
                   classicUi: classicUi,
@@ -140,6 +184,16 @@ class FilterChipsBar extends StatelessWidget {
     );
   }
 
+  static Color _colorForCategory(String category, bool isDark) {
+    return switch (category.toLowerCase()) {
+      'video' => isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+      'audio' => isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+      'document' => isDark ? AppTheme.neonCyan : AppTheme.lightNeonCyan,
+      'archive' => isDark ? AppTheme.neonOrange : AppTheme.lightNeonOrange,
+      _ => isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+    };
+  }
+
   static const List<String> _historyFilters = ['All', 'Completed', 'Failed'];
   static const List<String> _downloadFilters = [
     'All',
@@ -151,19 +205,21 @@ class FilterChipsBar extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Standalone filter buttons matching Settings tab button design
+// Horizontal pill bar with clean active states and count badges
 // ─────────────────────────────────────────────────────────────────────────────
-class _StatusFilterButtons extends StatelessWidget {
+class _StatusFilterPills extends StatelessWidget {
   final List<String> filters;
   final String activeFilter;
+  final Map<String, int> statusCounts;
   final bool isDark;
   final bool vibration;
   final bool classicUi;
   final bool glow;
 
-  const _StatusFilterButtons({
+  const _StatusFilterPills({
     required this.filters,
     required this.activeFilter,
+    required this.statusCounts,
     required this.isDark,
     required this.vibration,
     required this.classicUi,
@@ -210,9 +266,9 @@ class _StatusFilterButtons extends StatelessWidget {
   String _labelFor(BuildContext context, String filter) {
     final key = _filterL10nKeys[filter];
     if (key != null) {
-      return L10n.of(context, key).toUpperCase();
+      return L10n.of(context, key);
     }
-    return filter.toUpperCase();
+    return filter;
   }
 
   @override
@@ -221,100 +277,75 @@ class _StatusFilterButtons extends StatelessWidget {
     if (isScrollable) {
       return SizedBox(
         height: 38,
-        child: SingleChildScrollView(
+        child: ListView.separated(
           scrollDirection: Axis.horizontal,
           physics: const BouncingScrollPhysics(),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (int i = 0; i < filters.length; i++) ...[
-                _buildButton(context, filters[i]),
-                if (i < filters.length - 1) const SizedBox(width: 8),
-              ],
-            ],
-          ),
+          itemCount: filters.length,
+          separatorBuilder: (_, __) => const SizedBox(width: DmxTokens.spaceSm),
+          itemBuilder: (context, i) => _buildPill(context, filters[i]),
         ),
       );
     }
 
-    return Row(
-      children: [
-        for (int i = 0; i < filters.length; i++) ...[
-          Expanded(child: _buildButton(context, filters[i])),
-          if (i < filters.length - 1) const SizedBox(width: 8),
+    return SizedBox(
+      height: 38,
+      child: Row(
+        children: [
+          for (int i = 0; i < filters.length; i++) ...[
+            Expanded(child: _buildPill(context, filters[i], expand: true)),
+            if (i < filters.length - 1) const SizedBox(width: DmxTokens.spaceSm),
+          ],
         ],
-      ],
+      ),
     );
   }
 
-  Widget _buildButton(BuildContext context, String filter) {
+  Widget _buildPill(BuildContext context, String filter,
+      {bool expand = false}) {
     final selected = activeFilter == filter;
     final color = _colorForFilter(filter);
     final icon = _iconForFilter(filter);
     final label = _labelFor(context, filter);
+    final count = statusCounts[filter] ?? 0;
 
-    final bgColor = selected
-        ? color
-        : (classicUi
-            ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
-            : (isDark
-                ? AppTheme.surface.withValues(alpha: 0.40)
-                : AppTheme.lightSurface.withValues(alpha: 0.40)));
+    final inactiveBg = classicUi
+        ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
+        : (isDark
+            ? AppTheme.surface.withValues(alpha: 0.65)
+            : AppTheme.lightSurface.withValues(alpha: 0.90));
 
-    final textColor = selected
+    final bgColor = selected ? color : inactiveBg;
+    final fgColor = selected
         ? AppTheme.inkOn(color)
-        : (isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary);
-
-    final iconColor = selected ? textColor : color;
-
-    final borderColor =
-        selected ? color : color.withValues(alpha: isDark ? 0.30 : 0.35);
+        : (isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary);
+    final iconColor = selected ? fgColor : color.withValues(alpha: 0.9);
+    final borderColor = selected
+        ? color
+        : (isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle);
 
     final shadows = (selected && glow && !classicUi)
         ? [
             BoxShadow(
-              color: color.withValues(alpha: isDark ? 0.35 : 0.20),
+              color: color.withValues(alpha: isDark ? 0.28 : 0.18),
               blurRadius: 10,
-              spreadRadius: 0,
               offset: const Offset(0, 2),
             ),
           ]
-        : <BoxShadow>[];
+        : const <BoxShadow>[];
 
-    final Widget buttonContent = Container(
-      constraints: const BoxConstraints(minHeight: 48),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: borderColor, width: 1.0),
-        boxShadow: shadows,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 15, color: iconColor),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: textColor,
-              fontFamily: 'Space Grotesk',
-              fontSize: responsiveFontSize(context, 11),
-              fontWeight: selected ? FontWeight.bold : FontWeight.w600,
-              letterSpacing: 0.4,
-            ),
-          ),
-        ],
-      ),
-    );
+    final badgeBg = selected
+        ? fgColor.withValues(alpha: 0.18)
+        : (isDark
+            ? Colors.white.withValues(alpha: 0.07)
+            : Colors.black.withValues(alpha: 0.06));
+
+    final badgeFg = selected
+        ? fgColor
+        : (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted);
 
     return Semantics(
       button: true,
-      label: 'Filter: $label',
+      label: count > 0 ? 'Filter: $label ($count)' : 'Filter: $label',
       selected: selected,
       child: Material(
         color: Colors.transparent,
@@ -323,8 +354,66 @@ class _StatusFilterButtons extends StatelessWidget {
             if (vibration) HapticFeedback.selectionClick();
             context.read<DownloadProvider>().setStatusFilter(filter);
           },
-          borderRadius: BorderRadius.circular(10),
-          child: buttonContent,
+          borderRadius: BorderRadius.circular(DmxTokens.radiusFull),
+          child: AnimatedContainer(
+            duration: DmxTokens.animFast,
+            curve: DmxTokens.animCurve,
+            height: 36,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: bgColor,
+              borderRadius: BorderRadius.circular(DmxTokens.radiusFull),
+              border: Border.all(
+                color: borderColor,
+                width: selected ? 1.0 : DmxTokens.borderThin,
+              ),
+              boxShadow: shadows,
+            ),
+            child: Row(
+              mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 14, color: iconColor),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: fgColor,
+                      fontFamily: 'Space Grotesk',
+                      fontSize: responsiveFontSize(context, 11.5),
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                ),
+                if (count > 0) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 1.5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: badgeBg,
+                      borderRadius: BorderRadius.circular(DmxTokens.radiusFull),
+                    ),
+                    child: Text(
+                      '$count',
+                      style: TextStyle(
+                        color: badgeFg,
+                        fontFamily: 'Space Grotesk',
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -336,6 +425,7 @@ class _StatusFilterButtons extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 class _CategoryChip extends StatelessWidget {
   final String label;
+  final int count;
   final Color color;
   final bool isDark;
   final bool classicUi;
@@ -344,6 +434,7 @@ class _CategoryChip extends StatelessWidget {
 
   const _CategoryChip({
     required this.label,
+    required this.count,
     required this.color,
     required this.isDark,
     required this.classicUi,
@@ -353,49 +444,50 @@ class _CategoryChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bgColor = classicUi
-        ? color.withValues(alpha: isDark ? 0.15 : 0.12)
-        : color.withValues(alpha: isDark ? 0.20 : 0.16);
+    final bgColor = color.withValues(alpha: isDark ? 0.16 : 0.12);
+    final borderColor = color.withValues(alpha: isDark ? 0.40 : 0.32);
 
-    final borderColor = color.withValues(alpha: isDark ? 0.45 : 0.35);
-
-    final Widget chip = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: borderColor, width: 1.0),
-        boxShadow: (glow && !classicUi)
-            ? [
-                BoxShadow(
-                  color: color.withValues(alpha: isDark ? 0.20 : 0.10),
-                  blurRadius: 8,
-                ),
-              ]
-            : null,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              fontFamily: 'Space Grotesk',
+    return Semantics(
+      button: true,
+      label: 'Remove filter: $label ($count)',
+      child: Container(
+        height: 32,
+        padding: const EdgeInsetsDirectional.only(start: 10, end: 4),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(DmxTokens.radiusFull),
+          border: Border.all(color: borderColor, width: 0.9),
+          boxShadow: (glow && !classicUi)
+              ? [
+                  BoxShadow(
+                    color: color.withValues(alpha: isDark ? 0.16 : 0.08),
+                    blurRadius: 8,
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '$label ($count)',
+              style: TextStyle(
+                color: color,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                fontFamily: 'Space Grotesk',
+                letterSpacing: 0.2,
+              ),
             ),
-          ),
-          const SizedBox(width: 4),
-          Semantics(
-            button: true,
-            label: 'Remove category filter',
-            child: GestureDetector(
-              onTap: onRemove,
-              behavior: HitTestBehavior.opaque,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-                child: Center(
+            const SizedBox(width: 4),
+            Semantics(
+              button: true,
+              label: 'Remove category filter',
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: onRemove,
+                  borderRadius: BorderRadius.circular(DmxTokens.radiusFull),
                   child: Padding(
                     padding: const EdgeInsets.all(4.0),
                     child: Icon(Icons.close_rounded, size: 14, color: color),
@@ -403,15 +495,9 @@ class _CategoryChip extends StatelessWidget {
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    );
-
-    return Semantics(
-      button: true,
-      label: 'Remove filter: $label',
-      child: chip,
     );
   }
 }
@@ -423,11 +509,13 @@ class _FilterState {
   final String activeFilter;
   final List<String> categoryFilters;
   final Map<String, int> categoryCounts;
+  final Map<String, int> statusCounts;
 
   const _FilterState({
     required this.activeFilter,
     required this.categoryFilters,
     required this.categoryCounts,
+    required this.statusCounts,
   });
 
   @override
@@ -437,13 +525,15 @@ class _FilterState {
           runtimeType == other.runtimeType &&
           activeFilter == other.activeFilter &&
           _listEquals(categoryFilters, other.categoryFilters) &&
-          _mapEquals(categoryCounts, other.categoryCounts);
+          _mapEquals(categoryCounts, other.categoryCounts) &&
+          _mapEquals(statusCounts, other.statusCounts);
 
   @override
   int get hashCode =>
       activeFilter.hashCode ^
       Object.hashAll(categoryFilters) ^
-      Object.hashAll(categoryCounts.entries);
+      Object.hashAll(categoryCounts.entries) ^
+      Object.hashAll(statusCounts.entries);
 
   static bool _listEquals(List<String> a, List<String> b) {
     if (a.length != b.length) return false;

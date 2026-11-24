@@ -237,7 +237,8 @@ void main() {
   });
 
   group('Section A: 416 Total Size Discovery & Completion', () {
-    test('handle416 updates chunk boundaries accurately when serverTotal is known',
+    test(
+        'handle416 updates chunk boundaries accurately when serverTotal is known',
         () {
       final chunk = ChunkState(start: 0, end: 999999, downloaded: 1000000);
       final handled = HttpTransferJob.handle416(chunk, 1000000);

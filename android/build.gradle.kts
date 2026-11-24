@@ -5,9 +5,9 @@ buildscript {
         maven(url = "https://jitpack.io")
     }
     dependencies {
-        classpath("com.android.tools.build:gradle:8.11.1")
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.2.20")
-        classpath("com.google.gms:google-services:4.4.2")
+        classpath("com.android.tools.build:gradle:9.5.2")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.21")
+        classpath("com.google.gms:google-services:4.6.0")
     }
 }
 
@@ -68,21 +68,24 @@ subprojects {
     }
 
     val proj = this
-    val setNamespace: () -> Unit = {
+    val configureLibraryPlugin: () -> Unit = {
         val androidExt = proj.extensions.findByName("android")
         if (androidExt != null && androidExt is com.android.build.gradle.LibraryExtension) {
             if (androidExt.namespace == null) {
                 val groupStr = proj.group.toString()
-                androidExt.namespace = if (groupStr.isNotEmpty()) groupStr else "com.example.plugin.\${proj.name}"
+                androidExt.namespace = if (groupStr.isNotEmpty()) groupStr else "com.example.plugin.${proj.name}"
+            }
+            if ((androidExt.compileSdk ?: 0) < 37) {
+                androidExt.compileSdk = 37
             }
         }
     }
     
     if (proj.state.executed) {
-        setNamespace()
+        configureLibraryPlugin()
     } else {
         proj.afterEvaluate {
-            setNamespace()
+            configureLibraryPlugin()
         }
     }
 }

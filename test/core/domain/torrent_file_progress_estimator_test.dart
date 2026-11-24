@@ -173,5 +173,262 @@ void main() {
           files.fold<int>(0, (sum, f) => sum + (f['downloadedBytes'] as int));
       expect(total, equals(100));
     });
+
+    test('priorityWeight maps priority bands', () {
+      expect(TorrentFileProgressEstimator.priorityWeight(0), 0.0);
+      expect(TorrentFileProgressEstimator.priorityWeight(-1), 0.0);
+      expect(
+          TorrentFileProgressEstimator.priorityWeight(1), closeTo(0.5, 0.001));
+      expect(TorrentFileProgressEstimator.priorityWeight(4), 1.0);
+      expect(TorrentFileProgressEstimator.priorityWeight(5),
+          closeTo(1.1666, 0.001));
+      expect(TorrentFileProgressEstimator.priorityWeight(7), 1.5);
+      expect(TorrentFileProgressEstimator.priorityWeight(9), 1.5);
+    });
+
+    test('updateFilesWithNativeProgress handles empty list safely', () {
+      TorrentFileProgressEstimator.updateFilesWithNativeProgress([], 0.5, 100);
+    });
+
+    test('updateFilesWithNativeProgress covers all branches', () {
+      final files = [
+        {
+          'name': 'unselected',
+          'length': 100,
+          'selected': false,
+          'downloadedBytes': 50,
+        },
+        {
+          'name': 'zero-length',
+          'length': 0,
+          'selected': true,
+          'downloadedBytes': 0,
+        },
+        {
+          'name': 'exact',
+          'length': 100,
+          'selected': true,
+          'downloadedBytes': 50,
+        },
+        {
+          'name': 'estimate',
+          'length': 100,
+          'selected': true,
+          'downloadedBytes': 0,
+        },
+        {
+          'name': 'fresh',
+          'length': 100,
+          'selected': true,
+          'downloadedBytes': -1,
+        },
+        {
+          'name': 'overflow',
+          'length': 100,
+          'selected': true,
+          'downloadedBytes': 1000,
+        },
+      ];
+
+      TorrentFileProgressEstimator.updateFilesWithNativeProgress(
+          files, 0.5, 100);
+
+      expect(files[0]['downloadedBytes'], 0);
+      expect(files[1]['progressEstimated'], isTrue);
+      expect(files[2]['progressEstimated'], isFalse);
+      expect(files[2]['progress'], closeTo(0.5, 0.001));
+      expect(files[5]['downloadedBytes'], lessThanOrEqualTo(100));
+    });
+
+    test('updateFilesWithNativeProgress with zero total skips distribution',
+        () {
+      final files = [
+        {
+          'name': 'fresh',
+          'length': 100,
+          'selected': true,
+          'downloadedBytes': 0,
+        },
+      ];
+      TorrentFileProgressEstimator.updateFilesWithNativeProgress(files, 0.5, 0);
+      expect(files[0]['downloadedBytes'], 0);
+    });
+
+    test('updateFilesWithNativeProgress sequential path', () {
+      final files = [
+        {'name': 'a', 'length': 100, 'selected': true, 'downloadedBytes': 0},
+        {'name': 'b', 'length': 100, 'selected': true, 'downloadedBytes': 0},
+      ];
+      TorrentFileProgressEstimator.updateFilesWithNativeProgress(
+          files, 0.5, 150,
+          sequential: true);
+      expect(files[0]['downloadedBytes'], 100);
+      expect(files[1]['downloadedBytes'], 50);
+    });
+
+    test('applyNativeFileProgress uses native data when available', () {
+      final files = [
+        {'name': 'a', 'length': 100, 'selected': true, 'downloadedBytes': 0},
+        {'name': 'b', 'length': 100, 'selected': false, 'downloadedBytes': 0},
+        {'name': 'c', 'length': 0, 'selected': true, 'downloadedBytes': 0},
+        {'name': 'd', 'length': 100, 'selected': true, 'downloadedBytes': 0},
+      ];
+      TorrentFileProgressEstimator.applyNativeFileProgress(
+          files, [50, 60, 5, 500], 0.5, 100);
+      expect(files[0]['downloadedBytes'], 50);
+      expect(files[1]['downloadedBytes'], 0);
+      expect(files[2]['downloadedBytes'], 5);
+      expect(files[3]['downloadedBytes'], 100);
+      expect(files[0]['progressEstimated'], isFalse);
+    });
+
+    test('applyNativeFileProgress falls back to estimation', () {
+      final files = [
+        {'name': 'a', 'length': 100, 'selected': true, 'downloadedBytes': 0},
+      ];
+      TorrentFileProgressEstimator.applyNativeFileProgress(
+          files, const [], 0.5, 100);
+      expect(files[0]['downloadedBytes'], greaterThan(0));
+    });
+
+    test('distributeEstimatedBytes returns when nothing needing', () {
+      final files = [
+        {
+          'name': 'complete',
+          'length': 100,
+          'selected': true,
+          'downloadedBytes': 100,
+          'progressEstimated': false,
+        },
+      ];
+      TorrentFileProgressEstimator.distributeEstimatedBytes(files, 100);
+      expect(files[0]['downloadedBytes'], 100);
+    });
+
+    test('distributeEstimatedBytes zero-weight even share branch', () {
+      final files = [
+        {
+          'name': 'a',
+          'length': 100,
+          'selected': true,
+          'downloadedBytes': 0,
+          'progressEstimated': true,
+          'priority': 0,
+        },
+        {
+          'name': 'b',
+          'length': 100,
+          'selected': true,
+          'downloadedBytes': 0,
+          'progressEstimated': true,
+          'priority': 0,
+        },
+      ];
+      TorrentFileProgressEstimator.distributeEstimatedBytes(files, 101);
+      expect(files[0]['downloadedBytes'], 51);
+      expect(files[1]['downloadedBytes'], 50);
+    });
+
+    test('distributeEstimatedBytes zero-length file in even share branch', () {
+      final files = [
+        {
+          'name': 'a',
+          'length': 0,
+          'selected': true,
+          'downloadedBytes': 0,
+          'progressEstimated': true,
+          'priority': 0,
+        },
+      ];
+      TorrentFileProgressEstimator.distributeEstimatedBytes(files, 10);
+      expect(files[0]['downloadedBytes'], 0);
+    });
+
+    test('distributeEstimatedBytes proportional branch caps at length', () {
+      final files = [
+        {
+          'name': 'a',
+          'length': 100,
+          'selected': true,
+          'downloadedBytes': 0,
+          'progressEstimated': true,
+          'priority': 4,
+        },
+        {
+          'name': 'b',
+          'length': 100,
+          'selected': true,
+          'downloadedBytes': 0,
+          'progressEstimated': true,
+          'priority': 4,
+        },
+      ];
+      TorrentFileProgressEstimator.distributeEstimatedBytes(files, 500);
+      expect(files[0]['downloadedBytes'], 100);
+      expect(files[1]['downloadedBytes'], 100);
+    });
+
+    test('reconcileEstimatedFiles handles positive, negative and no-op', () {
+      TorrentFileProgressEstimator.reconcileEstimatedFiles([], 0);
+      TorrentFileProgressEstimator.reconcileEstimatedFiles([
+        {
+          'length': 100,
+          'downloadedBytes': 100,
+          'progressEstimated': true,
+          'selected': true,
+        }
+      ], 100);
+
+      final under = [
+        {
+          'length': 100,
+          'downloadedBytes': 10,
+          'progressEstimated': true,
+          'selected': true,
+        },
+        {
+          'length': 100,
+          'downloadedBytes': 10,
+          'progressEstimated': true,
+          'selected': true,
+        },
+      ];
+      TorrentFileProgressEstimator.reconcileEstimatedFiles(under, 100);
+      final sum =
+          under.fold<int>(0, (s, f) => s + (f['downloadedBytes'] as int));
+      expect(sum, 100);
+
+      final over = [
+        {
+          'length': 100,
+          'downloadedBytes': 50,
+          'progressEstimated': true,
+          'selected': true,
+        },
+        {
+          'length': 100,
+          'downloadedBytes': 50,
+          'progressEstimated': true,
+          'selected': true,
+        },
+      ];
+      TorrentFileProgressEstimator.reconcileEstimatedFiles(over, 40);
+      final overSum =
+          over.fold<int>(0, (s, f) => s + (f['downloadedBytes'] as int));
+      expect(overSum, lessThanOrEqualTo(100));
+    });
+
+    test('reconcileEstimatedFiles negative with no estimated downloads', () {
+      final files = [
+        {
+          'length': 100,
+          'downloadedBytes': 50,
+          'progressEstimated': false,
+          'selected': true,
+        },
+      ];
+      TorrentFileProgressEstimator.reconcileEstimatedFiles(files, 10);
+      expect(files[0]['downloadedBytes'], 50);
+    });
   });
 }

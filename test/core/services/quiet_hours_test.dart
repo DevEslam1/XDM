@@ -56,5 +56,56 @@ void main() {
           false);
       expect(QuietHours.isInQuietHours(start: '', end: '', now: now), false);
     });
+
+    test('single-field or non-numeric times are rejected', () {
+      final now = DateTime(2026, 1, 1, 10, 0);
+      expect(QuietHours.isInQuietHours(start: '10', end: '12:00', now: now),
+          false);
+      expect(QuietHours.isInQuietHours(start: 'a:b', end: '12:00', now: now),
+          false);
+      expect(QuietHours.isInQuietHours(start: '10:00', end: '12:xx', now: now),
+          false);
+    });
+
+    test('out-of-range minutes and hours are rejected', () {
+      final now = DateTime(2026, 1, 1, 10, 0);
+      expect(QuietHours.isInQuietHours(start: '10:60', end: '12:00', now: now),
+          false);
+      expect(QuietHours.isInQuietHours(start: '-1:00', end: '12:00', now: now),
+          false);
+      expect(QuietHours.isInQuietHours(start: '24:00', end: '12:00', now: now),
+          false);
+    });
+
+    test(
+        'wrapping window boundary semantics are start-inclusive, end-exclusive',
+        () {
+      final atStart = DateTime(2026, 1, 1, 22, 0);
+      final justBeforeStart = DateTime(2026, 1, 1, 21, 59);
+      final atEnd = DateTime(2026, 1, 1, 7, 0);
+      final justBeforeEnd = DateTime(2026, 1, 1, 6, 59);
+
+      expect(
+          QuietHours.isInQuietHours(start: '22:00', end: '07:00', now: atStart),
+          true);
+      expect(
+          QuietHours.isInQuietHours(start: '22:00', end: '07:00', now: atEnd),
+          false);
+      expect(
+          QuietHours.isInQuietHours(
+              start: '22:00', end: '07:00', now: justBeforeStart),
+          false);
+      expect(
+          QuietHours.isInQuietHours(
+              start: '22:00', end: '07:00', now: justBeforeEnd),
+          true);
+    });
+
+    test('defaults to the current time when none is supplied', () {
+      expect(
+        QuietHours.isInQuietHours(start: '00:00', end: '23:59'),
+        isA<bool>(),
+      );
+    });
   });
 }

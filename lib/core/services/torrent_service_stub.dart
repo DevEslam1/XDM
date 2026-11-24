@@ -138,6 +138,7 @@ class TorrentService {
   static void addWebSeed(int torrentId, String url) {}
   static void removeWebSeed(int torrentId, String url) {}
   static List<String> getWebSeeds(int torrentId) => const [];
+  static void updateTorrentSource(int torrentId, String newSourceUrl) {}
 
   static Future<void> setProxy({
     required String host,
@@ -388,6 +389,8 @@ class TorrentServiceImpl implements ITorrentService {
   void removeWebSeed(int torrentId, String url) {}
   @override
   List<String> getWebSeeds(int torrentId) => const [];
+  @override
+  void updateTorrentSource(int torrentId, String newSourceUrl) {}
 
   @override
   bool shouldStopSeeding({

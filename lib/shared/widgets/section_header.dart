@@ -1,13 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../core/app_theme.dart';
+import '../design/dmx_tokens.dart';
 
-/// A reusable, polished section header with accent bar and consistent typography.
-///
-/// UI/UX improvements:
-/// - Accent bar indicator for visual hierarchy
-/// - Consistent letter spacing and weight
-/// - Optional trailing action widget (e.g. "See all")
-/// - Proper semantics for screen readers
+/// A reusable, polished section header with accent indicator and consistent
+/// typography.
 class SectionHeader extends StatelessWidget {
   final String title;
   final String? subtitle;
@@ -32,10 +28,8 @@ class SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final accent =
         accentColor ?? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue);
-    final textPrimary =
-        isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-    final textSecondary =
-        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final textPrimary = AppTheme.textPrimaryOf(isDark);
+    final textSecondary = AppTheme.textSecondaryOf(isDark);
 
     return Padding(
       padding: padding,
@@ -44,21 +38,14 @@ class SectionHeader extends StatelessWidget {
         label: title,
         child: IntrinsicHeight(
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Container(
                 width: 3,
-                margin: const EdgeInsets.symmetric(vertical: 2),
+                height: subtitle != null ? 24 : 16,
                 decoration: BoxDecoration(
                   color: accent,
                   borderRadius: BorderRadius.circular(2),
-                  boxShadow: [
-                    BoxShadow(
-                      color: accent.withValues(alpha: 0.4),
-                      blurRadius: 6,
-                      spreadRadius: 0.5,
-                    ),
-                  ],
                 ),
               ),
               const SizedBox(width: 10),
@@ -73,11 +60,13 @@ class SectionHeader extends StatelessWidget {
                   children: [
                     Text(
                       title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: textPrimary,
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
-                        letterSpacing: 0.4,
+                        letterSpacing: 0.2,
                         fontFamily: AppTheme.fontDisplay,
                       ),
                     ),
@@ -85,18 +74,24 @@ class SectionHeader extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         subtitle!,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: textSecondary,
-                          fontSize: 11,
+                          fontSize: 11.5,
+                          fontFamily: AppTheme.fontBody,
                           fontWeight: FontWeight.w400,
-                          letterSpacing: 0.1,
+                          height: 1.3,
                         ),
                       ),
                     ],
                   ],
                 ),
               ),
-              if (trailing != null) trailing!,
+              if (trailing != null) ...[
+                const SizedBox(width: 8),
+                trailing!,
+              ],
             ],
           ),
         ),
@@ -105,7 +100,8 @@ class SectionHeader extends StatelessWidget {
   }
 }
 
-/// A reusable settings card container with consistent styling.
+/// A reusable settings card container with crisp hairline border and consistent
+/// light/dark/AMOLED styling.
 class SettingsCard extends StatelessWidget {
   final List<Widget> children;
   final bool isDark;
@@ -124,30 +120,16 @@ class SettingsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cardClr = (isAmoled && isDark)
-        ? AppTheme.amoledCardBg
-        : (isDark
-            ? AppTheme.surface.withValues(alpha: 0.8)
-            : AppTheme.lightSurface);
+    final cardClr = AppTheme.surfaceColor(isDark, isAmoled: isAmoled);
+    final borderClr = AppTheme.hairlineBorder(isDark, isAmoled: isAmoled);
 
     return Container(
       margin: margin,
       decoration: BoxDecoration(
         color: cardClr,
         borderRadius: BorderRadius.circular(borderRadius),
-        border: Border.all(
-          color: isDark
-              ? AppTheme.glassBorder.withValues(alpha: 0.3)
-              : AppTheme.lightGlassBorder.withValues(alpha: 0.5),
-          width: 0.8,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        border: Border.all(color: borderClr, width: 0.8),
+        boxShadow: AppTheme.cardShadow(isDark),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(borderRadius),
@@ -169,20 +151,28 @@ class DragHandle extends StatelessWidget {
   const DragHandle({
     super.key,
     this.color,
-    this.width = 40,
-    this.height = 4,
+    this.width = DmxTokens.dragHandleWidth,
+    this.height = DmxTokens.dragHandleHeight,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Container(
-        width: width,
-        height: height,
-        margin: const EdgeInsets.only(top: 10, bottom: 6),
-        decoration: BoxDecoration(
-          color: color ?? Colors.grey.withValues(alpha: 0.4),
-          borderRadius: BorderRadius.circular(2),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final resolvedColor = color ??
+        (isDark
+            ? AppTheme.borderStrong.withValues(alpha: 0.9)
+            : AppTheme.lightBorderStrong);
+
+    return ExcludeSemantics(
+      child: Center(
+        child: Container(
+          width: width,
+          height: height,
+          margin: const EdgeInsets.only(top: 10, bottom: 8),
+          decoration: BoxDecoration(
+            color: resolvedColor,
+            borderRadius: BorderRadius.circular(height / 2),
+          ),
         ),
       ),
     );
@@ -214,107 +204,102 @@ class EmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     final accent =
         accentColor ?? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue);
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+
+    final badge = Container(
+      width: 80,
+      height: 80,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          colors: [
+            accent.withValues(alpha: isDark ? 0.18 : 0.12),
+            accent.withValues(alpha: isDark ? 0.05 : 0.03),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        border: Border.all(
+          color: accent.withValues(alpha: isDark ? 0.25 : 0.20),
+          width: 1.0,
+        ),
+      ),
+      child: Icon(icon, size: 36, color: accent),
+    );
 
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TweenAnimationBuilder<double>(
-              tween: Tween<double>(begin: 0.8, end: 1.0),
-              duration: const Duration(milliseconds: 600),
-              curve: Curves.elasticOut,
-              builder: (context, value, child) {
-                return Transform.scale(
-                  scale: value,
-                  child: child,
-                );
-              },
-              child: Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: [
-                      accent.withValues(alpha: 0.2),
-                      accent.withValues(alpha: 0.05),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: accent.withValues(alpha: 0.15),
-                      blurRadius: 20,
-                      spreadRadius: 2,
-                    ),
-                  ],
+        padding: const EdgeInsets.all(28.0),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 340),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (reduceMotion)
+                badge
+              else
+                TweenAnimationBuilder<double>(
+                  tween: Tween<double>(begin: 0.9, end: 1.0),
+                  duration: AppTheme.motionSlow,
+                  curve: AppTheme.motionCurve,
+                  builder: (context, value, child) =>
+                      Transform.scale(scale: value, child: child),
+                  child: badge,
                 ),
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Icon(
-                      icon,
-                      size: 48,
-                      color: accent.withValues(alpha: 0.4),
-                    ),
-                    Icon(
-                      icon,
-                      size: 36,
-                      color: accent,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color:
-                    isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-                letterSpacing: 0.2,
-              ),
-            ),
-            if (subtitle != null) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: 18),
               Text(
-                subtitle!,
+                title,
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: isDark
-                      ? AppTheme.textSecondary
-                      : AppTheme.lightTextSecondary,
-                  fontSize: 13,
-                  height: 1.4,
+                  color: AppTheme.textPrimaryOf(isDark),
+                  fontFamily: AppTheme.fontDisplay,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                  letterSpacing: -0.1,
                 ),
               ),
-            ],
-            if (actionLabel != null && onAction != null) ...[
-              const SizedBox(height: 20),
-              FilledButton.icon(
-                onPressed: onAction,
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: Text(actionLabel!),
-                style: FilledButton.styleFrom(
-                  backgroundColor: accent,
-                  foregroundColor: AppTheme.inkOn(accent),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 12,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+              if (subtitle != null && subtitle!.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  subtitle!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: AppTheme.textSecondaryOf(isDark),
+                    fontFamily: AppTheme.fontBody,
+                    fontSize: 13,
+                    height: 1.45,
                   ),
                 ),
-              ),
+              ],
+              if (actionLabel != null && onAction != null) ...[
+                const SizedBox(height: 20),
+                FilledButton.icon(
+                  onPressed: onAction,
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: Text(
+                    actionLabel!,
+                    style: const TextStyle(
+                      fontFamily: AppTheme.fontDisplay,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: accent,
+                    foregroundColor: AppTheme.inkOn(accent),
+                    elevation: 0,
+                    minimumSize: const Size(0, 44),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

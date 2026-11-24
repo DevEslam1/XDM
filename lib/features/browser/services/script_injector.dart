@@ -57,6 +57,113 @@ class ScriptInjector {
     })();
   ''';
 
+  /// Real-time 1DM-style media sniffing script injected at document-start.
+  /// Hooks HTMLMediaElement.play, URL.createObjectURL, window.fetch, and XMLHttpRequest.open.
+  static const String kMediaSnifferEarlyJs = '''
+    (function() {
+      if (window.__dmxSnifferV2Installed) return;
+      window.__dmxSnifferV2Installed = true;
+
+      function reportMedia(url, mime, label) {
+        if (!url || typeof url !== 'string') return;
+        if (url.startsWith('data:') || url.startsWith('javascript:') || url.startsWith('about:') || url.startsWith('chrome:')) return;
+        
+        var lower = url.toLowerCase();
+        if (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || 
+            lower.endsWith('.gif') || lower.endsWith('.svg') || lower.endsWith('.webp') || 
+            lower.endsWith('.ico') || lower.endsWith('.woff') || lower.endsWith('.woff2') || 
+            lower.endsWith('.ttf') || lower.endsWith('.css') || lower.endsWith('.js')) {
+          return;
+        }
+
+        try {
+          if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+            window.flutter_inappwebview.callHandler('DMX_MediaDetected', JSON.stringify({
+              url: url,
+              mime: mime || '',
+              label: label || 'Media Stream',
+              pageTitle: document.title || '',
+              pageUrl: location.href
+            }));
+          }
+        } catch(e) {}
+      }
+
+      // 1. Hook HTMLMediaElement prototype
+      try {
+        var origPlay = HTMLMediaElement.prototype.play;
+        HTMLMediaElement.prototype.play = function() {
+          var src = this.currentSrc || this.src;
+          if (src) reportMedia(src, this.getAttribute('type') || '', 'HTML5 Video/Audio');
+          return origPlay.apply(this, arguments);
+        };
+      } catch(e) {}
+
+      // 2. Hook URL.createObjectURL for Blob streams
+      try {
+        var origCreate = URL.createObjectURL;
+        URL.createObjectURL = function(blob) {
+          var url = origCreate.apply(this, arguments);
+          if (blob && blob.type && (blob.type.indexOf('video') !== -1 || blob.type.indexOf('audio') !== -1 || blob.type.indexOf('mpegurl') !== -1)) {
+            reportMedia(url, blob.type, 'Blob Stream (' + Math.round((blob.size || 0)/1024) + ' KB)');
+          }
+          return url;
+        };
+      } catch(e) {}
+
+      // 3. Hook Fetch API for HLS / DASH / Media requests
+      try {
+        var origFetch = window.fetch;
+        window.fetch = function(input, init) {
+          var url = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+          if (url) {
+            var uLower = url.toLowerCase();
+            if (uLower.indexOf('.m3u8') !== -1 || uLower.indexOf('.mpd') !== -1 || uLower.indexOf('googlevideo.com') !== -1 || uLower.indexOf('.ts') !== -1) {
+              reportMedia(url, uLower.indexOf('.m3u8') !== -1 ? 'application/x-mpegURL' : (uLower.indexOf('.mpd') !== -1 ? 'application/dash+xml' : 'video/mp4'), 'Adaptive Stream');
+            }
+          }
+          return origFetch.apply(this, arguments);
+        };
+      } catch(e) {}
+
+      // 4. Hook XMLHttpRequest for HLS / DASH / Media requests
+      try {
+        var origOpen = XMLHttpRequest.prototype.open;
+        XMLHttpRequest.prototype.open = function(method, url) {
+          if (url && typeof url === 'string') {
+            var uLower = url.toLowerCase();
+            if (uLower.indexOf('.m3u8') !== -1 || uLower.indexOf('.mpd') !== -1 || uLower.indexOf('.mp4') !== -1 || uLower.indexOf('.ts') !== -1) {
+              reportMedia(url, 'application/octet-stream', 'XHR Stream');
+            }
+          }
+          return origOpen.apply(this, arguments);
+        };
+      } catch(e) {}
+    })();
+  ''';
+
+  /// Anti-adblock and window.open popup defuser (from 1DM adblocker suite).
+  static const String kWindowOpenDefuserJs = '''
+    (function() {
+      if (window.__dmxWindowOpenDefuserInstalled) return;
+      window.__dmxWindowOpenDefuserInstalled = true;
+      try {
+        var originalOpen = window.open;
+        window.open = function(url, target, features) {
+          if (!navigator.userActivation || navigator.userActivation.isActive) {
+            return originalOpen.apply(this, arguments);
+          }
+          try {
+            if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+              window.flutter_inappwebview.callHandler('XDM_Popups', url || '');
+            }
+          } catch(e) {}
+          return null;
+        };
+      } catch(e) {}
+    })();
+  ''';
+
   /// High-quality, smart Dark Mode CSS engine for web pages.
   static String buildForceDarkCss() => '''
     :root {

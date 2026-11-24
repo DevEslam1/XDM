@@ -174,6 +174,33 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
         _handleAutofillMessage(tab, msg);
       },
     );
+
+    // 1DM Parity: Real-time event-driven media sniffer bridge
+    controller.addJavaScriptHandler(
+      handlerName: 'DMX_MediaDetected',
+      callback: (args) {
+        final msg = args.isNotEmpty ? args.first.toString() : '';
+        if (msg.isEmpty) return;
+        try {
+          final data = jsonDecode(msg) as Map<String, dynamic>;
+          final url = data['url'] as String? ?? '';
+          final mime = data['mime'] as String? ?? '';
+          final label = data['label'] as String? ?? '';
+          final title = data['pageTitle'] as String? ?? '';
+          if (url.isNotEmpty) {
+            _sniffer.recordDetectedMedia(
+              tab.id,
+              url: url,
+              mime: mime,
+              label: label,
+              pageTitle: title,
+            );
+          }
+        } catch (e) {
+          _log.fine('[MediaDetected] Failed to parse message: $e');
+        }
+      },
+    );
   }
 
   Future<void> _handleAutofillMessage(BrowserTab tab, String message) async {
@@ -365,6 +392,8 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
     _navigatingBackForwardTabIds[tab.id] = false;
     final settings = _settings;
     unawaited(_injectAllScripts(tab, url));
+    // 1DM Parity: Inject cosmetic CSS adblock rules into page
+    _adBlocker.injectInto(tab);
     // UX 3.6: Tab favicons — fetch after page load.
     unawaited(_fetchFavicon(tab));
     // UX 3.19: Autofill saved form data for this host.

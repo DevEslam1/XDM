@@ -7,6 +7,26 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/bencode_decoder.dart';
+import '../utils/url_utils.dart';
+
+/// Reconciliation snapshot loaded for a torrent task on startup / UI refresh.
+class TorrentTaskReconciliationSnapshot {
+  final List<Map<String, dynamic>> files;
+  final int selectedTotalBytes;
+  final int selectedDownloadedBytes;
+  final int totalUploaded;
+  final bool hasNativeResumeBlob;
+  final bool isComplete;
+
+  const TorrentTaskReconciliationSnapshot({
+    required this.files,
+    required this.selectedTotalBytes,
+    required this.selectedDownloadedBytes,
+    this.totalUploaded = 0,
+    required this.hasNativeResumeBlob,
+    required this.isComplete,
+  });
+}
 
 /// B15: readable degraded snapshot for engines whose native binary cannot
 /// produce a fast-resume blob (libtorrent_flutter 1.9.2 has no
@@ -59,6 +79,21 @@ class TorrentResumeStore {
   /// torrentId → sourceUrl registry (populated by the engine on add).
   static final Map<int, String> _sourceByTorrentId = {};
 
+  /// sourceUrl → normalized canonical infoHash (hex lowercase).
+  static final Map<String, String> _infoHashBySource = {};
+  static String? _loadedHashIndexPath;
+
+  static const List<String> _artifactSuffixes = [
+    '.bin',
+    '.meta.json',
+    '.bin.tmp',
+    '.resume',
+    '.resume.tmp',
+    '.meta.json.tmp',
+    '.torrent',
+    '.torrent.tmp',
+  ];
+
   static Future<Directory> _dir() async {
     final support = await getApplicationSupportDirectory();
     final dir = Directory('${support.path}/$_resumeDirName');
@@ -66,22 +101,100 @@ class TorrentResumeStore {
     return dir;
   }
 
-  static String _stableKey(String sourceUrl) {
-    // Key on the info-hash when available (stable across mirrors/redirects)
-    if (sourceUrl.startsWith('magnet:')) {
+  static int _fileRowLength(Map<String, dynamic> row) =>
+      (row['length'] as num?)?.toInt() ?? (row['size'] as num?)?.toInt() ?? 0;
+
+  static List<Map<String, dynamic>> _normalizeFileRows(
+      List<Map<String, dynamic>> rows) {
+    return rows.map((row) {
+      final len = _fileRowLength(row);
+      final dl = (row['downloadedBytes'] as num?)?.toInt() ?? 0;
+      final selected = (row['selected'] as bool?) ?? true;
+      final priority = (row['priority'] as num?)?.toInt() ?? (selected ? 4 : 0);
+      final isComplete = (row['isComplete'] as bool?) ?? (len > 0 && dl >= len);
+      return <String, dynamic>{
+        ...row,
+        'length': len,
+        'size': len,
+        'lengthKnown': (row['lengthKnown'] as bool?) ?? (len > 0),
+        'selected': selected,
+        'priority': priority,
+        'downloadedBytes': len > 0 ? dl.clamp(0, len) : (dl < 0 ? 0 : dl),
+        'isComplete': isComplete,
+      };
+    }).toList();
+  }
+
+  /// Normalizes a v1 hex (40-char), v2 hex (64-char), or v1 base32 (32-char)
+  /// infoHash to lowercase hex. Returns `null` when [raw] is empty or invalid.
+  static String? normalizeInfoHash(String? raw) {
+    if (raw == null) return null;
+    final cleaned = raw.trim();
+    if (cleaned.isEmpty) return null;
+    if (RegExp(r'^[a-fA-F0-9]{40}$').hasMatch(cleaned) ||
+        RegExp(r'^[a-fA-F0-9]{64}$').hasMatch(cleaned)) {
+      return cleaned.toLowerCase();
+    }
+    if (RegExp(r'^[A-Za-z2-7]{32}$').hasMatch(cleaned)) {
+      final decoded = _decodeBase32(cleaned.toUpperCase());
+      if (decoded != null && decoded.length == 20) {
+        return decoded.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+      }
+    }
+    return null;
+  }
+
+  static List<int>? _decodeBase32(String input) {
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    var buffer = 0;
+    var bitsLeft = 0;
+    final out = <int>[];
+    for (var i = 0; i < input.length; i++) {
+      final val = alphabet.indexOf(input[i]);
+      if (val < 0) return null;
+      buffer = (buffer << 5) | val;
+      bitsLeft += 5;
+      if (bitsLeft >= 8) {
+        out.add((buffer >> (bitsLeft - 8)) & 0xFF);
+        bitsLeft -= 8;
+      }
+    }
+    return out;
+  }
+
+  /// Extracts a canonical lowercase hex infoHash from [infoHash], the
+  /// persistent/in-memory source registry, a magnet URI (v1 hex/base32 or v2),
+  /// or a local `.torrent` file path.
+  static String? extractCanonicalInfoHash(
+    String sourceUrl, {
+    String? infoHash,
+  }) {
+    final explicit = normalizeInfoHash(infoHash);
+    if (explicit != null) return explicit;
+
+    final cached = _infoHashBySource[sourceUrl];
+    if (cached != null) return cached;
+
+    if (sourceUrl.toLowerCase().startsWith('magnet:')) {
+      final parsed = parseMagnetUrl(sourceUrl);
+      final fromParsed =
+          normalizeInfoHash(parsed['infoHashV1'] ?? parsed['infoHash']) ??
+              normalizeInfoHash(parsed['infoHashV2']);
+      if (fromParsed != null) return fromParsed;
+
       final match = RegExp(
         r'xt=urn:bt(?:ih|mh):([a-zA-Z0-9]+)',
         caseSensitive: false,
       ).firstMatch(sourceUrl);
       if (match != null) {
-        final infoHash = match.group(1)!;
-        return sha256.convert(utf8.encode(infoHash.toLowerCase())).toString();
+        final normalized = normalizeInfoHash(match.group(1)!);
+        if (normalized != null) return normalized;
+        return match.group(1)!.toLowerCase();
       }
     }
 
-    // For .torrent files, attempt to extract the info-hash from file bytes
     try {
-      String filePath = sourceUrl;
+      var filePath = sourceUrl;
       if (filePath.startsWith('file://')) {
         filePath = Uri.parse(filePath).toFilePath();
       }
@@ -89,14 +202,240 @@ class TorrentResumeStore {
       if (file.existsSync() && file.lengthSync() < 2 * 1024 * 1024) {
         final bytes = file.readAsBytesSync();
         final parsed = BencodeDecoder.parseTorrentBytes(bytes);
-        final infoHash = parsed?['infoHash'] as String?;
-        if (infoHash != null && infoHash.isNotEmpty) {
-          return sha256.convert(utf8.encode(infoHash.toLowerCase())).toString();
-        }
+        final parsedHash = normalizeInfoHash(
+              parsed?['infoHashV1'] as String? ??
+                  parsed?['infoHash'] as String?,
+            ) ??
+            normalizeInfoHash(parsed?['infoHashV2'] as String?);
+        if (parsedHash != null) return parsedHash;
       }
     } catch (_) {}
 
-    return sha256.convert(utf8.encode(sourceUrl)).toString();
+    return null;
+  }
+
+  static Future<void> _ensureHashIndexLoaded(Directory dir) async {
+    final indexPath = '${dir.path}/source_hashes.json';
+    if (_loadedHashIndexPath == indexPath) return;
+    try {
+      final f = File(indexPath);
+      if (await f.exists()) {
+        final decoded = jsonDecode(await f.readAsString());
+        if (decoded is Map) {
+          for (final entry in decoded.entries) {
+            final normalized = normalizeInfoHash(entry.value?.toString());
+            if (entry.key is String && normalized != null) {
+              _infoHashBySource.putIfAbsent(
+                  entry.key as String, () => normalized);
+            }
+          }
+        }
+      }
+      _loadedHashIndexPath = indexPath;
+    } catch (_) {}
+  }
+
+  static Future<void> _saveHashIndex(Directory dir) async {
+    try {
+      final indexPath = '${dir.path}/source_hashes.json';
+      final tmp = File('$indexPath.tmp');
+      await tmp.writeAsString(jsonEncode(_infoHashBySource), flush: true);
+      await _safeRenameFile(tmp, indexPath);
+      _loadedHashIndexPath = indexPath;
+    } catch (_) {}
+  }
+
+  static String _urlHashKey(String sourceUrl) =>
+      sha256.convert(utf8.encode(sourceUrl)).toString();
+
+  static String _stableKey(String sourceUrl, {String? infoHash}) {
+    final canonical = extractCanonicalInfoHash(sourceUrl, infoHash: infoHash);
+    if (canonical != null && canonical.isNotEmpty) {
+      return sha256.convert(utf8.encode(canonical)).toString();
+    }
+    return _urlHashKey(sourceUrl);
+  }
+
+  static Future<String> _primaryKey(
+    Directory dir,
+    String sourceUrl, {
+    String? infoHash,
+  }) async {
+    await _ensureHashIndexLoaded(dir);
+    return _stableKey(sourceUrl, infoHash: infoHash);
+  }
+
+  static Future<List<String>> _candidateKeys(
+    Directory dir,
+    String sourceUrl, {
+    String? infoHash,
+  }) async {
+    await _ensureHashIndexLoaded(dir);
+    final keys = <String>[];
+    final primary = _stableKey(sourceUrl, infoHash: infoHash);
+    keys.add(primary);
+    final legacy = _urlHashKey(sourceUrl);
+    if (legacy != primary) {
+      keys.add(legacy);
+    }
+    return keys;
+  }
+
+  /// Associates [infoHash] with [sourceUrl] across app restarts and migrates any
+  /// legacy URL-keyed artifacts to the canonical infoHash key.
+  static Future<void> registerInfoHash(
+    String sourceUrl,
+    String infoHash,
+  ) async {
+    final normalized = normalizeInfoHash(infoHash);
+    if (sourceUrl.trim().isEmpty || normalized == null) return;
+    try {
+      final dir = await _dir();
+      await _ensureHashIndexLoaded(dir);
+      final prev = _infoHashBySource[sourceUrl];
+      _infoHashBySource[sourceUrl] = normalized;
+      if (prev != normalized) {
+        await _saveHashIndex(dir);
+      }
+
+      final canonicalKey = sha256.convert(utf8.encode(normalized)).toString();
+      final legacyKey = _urlHashKey(sourceUrl);
+      if (legacyKey != canonicalKey) {
+        final legacyMeta = File('${dir.path}/$legacyKey.meta.json');
+        final canonicalMeta = File('${dir.path}/$canonicalKey.meta.json');
+        if (await legacyMeta.exists() && !await canonicalMeta.exists()) {
+          await _copyOrMoveArtifacts(
+            dir,
+            fromKey: legacyKey,
+            toKey: canonicalKey,
+            updatedSourceUrl: sourceUrl,
+            infoHash: normalized,
+            deleteOriginals: true,
+          );
+        } else {
+          final legacyTorrent = File('${dir.path}/$legacyKey.torrent');
+          final canonicalTorrent = File('${dir.path}/$canonicalKey.torrent');
+          if (await legacyTorrent.exists() &&
+              !await canonicalTorrent.exists()) {
+            await legacyTorrent.copy(canonicalTorrent.path);
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[TorrentResumeStore] registerInfoHash failed: $e');
+    }
+  }
+
+  /// Migrates stored resume artifacts, cached `.torrent` file, and source
+  /// registry from [oldSourceUrl] to [newSourceUrl] without losing bytes.
+  static Future<bool> migrateSourceKey(
+    String oldSourceUrl,
+    String newSourceUrl, {
+    String? infoHash,
+  }) async {
+    if (oldSourceUrl.trim().isEmpty || newSourceUrl.trim().isEmpty) {
+      return false;
+    }
+    try {
+      final dir = await _dir();
+      await _ensureHashIndexLoaded(dir);
+
+      final effectiveHash = normalizeInfoHash(infoHash) ??
+          extractCanonicalInfoHash(newSourceUrl) ??
+          extractCanonicalInfoHash(oldSourceUrl);
+      if (effectiveHash != null) {
+        _infoHashBySource[oldSourceUrl] = effectiveHash;
+        _infoHashBySource[newSourceUrl] = effectiveHash;
+        await _saveHashIndex(dir);
+      }
+
+      for (final entry in List<MapEntry<int, String>>.from(
+        _sourceByTorrentId.entries,
+      )) {
+        if (entry.value == oldSourceUrl) {
+          _sourceByTorrentId[entry.key] = newSourceUrl;
+        }
+      }
+
+      final targetKey = _stableKey(newSourceUrl, infoHash: effectiveHash);
+      final candidates =
+          await _candidateKeys(dir, oldSourceUrl, infoHash: effectiveHash);
+      String? sourceKey;
+      for (final candidate in candidates) {
+        if (await File('${dir.path}/$candidate.meta.json').exists() ||
+            await File('${dir.path}/$candidate.resume').exists() ||
+            await File('${dir.path}/$candidate.torrent').exists()) {
+          sourceKey = candidate;
+          break;
+        }
+      }
+      if (sourceKey == null) {
+        return effectiveHash != null;
+      }
+
+      await _copyOrMoveArtifacts(
+        dir,
+        fromKey: sourceKey,
+        toKey: targetKey,
+        updatedSourceUrl: newSourceUrl,
+        infoHash: effectiveHash,
+        deleteOriginals: sourceKey != targetKey,
+      );
+      return true;
+    } catch (e) {
+      debugPrint('[TorrentResumeStore] migrateSourceKey failed: $e');
+      return false;
+    }
+  }
+
+  static Future<void> _copyOrMoveArtifacts(
+    Directory dir, {
+    required String fromKey,
+    required String toKey,
+    required String updatedSourceUrl,
+    String? infoHash,
+    bool deleteOriginals = false,
+  }) async {
+    for (final ext in ['.resume', '.bin', '.torrent']) {
+      final src = File('${dir.path}/$fromKey$ext');
+      final dst = File('${dir.path}/$toKey$ext');
+      if (fromKey != toKey && await src.exists()) {
+        if (deleteOriginals) {
+          await _safeRenameFile(src, dst.path);
+        } else {
+          await src.copy(dst.path);
+        }
+      }
+    }
+
+    final srcMeta = File('${dir.path}/$fromKey.meta.json');
+    final dstMeta = File('${dir.path}/$toKey.meta.json');
+    if (await srcMeta.exists()) {
+      try {
+        final decoded = jsonDecode(await srcMeta.readAsString());
+        if (decoded is Map) {
+          final updated = Map<String, dynamic>.from(decoded);
+          updated['sourceUrl'] = updatedSourceUrl;
+          if (infoHash != null) updated['infoHash'] = infoHash;
+          final tmp = File('${dstMeta.path}.tmp');
+          await tmp.writeAsString(jsonEncode(updated), flush: true);
+          await _safeRenameFile(tmp, dstMeta.path);
+          if (fromKey != toKey && deleteOriginals && await srcMeta.exists()) {
+            try {
+              await srcMeta.delete();
+            } catch (_) {}
+          }
+          return;
+        }
+      } catch (_) {}
+      if (fromKey != toKey) {
+        if (deleteOriginals) {
+          await _safeRenameFile(srcMeta, dstMeta.path);
+        } else {
+          await srcMeta.copy(dstMeta.path);
+        }
+      }
+    }
   }
 
   static void registerSource(int torrentId, String sourceUrl) {
@@ -162,6 +501,7 @@ class TorrentResumeStore {
     int? piecesTotal,
     int? piecesDone,
     bool degradedFallback = false,
+    String? infoHash,
   }) async {
     try {
       if (sourceUrl.trim().isEmpty) return false;
@@ -184,7 +524,13 @@ class TorrentResumeStore {
       }
 
       final dir = await _dir();
-      final key = _stableKey(sourceUrl);
+      final normalizedHash = normalizeInfoHash(infoHash);
+      if (normalizedHash != null) {
+        _infoHashBySource[sourceUrl] = normalizedHash;
+        await _saveHashIndex(dir);
+      }
+      final key = await _primaryKey(dir, sourceUrl, infoHash: infoHash);
+      final normalizedFiles = files != null ? _normalizeFileRows(files) : null;
       final fileName = '$key.resume';
       final blobFile = File('${dir.path}/$fileName');
       final metaFile = File('${dir.path}/$key.meta.json');
@@ -220,22 +566,40 @@ class TorrentResumeStore {
         effectiveDigest = sha256.convert(actualBlob).toString();
       }
 
+      // Merge with existing meta so partial callers (e.g. saveResumeData) do
+      // not drop stored files, bitfield, or infoHash.
+      Map<String, dynamic> existingMeta = {};
+      if (await metaFile.exists()) {
+        try {
+          final decoded = jsonDecode(await metaFile.readAsString());
+          if (decoded is Map) {
+            existingMeta = Map<String, dynamic>.from(decoded);
+          }
+        } catch (_) {}
+      }
+
       // Re-encode meta with effective digest (preserve existing blob digest when degraded)
       final correctedMeta = jsonEncode({
+        ...existingMeta,
         'sourceUrl': sourceUrl,
+        if (normalizedHash != null) 'infoHash': normalizedHash,
         'torrentId': torrentId,
         'sha256': effectiveDigest,
         'savedAt': DateTime.now().millisecondsSinceEpoch,
         'bytes': shouldWriteBlob ? actualBlob.length : effectiveBlob.length,
         'hasNativeResumeData': hasNativeResumeData && shouldWriteBlob,
-        if (hasNativeResumeData && shouldWriteBlob) 'nativeResumeBlob': base64Encode(actualBlob),
-        if (files != null) 'files': files,
+        if (hasNativeResumeData && shouldWriteBlob)
+          'nativeResumeBlob': base64Encode(actualBlob),
+        if (normalizedFiles != null) 'files': normalizedFiles,
         if (pieceBitfield != null)
           'piecesBitfield': pieceBitfield.map((b) => b ? 1 : 0).toList(),
         if (fileProgress != null) 'fileProgress': fileProgress,
         if (piecesTotal != null) 'piecesTotal': piecesTotal,
         if (piecesDone != null) 'piecesDone': piecesDone,
-        if (degradedFallback) 'degradedFallback': true,
+        if (degradedFallback)
+          'degradedFallback': true
+        else if (hasNativeResumeData && shouldWriteBlob)
+          'degradedFallback': false,
       });
 
       // Write blob FIRST (crash-safe: meta references blob sha)
@@ -255,7 +619,9 @@ class TorrentResumeStore {
       if (shouldWriteBlob) {
         await _safeRenameFile(blobTmp, blobFile.path);
       } else {
-        try { if (await blobTmp.exists()) await blobTmp.delete(); } catch (_) {}
+        try {
+          if (await blobTmp.exists()) await blobTmp.delete();
+        } catch (_) {}
       }
       await _safeRenameFile(metaTmp, metaFile.path);
 
@@ -429,67 +795,78 @@ class TorrentResumeStore {
 
   /// Loads and hash-verifies the blob for [sourceUrl]. Null when missing,
   /// corrupt, or unreadable.
-  static Future<Uint8List?> loadResumeDataForSource(String sourceUrl) async {
+  static Future<Uint8List?> loadResumeDataForSource(
+    String sourceUrl, {
+    String? infoHash,
+  }) async {
     try {
       final dir = await _dir();
-      final key = _stableKey(sourceUrl);
-      var blobFile = File('${dir.path}/$key.resume');
-      if (!await blobFile.exists()) {
-        blobFile = File('${dir.path}/$key.bin');
-      }
-      final metaFile = File('${dir.path}/$key.meta.json');
-      if (!await metaFile.exists()) return null;
+      final keys = await _candidateKeys(dir, sourceUrl, infoHash: infoHash);
+      for (final key in keys) {
+        var blobFile = File('${dir.path}/$key.resume');
+        if (!await blobFile.exists()) {
+          blobFile = File('${dir.path}/$key.bin');
+        }
+        final metaFile = File('${dir.path}/$key.meta.json');
+        if (!await metaFile.exists()) continue;
 
-      final metaStr = await metaFile.readAsString();
-      final meta = jsonDecode(metaStr);
-      if (meta is! Map) return null;
+        final metaStr = await metaFile.readAsString();
+        final meta = jsonDecode(metaStr);
+        if (meta is! Map) continue;
 
-      if (!await blobFile.exists()) return null;
+        if (!await blobFile.exists()) continue;
 
-      final expectedSha = meta['sha256'] as String?;
+        final expectedSha = meta['sha256'] as String?;
 
-      final blob = await blobFile.readAsBytes();
-      // FIX: [Audit] Cap at 16MB
-      if (blob.isEmpty || blob.length > 16 * 1024 * 1024) {
-        debugPrint(
-            '[TorrentResumeStore] invalid blob size (${blob.length} bytes), rejecting as corrupt');
-        await deleteResumeDataForSource(sourceUrl);
-        return null;
-      }
-
-      if (expectedSha != null) {
-        final actual = sha256.convert(blob).toString();
-        if (actual != expectedSha) {
-          debugPrint('[TorrentResumeStore] sha mismatch for $sourceUrl — '
-              'discarding corrupt resume data');
-          await deleteResumeDataForSource(sourceUrl);
+        final blob = await blobFile.readAsBytes();
+        // FIX: [Audit] Cap at 16MB
+        if (blob.isEmpty || blob.length > 16 * 1024 * 1024) {
+          debugPrint(
+              '[TorrentResumeStore] invalid blob size (${blob.length} bytes), rejecting as corrupt');
+          await deleteResumeDataForSource(sourceUrl, infoHash: infoHash);
           return null;
         }
+
+        if (expectedSha != null) {
+          final actual = sha256.convert(blob).toString();
+          if (actual != expectedSha) {
+            debugPrint('[TorrentResumeStore] sha mismatch for $sourceUrl — '
+                'discarding corrupt resume data');
+            await deleteResumeDataForSource(sourceUrl, infoHash: infoHash);
+            return null;
+          }
+        }
+        return Uint8List.fromList(blob);
       }
-      return Uint8List.fromList(blob);
+      return null;
     } catch (e) {
       debugPrint('[TorrentResumeStore] load failed: $e');
       // FIX-M12: Delete corrupt resume data on load error
-      await deleteResumeDataForSource(sourceUrl);
+      await deleteResumeDataForSource(sourceUrl, infoHash: infoHash);
       return null;
     }
   }
 
   /// B15: loads the degraded (meta-only) snapshot for [sourceUrl] when no
-  /// native blob exists. Returns the stored piece bitfield, piece counts and
-  /// per-file rows — and the byte total the store claimed at pause time — so
-  /// the download handler can re-arm progress on re-add even though 1.9.2's
-  /// native bridge cannot persist or load a real fast-resume blob.
+  /// native blob exists.
   static Future<TorrentDegradedSnapshot?> loadDegradedSnapshotForSource(
-      String sourceUrl) async {
+    String sourceUrl, {
+    String? infoHash,
+  }) async {
     try {
       final dir = await _dir();
-      final key = _stableKey(sourceUrl);
-      final metaFile = File('${dir.path}/$key.meta.json');
-      if (!await metaFile.exists()) return null;
-
-      final meta = jsonDecode(await metaFile.readAsString());
-      if (meta is! Map) return null;
+      final keys = await _candidateKeys(dir, sourceUrl, infoHash: infoHash);
+      Map<dynamic, dynamic>? meta;
+      for (final key in keys) {
+        final metaFile = File('${dir.path}/$key.meta.json');
+        if (!await metaFile.exists()) continue;
+        final decoded = jsonDecode(await metaFile.readAsString());
+        if (decoded is Map) {
+          meta = decoded;
+          break;
+        }
+      }
+      if (meta == null) return null;
       // A native blob is handled by loadResumeDataForSource; this path is
       // exclusively for degraded (meta-only) snapshots.
       if (meta['degradedFallback'] != true) return null;
@@ -502,8 +879,8 @@ class TorrentResumeStore {
           ?.map((b) => (b as num).toInt() != 0)
           .toList();
       final storedPiecesDone = (meta['piecesDone'] as num?)?.toInt();
-      final piecesDone = storedPiecesDone ??
-          (bitfield?.where((b) => b).length ?? 0);
+      final piecesDone =
+          storedPiecesDone ?? (bitfield?.where((b) => b).length ?? 0);
       final piecesTotal =
           (meta['piecesTotal'] as num?)?.toInt() ?? bitfield?.length ?? 0;
 
@@ -511,16 +888,13 @@ class TorrentResumeStore {
           (files != null && files.isNotEmpty) || (bitfield != null);
       if (!hasSnapshot) return null;
 
-      // Byte total: prefer real per-file counts; under 1.9.2 those are
-      // unavailable (the engine reports no per-file progress), so map the
-      // stored bitfield onto the selected file sizes instead.
       var selectedBytesTotal = 0;
       var storedFileBytes = 0;
       if (files != null) {
         for (final f in files) {
           final selected = (f['selected'] as bool?) ?? true;
           if (!selected) continue;
-          final len = (f['length'] as num?)?.toInt() ?? 0;
+          final len = _fileRowLength(f);
           final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
           selectedBytesTotal += len;
           storedFileBytes += len > 0 ? dl.clamp(0, len) : 0;
@@ -528,18 +902,92 @@ class TorrentResumeStore {
       }
       var downloadedBytes = storedFileBytes;
       if (bitfield != null && bitfield.isNotEmpty && selectedBytesTotal > 0) {
-        final estimated = (selectedBytesTotal * piecesDone / bitfield.length)
-            .round();
+        final estimated =
+            (selectedBytesTotal * piecesDone / bitfield.length).round();
         if (estimated > downloadedBytes) downloadedBytes = estimated;
       }
 
       return TorrentDegradedSnapshot(
-        files: files ?? const [],
+        files: files != null ? _normalizeFileRows(files) : const [],
         piecesBitfield: bitfield ?? const [],
         piecesTotal: piecesTotal,
         piecesDone: piecesDone,
         downloadedBytes: downloadedBytes,
       );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Loads persisted file selection & byte-progress state for task
+  /// reconciliation at app startup.
+  static Future<TorrentTaskReconciliationSnapshot?>
+      loadTaskReconciliationSnapshot(
+    String sourceUrl, {
+    String? infoHash,
+  }) async {
+    try {
+      final dir = await _dir();
+      final keys = await _candidateKeys(dir, sourceUrl, infoHash: infoHash);
+      for (final key in keys) {
+        final metaFile = File('${dir.path}/$key.meta.json');
+        if (!await metaFile.exists()) continue;
+        final decoded = jsonDecode(await metaFile.readAsString());
+        if (decoded is! Map) continue;
+        final meta = Map<String, dynamic>.from(decoded);
+
+        final rawFiles = (meta['files'] as List?)
+                ?.whereType<Map>()
+                .map((f) => Map<String, dynamic>.from(f))
+                .toList() ??
+            const <Map<String, dynamic>>[];
+        final files = _normalizeFileRows(rawFiles);
+        final hasNativeResumeBlob =
+            await File('${dir.path}/$key.resume').exists() ||
+                await File('${dir.path}/$key.bin').exists();
+
+        var selectedTotal = 0;
+        var selectedDone = 0;
+        for (final f in files) {
+          if ((f['selected'] as bool?) == false) continue;
+          final len = _fileRowLength(f);
+          final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+          selectedTotal += len;
+          selectedDone += len > 0 ? dl.clamp(0, len) : dl;
+        }
+
+        if (selectedDone == 0 && selectedTotal > 0) {
+          final bitfield = (meta['piecesBitfield'] as List?)
+              ?.map((b) => (b as num).toInt() != 0)
+              .toList();
+          final piecesDone = (meta['piecesDone'] as num?)?.toInt() ??
+              (bitfield?.where((b) => b).length ?? 0);
+          final piecesTotal =
+              (meta['piecesTotal'] as num?)?.toInt() ?? bitfield?.length ?? 0;
+          if (piecesTotal > 0 && piecesDone > 0) {
+            selectedDone = (selectedTotal * piecesDone / piecesTotal)
+                .round()
+                .clamp(0, selectedTotal);
+          }
+        }
+
+        final isComplete = files.isNotEmpty &&
+            selectedTotal > 0 &&
+            selectedDone >= selectedTotal;
+
+        if (files.isEmpty && !hasNativeResumeBlob) continue;
+
+        return TorrentTaskReconciliationSnapshot(
+          files: files,
+          selectedTotalBytes: selectedTotal,
+          selectedDownloadedBytes: selectedTotal > 0
+              ? selectedDone.clamp(0, selectedTotal)
+              : selectedDone,
+          hasNativeResumeBlob: hasNativeResumeBlob,
+          isComplete: isComplete,
+        );
+      }
+      return null;
     } catch (_) {
       return null;
     }
@@ -554,11 +1002,17 @@ class TorrentResumeStore {
     required List<Map<String, dynamic>> files,
     String? name,
     int torrentId = -1,
+    String? infoHash,
   }) async {
     try {
       if (sourceUrl.trim().isEmpty || files.isEmpty) return false;
       final dir = await _dir();
-      final key = _stableKey(sourceUrl);
+      final normalizedHash = normalizeInfoHash(infoHash);
+      if (normalizedHash != null) {
+        _infoHashBySource[sourceUrl] = normalizedHash;
+        await _saveHashIndex(dir);
+      }
+      final key = await _primaryKey(dir, sourceUrl, infoHash: infoHash);
       final metaFile = File('${dir.path}/$key.meta.json');
       final metaTmp = File('${dir.path}/$key.meta.json.tmp');
 
@@ -576,10 +1030,11 @@ class TorrentResumeStore {
       final merged = <String, dynamic>{
         ...existing,
         'sourceUrl': sourceUrl,
+        if (normalizedHash != null) 'infoHash': normalizedHash,
         'torrentId': torrentId,
         'savedAt': DateTime.now().millisecondsSinceEpoch,
         if (name != null && name.isNotEmpty) 'name': name,
-        'files': files,
+        'files': _normalizeFileRows(files),
       };
 
       await metaTmp.writeAsString(jsonEncode(merged), flush: true);
@@ -599,18 +1054,24 @@ class TorrentResumeStore {
 
   /// Per-file selection/progress snapshot saved alongside the blob, if any.
   static Future<List<Map<String, dynamic>>?> loadFilesForSource(
-      String sourceUrl) async {
+    String sourceUrl, {
+    String? infoHash,
+  }) async {
     try {
       final dir = await _dir();
-      final key = _stableKey(sourceUrl);
-      final metaFile = File('${dir.path}/$key.meta.json');
-      if (!await metaFile.exists()) return null;
-      final meta = jsonDecode(await metaFile.readAsString());
-      if (meta is! Map || meta['files'] is! List) return null;
-      return (meta['files'] as List)
-          .whereType<Map>()
-          .map((f) => Map<String, dynamic>.from(f))
-          .toList();
+      final keys = await _candidateKeys(dir, sourceUrl, infoHash: infoHash);
+      for (final key in keys) {
+        final metaFile = File('${dir.path}/$key.meta.json');
+        if (!await metaFile.exists()) continue;
+        final meta = jsonDecode(await metaFile.readAsString());
+        if (meta is! Map || meta['files'] is! List) continue;
+        final raw = (meta['files'] as List)
+            .whereType<Map>()
+            .map((f) => Map<String, dynamic>.from(f))
+            .toList();
+        return _normalizeFileRows(raw);
+      }
+      return null;
     } catch (_) {
       return null;
     }
@@ -618,9 +1079,29 @@ class TorrentResumeStore {
 
   /// Persistently caches the raw bytes of a remote .torrent file so that subsequent
   /// resumes or re-adds can access a valid local file instead of failing HTTP fopen.
-  static Future<File> saveTorrentFile(String sourceUrl, List<int> bytes) async {
+  static Future<File> saveTorrentFile(
+    String sourceUrl,
+    List<int> bytes, {
+    String? infoHash,
+  }) async {
     final dir = await _dir();
-    final key = _stableKey(sourceUrl);
+    String? extractedHash = normalizeInfoHash(infoHash);
+    if (extractedHash == null && bytes.isNotEmpty) {
+      try {
+        final parsed = BencodeDecoder.parseTorrentBytes(
+          bytes is Uint8List ? bytes : Uint8List.fromList(bytes),
+        );
+        extractedHash = normalizeInfoHash(
+              parsed?['infoHashV1'] as String? ??
+                  parsed?['infoHash'] as String?,
+            ) ??
+            normalizeInfoHash(parsed?['infoHashV2'] as String?);
+      } catch (_) {}
+    }
+    if (extractedHash != null) {
+      await registerInfoHash(sourceUrl, extractedHash);
+    }
+    final key = await _primaryKey(dir, sourceUrl, infoHash: extractedHash);
     final torrentFile = File('${dir.path}/$key.torrent');
     final tmpFile = File('${dir.path}/$key.torrent.tmp');
     await tmpFile.writeAsBytes(bytes, flush: true);
@@ -632,35 +1113,39 @@ class TorrentResumeStore {
   }
 
   /// Returns the persistent local .torrent file for [sourceUrl] if it exists on disk.
-  static Future<File?> getTorrentFile(String sourceUrl) async {
+  static Future<File?> getTorrentFile(
+    String sourceUrl, {
+    String? infoHash,
+  }) async {
     try {
       final dir = await _dir();
-      final key = _stableKey(sourceUrl);
-      final file = File('${dir.path}/$key.torrent');
-      if (await file.exists() && await file.length() > 0) {
-        return file;
+      final keys = await _candidateKeys(dir, sourceUrl, infoHash: infoHash);
+      for (final key in keys) {
+        final file = File('${dir.path}/$key.torrent');
+        if (await file.exists() && await file.length() > 0) {
+          return file;
+        }
       }
     } catch (_) {}
     return null;
   }
 
-  static Future<void> deleteResumeDataForSource(String sourceUrl) async {
+  static Future<void> deleteResumeDataForSource(
+    String sourceUrl, {
+    String? infoHash,
+  }) async {
     try {
       final dir = await _dir();
-      final key = _stableKey(sourceUrl);
-      // FIX-M12: Delete all resume, metadata and cached torrent artifacts including temp files
-      for (final suffix in [
-        '.bin',
-        '.meta.json',
-        '.bin.tmp',
-        '.resume',
-        '.resume.tmp',
-        '.meta.json.tmp',
-        '.torrent',
-        '.torrent.tmp',
-      ]) {
-        final f = File('${dir.path}/$key$suffix');
-        if (await f.exists()) await f.delete();
+      final keys = await _candidateKeys(dir, sourceUrl, infoHash: infoHash);
+      for (final key in keys) {
+        // FIX-M12: Delete all resume, metadata and cached torrent artifacts including temp files
+        for (final suffix in _artifactSuffixes) {
+          final f = File('${dir.path}/$key$suffix');
+          if (await f.exists()) await f.delete();
+        }
+      }
+      if (_infoHashBySource.remove(sourceUrl) != null) {
+        await _saveHashIndex(dir);
       }
     } catch (_) {}
   }
@@ -707,9 +1192,9 @@ class TorrentResumeStore {
   }
 
   /// FIX-4: Verify on-disk resume data validity for a given source URL.
-  static Future<bool> verifySource(String sourceUrl) async {
+  static Future<bool> verifySource(String sourceUrl, {String? infoHash}) async {
     try {
-      final data = await loadResumeDataForSource(sourceUrl);
+      final data = await loadResumeDataForSource(sourceUrl, infoHash: infoHash);
       return data != null && validateResumeData(data);
     } catch (_) {
       return false;
@@ -720,24 +1205,30 @@ class TorrentResumeStore {
   /// validates whether a recheck is needed by comparing stored [piecesDone]
   /// with the native engine's actual pieces after resume.
   static Future<bool> needsRecheckAfterResume(
-      String sourceUrl, int actualPiecesDone) async {
+    String sourceUrl,
+    int actualPiecesDone, {
+    String? infoHash,
+  }) async {
     try {
       final dir = await _dir();
-      final key = _stableKey(sourceUrl);
-      final metaFile = File('${dir.path}/$key.meta.json');
-      if (!await metaFile.exists()) return false;
+      final keys = await _candidateKeys(dir, sourceUrl, infoHash: infoHash);
+      for (final key in keys) {
+        final metaFile = File('${dir.path}/$key.meta.json');
+        if (!await metaFile.exists()) continue;
 
-      final meta = jsonDecode(await metaFile.readAsString());
-      if (meta is! Map) return false;
+        final meta = jsonDecode(await metaFile.readAsString());
+        if (meta is! Map) continue;
 
-      final bitfieldRaw = meta['piecesBitfield'];
-      final piecesTotal = meta['piecesTotal'];
-      final storedPiecesDone = meta['piecesDone'];
+        final bitfieldRaw = meta['piecesBitfield'];
+        final piecesTotal = meta['piecesTotal'];
+        final storedPiecesDone = meta['piecesDone'];
 
-      if (bitfieldRaw != null &&
-          piecesTotal != null &&
-          (piecesTotal as num).toInt() > 0) {
-        return (storedPiecesDone as num?)?.toInt() != actualPiecesDone;
+        if (bitfieldRaw != null &&
+            piecesTotal != null &&
+            (piecesTotal as num).toInt() > 0) {
+          return (storedPiecesDone as num?)?.toInt() != actualPiecesDone;
+        }
+        return false;
       }
       return false;
     } catch (_) {

@@ -90,5 +90,106 @@ void main() {
       expect(result.isValid, isFalse);
       expect(result.mismatchReason, contains('Mirror group mismatch'));
     });
+
+    test('normalizeUrl trims and strips fragment', () {
+      expect(ResumeIdentity.normalizeUrl('  https://a/b#x  '), 'https://a/b');
+      expect(ResumeIdentity.normalizeUrl('https://a/b'), 'https://a/b');
+    });
+
+    test('fromHeaders handles list values, empty and explicit length', () {
+      final identity = ResumeIdentity.fromHeaders(
+        url: 'https://example.com/f',
+        headers: const {
+          'ETag': ['  "list-tag"  '],
+          'Last-Modified': '',
+          'Accept-Ranges': 'none',
+          'Content-Length': '999',
+        },
+        contentLength: 500,
+      );
+      expect(identity.etag, '"list-tag"');
+      expect(identity.lastModified, isNull);
+      expect(identity.supportsRanges, isFalse);
+      expect(identity.contentLength, 500);
+
+      final emptyHeader = ResumeIdentity.fromHeaders(
+        url: 'u',
+        headers: const {'etag': null},
+      );
+      expect(emptyHeader.etag, isNull);
+      expect(emptyHeader.contentLength, isNull);
+    });
+
+    test('toJson and fromJson roundtrip', () {
+      const identity = ResumeIdentity(
+        normalizedUrl: 'https://a',
+        etag: 'e',
+        lastModified: 'l',
+        contentLength: 5,
+        supportsRanges: true,
+        expectedSha256: 'sha',
+        mirrorGroupId: 'g',
+      );
+      final json = identity.toJson();
+      final restored = ResumeIdentity.fromJson(json);
+      expect(restored, equals(identity));
+      expect(restored.hashCode, identity.hashCode);
+      expect(restored.toString(), isNotNull);
+    });
+
+    test('fromJson defaults', () {
+      final restored = ResumeIdentity.fromJson(const {});
+      expect(restored.normalizedUrl, '');
+      expect(restored.etag, isNull);
+      expect(restored.contentLength, isNull);
+      expect(restored.supportsRanges, isFalse);
+      expect(restored.expectedSha256, isNull);
+      expect(restored.mirrorGroupId, isNull);
+    });
+
+    test('weak etags match and last-modified used when etags absent', () {
+      const a = ResumeIdentity(
+        normalizedUrl: 'u',
+        etag: 'W/"tag"',
+      );
+      const b = ResumeIdentity(
+        normalizedUrl: 'u',
+        etag: '"tag"',
+      );
+      expect(a.validateAgainst(b).isValid, isTrue);
+
+      const noEtagA = ResumeIdentity(
+        normalizedUrl: 'u',
+        lastModified: 'Mon',
+      );
+      const noEtagB = ResumeIdentity(
+        normalizedUrl: 'u',
+        lastModified: 'Tue',
+      );
+      final result = noEtagA.validateAgainst(noEtagB);
+      expect(result.isValid, isFalse);
+      expect(result.mismatchReason, contains('Last-Modified'));
+    });
+
+    test('non-positive lengths are not compared and valid result toString', () {
+      const a = ResumeIdentity(normalizedUrl: 'u', contentLength: 0);
+      const b = ResumeIdentity(normalizedUrl: 'u', contentLength: 10);
+      final result = a.validateAgainst(b);
+      expect(result.isValid, isTrue);
+      expect(result.mismatchReason, isNull);
+      expect(result.toString(), 'ResumeValidationResult.valid()');
+
+      const mismatch = ResumeValidationResult.mismatch('why');
+      expect(mismatch.toString(), 'ResumeValidationResult.mismatch(why)');
+    });
+
+    test('equality and hashCode', () {
+      const a = ResumeIdentity(normalizedUrl: 'u', etag: 'e');
+      const b = ResumeIdentity(normalizedUrl: 'u', etag: 'e');
+      expect(a, equals(b));
+      expect(a.hashCode, equals(b.hashCode));
+      expect(a == Object(), isFalse);
+      expect(a == const ResumeIdentity(normalizedUrl: 'x'), isFalse);
+    });
   });
 }

@@ -19,8 +19,8 @@ pluginManagement {
 
 plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
-    id("com.android.application") version "8.11.1" apply false
-    id("org.jetbrains.kotlin.android") version "2.2.20" apply false
+    id("com.android.application") version "9.5.2" apply false
+    id("org.jetbrains.kotlin.android") version "2.4.21" apply false
 }
 
 include(":app")
@@ -30,10 +30,10 @@ gradle.projectsLoaded {
         buildscript.configurations.matching { it.name == "classpath" }.configureEach {
             resolutionStrategy.eachDependency {
                 if (requested.group == "com.android.tools.build" && requested.name == "gradle") {
-                    useVersion("8.11.1")
+                    useVersion("9.5.2")
                 }
                 if (requested.group == "org.jetbrains.kotlin" && requested.name == "kotlin-gradle-plugin") {
-                    useVersion("2.2.20")
+                    useVersion("2.4.21")
                 }
             }
         }

@@ -567,9 +567,9 @@ class NotificationService {
     if (!_initialized) return;
     final now = DateTime.now();
     final lastPost = _lastProgressPostTimes[notificationId];
-    // FIX: Enforce minimum 1,000ms between calls per notification ID, 60,000ms in background
-    final isBg = DownloadEngine.isInBackground || PowerMonitor.screenOff;
-    final throttleMs = isBg ? 60000 : 1000;
+    final throttleMs = PowerMonitor.screenOff
+        ? 30000
+        : (DownloadEngine.isInBackground ? 10000 : 1000);
     if (!isPaused &&
         lastPost != null &&
         now.difference(lastPost).inMilliseconds < throttleMs) {

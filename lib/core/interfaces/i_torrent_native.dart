@@ -396,6 +396,10 @@ class TorrentNativeCapabilities {
   const factory TorrentNativeCapabilities.v192() =
       TorrentNativeCapabilities._v192;
 
+  /// Capabilities supported by `libtorrent_dart` 1.2.0 (libtorrent 2.0.11).
+  const factory TorrentNativeCapabilities.v2011() =
+      TorrentNativeCapabilities._v2011;
+
   /// Every capability advertised as supported.
   const factory TorrentNativeCapabilities.all() =
       TorrentNativeCapabilities._all;
@@ -420,6 +424,27 @@ class TorrentNativeCapabilities {
         natPmp = false,
         anonymousMode = false,
         perTorrentConnectionLimit = false;
+
+  const TorrentNativeCapabilities._v2011()
+      : fileProgress = true,
+        filePriorities = true,
+        resumeData = true,
+        forceRecheck = true,
+        trackers = true,
+        reannounce = true,
+        createTorrent = true,
+        ipFilter = false,
+        sequentialDownload = true,
+        superSeeding = true,
+        pieceDeadline = true,
+        webSeeds = true,
+        proxy = true,
+        ssl = false,
+        peerExchange = false,
+        localPeerDiscovery = true,
+        natPmp = true,
+        anonymousMode = true,
+        perTorrentConnectionLimit = true;
 
   const TorrentNativeCapabilities._all()
       : fileProgress = true,

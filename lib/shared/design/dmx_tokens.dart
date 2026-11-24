@@ -21,6 +21,16 @@ abstract final class DmxTokens {
   static const double radiusXl = 20.0;
   static const double radius2xl = 24.0;
   static const double radiusFull = 9999.0;
+  static const double badgeRadius = 10.0;
+
+  // === SHEET DIMENSIONS ===
+  static const double sheetMaxWidth = 560.0;
+  static const double sheetMaxHeightFraction = 0.88;
+  static const double sheetRadius = 24.0;
+  static const double sheetHorizontalPadding = 20.0;
+  static const double sheetSectionGap = 16.0;
+  static const double dragHandleWidth = 36.0;
+  static const double dragHandleHeight = 4.0;
 
   // === ICON SIZES ===
   static const double iconXs = 12.0;
@@ -62,6 +72,7 @@ abstract final class DmxTokens {
 
   // === BORDER WIDTHS ===
   static const double borderThin = 0.8;
+  static const double borderHairline = 1.0;
   static const double borderMedium = 1.2;
   static const double borderThick = 2.0;
 

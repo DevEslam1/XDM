@@ -1,8 +1,56 @@
-import 'package:connectivity_plus/connectivity_plus.dart';
+import 'dart:async';
+import 'dart:typed_data';
+
+import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 import 'package:dio/dio.dart';
+import 'package:dmx/features/downloads/domain/commands/download_commands.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/features/downloads/provider/network_monitor.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+class _MockConnectivityPlatform extends ConnectivityPlatform {
+  @override
+  Future<List<ConnectivityResult>> checkConnectivity() async =>
+      [ConnectivityResult.wifi];
+
+  @override
+  Stream<List<ConnectivityResult>> get onConnectivityChanged =>
+      const Stream.empty();
+}
+
+class _ThrowingAdapter implements HttpClientAdapter {
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    throw DioException(
+      requestOptions: options,
+      type: DioExceptionType.connectionError,
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+class _OkAdapter implements HttpClientAdapter {
+  _OkAdapter(this.statusCode);
+  final int statusCode;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    return ResponseBody.fromString('', statusCode);
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
 
 /// Helper to build a minimal [DownloadTask] with the given [status].
 DownloadTask _task(
@@ -112,8 +160,11 @@ void main() {
         tasks.add(_task('d2', DownloadStatus.downloading));
         cancelTokens['d2'] = CancelToken();
 
-        // No connectivity signal resolved yet: the first spurious callback
-        // must not treat "unknown" as "disconnected" and pause everything.
+        // No connectivity signal resolved yet (empty list == unknown): the
+        // first spurious callback must not treat "unknown" as "disconnected"
+        // and pause everything. Pinning the state avoids touching the real
+        // Connectivity() platform channel in the unit test.
+        monitor.setConnectivityForTesting(const []);
         await monitor.checkNetworkConnectivity();
 
         expect(
@@ -199,8 +250,10 @@ void main() {
           ),
         );
 
-        // Even if we trigger checkNetworkConnectivity, the task should
-        // remain paused because pausedByUser is true.
+        // Wi-Fi is available, so the monitor attempts to resume wifi-paused
+        // tasks; the task must remain paused because pausedByUser is true.
+        // Pinning the state avoids touching the real Connectivity() channel.
+        monitor.setConnectivityForTesting(const [ConnectivityResult.wifi]);
         await monitor.checkNetworkConnectivity();
 
         // The task should NOT have been re-queued.
@@ -240,5 +293,193 @@ void main() {
         // This is a smoke test.
       });
     });
+
+    group('state getters', () {
+      test('reflect connectivity snapshots', () {
+        monitor.setConnectivityForTesting([ConnectivityResult.wifi]);
+        expect(monitor.hasWifiOrEthernet, isTrue);
+        expect(monitor.isCellular, isFalse);
+        expect(monitor.hasNoNetwork, isFalse);
+        expect(monitor.hasAnyNetworkConnection, isTrue);
+        expect(monitor.hasConnection, isTrue);
+        expect(monitor.currentConnectivity, [ConnectivityResult.wifi]);
+        expect(monitor.hasResolvedInitialConnectivity, isTrue);
+
+        monitor.setConnectivityForTesting([ConnectivityResult.mobile]);
+        expect(monitor.isCellular, isTrue);
+        expect(monitor.hasWifiOrEthernet, isFalse);
+
+        monitor.setConnectivityForTesting([ConnectivityResult.none]);
+        expect(monitor.hasNoNetwork, isTrue);
+        expect(monitor.hasConnection, isFalse);
+      });
+    });
+
+    group('wifi-waiting resume', () {
+      test('marked tasks are re-queued when wifi is available', () async {
+        tasks.add(_task('w1', DownloadStatus.paused));
+        monitor.markWifiWaiting('w1');
+        monitor.setConnectivityForTesting([ConnectivityResult.wifi]);
+        await monitor.checkNetworkConnectivity();
+        expect(tasks.first.status, DownloadStatus.queued);
+        expect(pumpQueueCount, greaterThan(0));
+      });
+
+      test('pausedByUser tasks are skipped on wifi resume', () async {
+        tasks.add(_task('w2', DownloadStatus.paused, pausedByUser: true));
+        monitor.markWifiWaiting('w2');
+        monitor.setConnectivityForTesting([ConnectivityResult.wifi]);
+        await monitor.checkNetworkConnectivity();
+        expect(tasks.first.status, DownloadStatus.paused);
+      });
+    });
+
+    group('pause-on-cellular', () {
+      test('pauses on mobile and resumes on wifi', () async {
+        final localTasks = <DownloadTask>[];
+        final localCancels = <String, CancelToken>{};
+        var pausedCount = 0;
+        final m = NetworkMonitor(
+          tasks: () => localTasks,
+          torrentIds: () => {},
+          cancelTokens: () => localCancels,
+          wifiOnly: () => false,
+          pauseOnCellular: () => true,
+          setTask: (updated) async {
+            final idx = localTasks.indexWhere((t) => t.id == updated.id);
+            if (idx != -1) localTasks[idx] = updated;
+            pausedCount++;
+          },
+          pumpQueue: () {},
+        );
+        addTearDown(m.dispose);
+
+        localTasks.add(_task('c1', DownloadStatus.downloading));
+        localCancels['c1'] = CancelToken();
+        m.setConnectivityForTesting([ConnectivityResult.mobile]);
+        await m.checkNetworkConnectivity();
+        expect(localTasks.first.status, DownloadStatus.paused);
+        expect(
+          localTasks.first.errorMessage,
+          DownloadStatusMessages.waitingWifi,
+        );
+
+        m.setConnectivityForTesting([ConnectivityResult.wifi]);
+        await m.checkNetworkConnectivity();
+        expect(localTasks.first.status, DownloadStatus.queued);
+        expect(pausedCount, greaterThan(0));
+      });
+    });
+
+    group('onNetworkChanged callback', () {
+      test('emits connected and wifi state', () async {
+        NetworkChanged? captured;
+        final m = NetworkMonitor(
+          tasks: () => [],
+          torrentIds: () => {},
+          cancelTokens: () => {},
+          wifiOnly: () => false,
+          setTask: (_) async {},
+          pumpQueue: () {},
+          onNetworkChanged: (event) async => captured = event,
+        );
+        addTearDown(m.dispose);
+        m.setConnectivityForTesting([ConnectivityResult.wifi]);
+        await m.checkNetworkConnectivity();
+        expect(captured, isNotNull);
+        expect(captured!.isConnected, isTrue);
+        expect(captured!.isWifi, isTrue);
+      });
+
+      test('emits disconnected on no network', () async {
+        NetworkChanged? captured;
+        final m = NetworkMonitor(
+          tasks: () => [],
+          torrentIds: () => {},
+          cancelTokens: () => {},
+          wifiOnly: () => false,
+          setTask: (_) async {},
+          pumpQueue: () {},
+          onNetworkChanged: (event) async => captured = event,
+        );
+        addTearDown(m.dispose);
+        m.setConnectivityForTesting([ConnectivityResult.none]);
+        await m.checkNetworkConnectivity();
+        expect(captured!.isConnected, isFalse);
+      });
+    });
+
+    group('torrent and future handling on disconnect', () {
+      test('pauses torrents, cancels token and awaits active future', () async {
+        final localTasks = <DownloadTask>[];
+        final localTorrentIds = <String, int>{'d1': 42};
+        final localCancels = <String, CancelToken>{'d1': CancelToken()};
+        final localFutures = <String, Future<void>>{
+          'd1': Future<void>.delayed(const Duration(milliseconds: 5)),
+        };
+        final m = NetworkMonitor(
+          tasks: () => localTasks,
+          torrentIds: () => localTorrentIds,
+          cancelTokens: () => localCancels,
+          activeFutures: () => localFutures,
+          wifiOnly: () => false,
+          setTask: (updated) async {
+            final idx = localTasks.indexWhere((t) => t.id == updated.id);
+            if (idx != -1) localTasks[idx] = updated;
+          },
+          pumpQueue: () {},
+        );
+        addTearDown(m.dispose);
+        localTasks.add(_task('d1', DownloadStatus.downloading));
+        m.setConnectivityForTesting([ConnectivityResult.none]);
+        await m.checkNetworkConnectivity();
+        expect(localTasks.first.status, DownloadStatus.paused);
+        expect(localCancels.containsKey('d1'), isFalse);
+      });
+    });
+
+    group('resume with skipPump', () {
+      test('re-queues without pumping the queue', () async {
+        tasks.add(_task('r1', DownloadStatus.downloading));
+        cancelTokens['r1'] = CancelToken();
+        monitor.setConnectivityForTesting([ConnectivityResult.none]);
+        await monitor.checkNetworkConnectivity();
+        expect(tasks.first.status, DownloadStatus.paused);
+
+        pumpQueueCount = 0;
+        monitor.setConnectivityForTesting([ConnectivityResult.wifi]);
+        await monitor.checkNetworkConnectivity(skipPump: true);
+        expect(tasks.first.status, DownloadStatus.queued);
+        expect(pumpQueueCount, 0);
+      });
+    });
+
+    group('network reachability', () {
+      test('false when the adapter throws', () async {
+        final dio = Dio()..httpClientAdapter = _ThrowingAdapter();
+        expect(await NetworkMonitor.isNetworkReachable(dioClient: dio), isFalse);
+      });
+
+      test('true for a 204 response', () async {
+        final dio = Dio()..httpClientAdapter = _OkAdapter(204);
+        expect(await NetworkMonitor.isNetworkReachable(dioClient: dio), isTrue);
+        expect(
+          await NetworkMonitor.verifyConnectivityProbe(dioClient: dio),
+          isTrue,
+        );
+      });
+    });
+
+    group('init', () {
+      test('resolves initial connectivity and dispose is safe', () async {
+        ConnectivityPlatform.instance = _MockConnectivityPlatform();
+        monitor.init();
+        monitor.init(); // idempotent
+        await monitor.ensureInitialConnectivity();
+        expect(monitor.hasResolvedInitialConnectivity, isTrue);
+        monitor.dispose();
+      });
+    });
   });
 }
+

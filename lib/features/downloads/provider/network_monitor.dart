@@ -51,7 +51,7 @@ class NetworkMonitor implements IConnectivity {
   List<ConnectivityResult> _currentConnectivity = [];
   bool _hasResolvedInitialConnectivity = false;
   bool _checkingNetwork = false;
-  bool _networkRecheckPending = false;
+  List<ConnectivityResult>? _pendingConnectivity;
   Timer? _debounceTimer;
   static const Duration debounceDuration = Duration(seconds: 2);
   final Set<String> _tasksPausedDueToDisconnect = {};
@@ -101,6 +101,7 @@ class NetworkMonitor implements IConnectivity {
     // the whole connectivity-change pipeline (pause on disconnect,
     // wifi-only enforcement, auto-resume on reconnect) was dead at runtime.
     if (_connectivitySubscription != null) return;
+    unawaited(ensureInitialConnectivity());
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
       results,
     ) {
@@ -154,8 +155,11 @@ class NetworkMonitor implements IConnectivity {
   }
 
   Future<void> checkNetworkConnectivity({bool skipPump = false}) async {
+    if (!_hasResolvedInitialConnectivity) {
+      await ensureInitialConnectivity();
+    }
     if (_checkingNetwork) {
-      _networkRecheckPending = true;
+      _pendingConnectivity = List<ConnectivityResult>.from(_currentConnectivity);
       return;
     }
     _checkingNetwork = true;
@@ -207,8 +211,10 @@ class NetworkMonitor implements IConnectivity {
       }
     } finally {
       _checkingNetwork = false;
-      if (_networkRecheckPending) {
-        _networkRecheckPending = false;
+      final pending = _pendingConnectivity;
+      if (pending != null) {
+        _pendingConnectivity = null;
+        _currentConnectivity = pending;
         unawaited(Future.microtask(
             () => checkNetworkConnectivity(skipPump: skipPump)));
       }
@@ -290,6 +296,7 @@ class NetworkMonitor implements IConnectivity {
   }
 
   Future<void> _pauseForWifiOnly() async {
+    if (!_hasResolvedInitialConnectivity) return;
     final active = _tasks()
         .where(
           (task) =>

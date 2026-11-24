@@ -59,10 +59,7 @@ jobs:
         run: flutter test --coverage
 
       - name: Verify coverage threshold
-        run: |
-          if [ -f coverage/lcov.info ]; then
-            echo "Coverage file generated successfully."
-          fi
+        run: bash tool/coverage_gate.sh coverage/lcov.info 60
 
   android-build:
     name: 🤖 Android Compilation & JVM Tests Gate

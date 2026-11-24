@@ -110,7 +110,9 @@ class MetadataProbeService {
 
       try {
         final headResult = await headFuture;
-        if (headResult.isValid) {
+        if (headResult.isValid &&
+            headResult.supportsResume &&
+            headResult.fileSize > 0) {
           // Cancel the in-flight ranged GET instead of ignore() leak.
           if (!getProbeCancel.isCancelled) getProbeCancel.cancel('head_valid');
           // Drain but don't block on GET error.
@@ -119,6 +121,13 @@ class MetadataProbeService {
           return headResult;
         }
         final getResult = await getFuture;
+        if (getResult.isValid &&
+            (getResult.fileSize > 0 || getResult.supportsResume)) {
+          return getResult;
+        }
+        if (headResult.fileSize > 0 || headResult.supportsResume) {
+          return headResult;
+        }
         if (getResult.isValid) return getResult;
         return headResult;
       } catch (_) {
@@ -178,15 +187,18 @@ class MetadataProbeService {
           ? acceptRanges == 'bytes'
           : (isYoutube || response.statusCode == 206);
 
-      if (_isLikelyHtmlResponse(
-              response.headers.value(Headers.contentTypeHeader)) &&
-          fileSize < 1024 * 1024) {
-        fileSize = 0;
-      }
+      final urlPath = Uri.tryParse(punyUrl)?.path.toLowerCase() ?? '';
+      final isExplicitHtmlUrl = urlPath.endsWith('.html') ||
+          urlPath.endsWith('.htm') ||
+          urlPath.endsWith('.xhtml');
+      final isHtml = _isLikelyHtmlResponse(
+          response.headers.value(Headers.contentTypeHeader));
       if (response.statusCode != null && response.statusCode! >= 400) {
-        if (![400, 403, 405].contains(response.statusCode)) {
-          fileSize = 0;
-        }
+        fileSize = 0;
+        supportsResume = false;
+      } else if (isHtml && (!isExplicitHtmlUrl || fileSize < 1024 * 1024)) {
+        fileSize = 0;
+        supportsResume = false;
       }
     } catch (e) {
       debugPrint('HEAD request failed for $punyUrl: $e');
@@ -242,20 +254,29 @@ class MetadataProbeService {
           final totalMatch = RegExp(r'/(\d+)').firstMatch(contentRange);
           fileSize = int.tryParse(totalMatch?.group(1) ?? '') ?? fileSize;
         }
-        if (fileSize == 0) {
+        if (fileSize == 0 && getResponse.statusCode != 206) {
           fileSize = int.tryParse(
                   getResponse.headers.value(Headers.contentLengthHeader) ??
                       '') ??
               0;
         }
-        if (_isLikelyHtmlResponse(
-                getResponse.headers.value(Headers.contentTypeHeader)) &&
-            fileSize < 1024 * 1024) {
+        final urlPath = Uri.tryParse(punyUrl)?.path.toLowerCase() ?? '';
+        final isExplicitHtmlUrl = urlPath.endsWith('.html') ||
+            urlPath.endsWith('.htm') ||
+            urlPath.endsWith('.xhtml');
+        final isHtml = _isLikelyHtmlResponse(
+            getResponse.headers.value(Headers.contentTypeHeader));
+        if (isHtml && (!isExplicitHtmlUrl || fileSize < 1024 * 1024)) {
           fileSize = 0;
+          supportsResume = false;
+        } else {
+          supportsResume = isYoutube ||
+              getResponse.statusCode == 206 ||
+              getResponse.headers.value('accept-ranges')?.toLowerCase() ==
+                  'bytes';
         }
-        supportsResume = isYoutube ||
-            getResponse.statusCode == 206 ||
-            getResponse.headers.value('accept-ranges')?.toLowerCase() == 'bytes';
+        await getResponse.data?.stream.listen((_) {}).cancel();
+      } else {
         await getResponse.data?.stream.listen((_) {}).cancel();
       }
     } catch (e) {

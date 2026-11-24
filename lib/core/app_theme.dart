@@ -170,6 +170,115 @@ class AppTheme {
   static Color getBackground(bool isDark, {bool isAmoled = false}) =>
       isDark ? (isAmoled ? amoledBackground : background) : lightBackground;
 
+  /// Primary card/surface color with optional elevation and AMOLED awareness.
+  static Color surfaceColor(
+    bool isDark, {
+    bool isAmoled = false,
+    bool elevated = false,
+  }) {
+    if (!isDark) return elevated ? lightSurfaceRaised : lightSurface;
+    if (isAmoled) return elevated ? amoledSurfaceRaised : amoledSurface;
+    return elevated ? surfaceRaised : surface;
+  }
+
+  /// Unified bottom sheet background surface.
+  static Color sheetSurface(bool isDark, {bool isAmoled = false}) {
+    if (!isDark) return lightSurface;
+    return isAmoled ? amoledSurface : surface;
+  }
+
+  /// Crisp hairline border color for cards, sections, and sheets.
+  static Color hairlineBorder(
+    bool isDark, {
+    bool isAmoled = false,
+    bool strong = false,
+  }) {
+    if (!isDark) return strong ? lightBorder : lightBorderSubtle;
+    if (isAmoled) return strong ? amoledBorder : amoledBorderSubtle;
+    return strong ? border : borderSubtle;
+  }
+
+  /// Semantic text colors resolved for theme brightness.
+  static Color textPrimaryOf(bool isDark) =>
+      isDark ? textPrimary : lightTextPrimary;
+  static Color textSecondaryOf(bool isDark) =>
+      isDark ? textSecondary : lightTextSecondary;
+  static Color textMutedOf(bool isDark) =>
+      isDark ? textMuted : lightTextMuted;
+
+  /// Calm, consistent elevation shadows for cards and floating surfaces.
+  static List<BoxShadow> cardShadow(
+    bool isDark, {
+    bool elevated = false,
+    Color? glowColor,
+  }) {
+    if (glowColor != null) {
+      return [
+        BoxShadow(
+          color: glowColor.withValues(alpha: isDark ? 0.10 : 0.06),
+          blurRadius: elevated ? 20 : 14,
+          spreadRadius: 0,
+          offset: const Offset(0, 4),
+        ),
+      ];
+    }
+    if (elevated) {
+      return [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: isDark ? 0.32 : 0.07),
+          blurRadius: 20,
+          spreadRadius: -2,
+          offset: const Offset(0, 8),
+        ),
+      ];
+    }
+    return [
+      BoxShadow(
+        color: Colors.black.withValues(alpha: isDark ? 0.16 : 0.035),
+        blurRadius: 10,
+        spreadRadius: -1,
+        offset: const Offset(0, 2),
+      ),
+    ];
+  }
+
+  /// Unified bottom sheet container decoration.
+  static BoxDecoration sheetDecoration({
+    required bool isDark,
+    bool isAmoled = false,
+    double radius = 24.0,
+    bool roundedAll = false,
+    Color? backgroundColor,
+    Color? accentColor,
+  }) {
+    final borderRadius = roundedAll
+        ? BorderRadius.circular(radius)
+        : BorderRadius.vertical(top: Radius.circular(radius));
+    final borderClr = accentColor != null
+        ? accentColor.withValues(alpha: isDark ? 0.28 : 0.24)
+        : hairlineBorder(isDark, isAmoled: isAmoled, strong: true);
+
+    return BoxDecoration(
+      color: backgroundColor ?? sheetSurface(isDark, isAmoled: isAmoled),
+      borderRadius: borderRadius,
+      border: roundedAll
+          ? Border.all(color: borderClr, width: 1.0)
+          : Border(
+              top: BorderSide(color: borderClr, width: 1.0),
+              left: BorderSide(color: borderClr, width: 0.8),
+              right: BorderSide(color: borderClr, width: 0.8),
+            ),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: isDark ? 0.45 : 0.12),
+          blurRadius: 28,
+          spreadRadius: -4,
+          offset: const Offset(0, -4),
+        ),
+      ],
+    );
+  }
+
   /// Primary channel accent for the current mode.
   static Color accent(bool isDark, [double alpha = 1.0]) =>
       (isDark ? neonBlue : lightNeonBlue)
@@ -649,6 +758,8 @@ class AppTheme {
       ),
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),

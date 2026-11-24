@@ -1,4 +1,7 @@
+import 'package:battery_plus/battery_plus.dart';
 import 'package:dmx/core/services/bandwidth_governor.dart';
+import 'package:dmx/core/services/power_monitor.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -133,6 +136,151 @@ void main() {
       // After 100ms+, tokens must have refilled despite rapid calls
       final wait = governor.acquireNonBlocking(1000);
       expect(wait, lessThan(1000));
+    });
+
+    test('acquireBlocking awaits the computed delay', () async {
+      final governor = BandwidthGovernor(1000, 1.0);
+      governor.registerConsumer();
+      final wait = await governor.acquireBlocking(2000);
+      expect(wait, greaterThan(0));
+      governor.dispose();
+    });
+
+    test('acquire delegates to the locked non-blocking path', () async {
+      final governor = BandwidthGovernor(0);
+      expect(await governor.acquire(10), 0);
+      expect(await governor.acquire(0), 0);
+      governor.dispose();
+    });
+
+    test('dispose cancels cleanup and blocks new consumers', () {
+      final governor = BandwidthGovernor(1000);
+      governor.registerConsumer();
+      expect(governor.domainCleanupTimerForTesting, isNotNull);
+
+      governor.dispose();
+      expect(governor.isDisposed, isTrue);
+      expect(governor.domainCleanupTimerForTesting, isNull);
+
+      // Guarded: registering after dispose is a no-op.
+      final countAfterDispose = governor.activeConsumers;
+      governor.registerConsumer();
+      expect(governor.activeConsumers, countAfterDispose);
+      governor.dispose();
+    });
+
+    test('unregistering the last consumer stops the cleanup timer', () {
+      final governor = BandwidthGovernor(1000);
+      governor.registerConsumer();
+      governor.registerConsumer();
+      governor.unregisterConsumer();
+      expect(governor.domainCleanupTimerForTesting, isNotNull);
+      governor.unregisterConsumer();
+      expect(governor.domainCleanupTimerForTesting, isNull);
+      governor.dispose();
+    });
+
+    test('setLimit and updateLimit aliases update the global limit', () {
+      final governor = BandwidthGovernor(0);
+      governor.setLimit(5000);
+      expect(governor.globalBytesPerSecond, 5000);
+      governor.updateLimit(-1);
+      expect(governor.globalBytesPerSecond, 0);
+      governor.dispose();
+    });
+
+    test('onPowerStateChanged refills without error', () {
+      final governor = BandwidthGovernor(1000);
+      governor.registerConsumer();
+      governor.onPowerStateChanged();
+      expect(governor.lastRefillMsForTesting, isNonNegative);
+      governor.dispose();
+    });
+
+    test('unknown task ids fall back to the global share', () async {
+      final governor = BandwidthGovernor(0);
+      expect(governor.getTaskLimit('missing'), isNull);
+      expect(await governor.acquire(10, taskId: 'missing'), 0);
+      governor.dispose();
+    });
+
+    test('domain cleanup timer runs on its interval', () {
+      fakeAsync((async) {
+        final governor = BandwidthGovernor(0);
+        governor.registerConsumer();
+        governor.reportDomainSpeed('idle.example', 10);
+        async.elapse(const Duration(minutes: 5));
+        expect(governor.getAverageSpeedForDomain('idle.example'), 10);
+        governor.dispose();
+      });
+    });
+
+    test('BandwidthArbiter handles torrent-only and idle branches', () {
+      final arbiter = BandwidthArbiter();
+      final (httpOnly, torrentOnly) = arbiter.arbitrate(
+        httpActiveCount: 0,
+        torrentActiveCount: 2,
+        totalLimitBps: 1000,
+      );
+      expect(httpOnly, 0);
+      expect(torrentOnly, 1000);
+
+      final (idleHttp, idleTorrent) = arbiter.arbitrate(
+        httpActiveCount: 0,
+        torrentActiveCount: 0,
+        totalLimitBps: 1000,
+      );
+      expect(idleHttp, 0);
+      expect(idleTorrent, 0);
+
+      final (zeroHttp, zeroTorrent) = arbiter.arbitrate(
+        httpActiveCount: 1,
+        torrentActiveCount: 1,
+        totalLimitBps: 0,
+      );
+      expect(zeroHttp, 0);
+      expect(zeroTorrent, 0);
+      arbiter.httpGovernor.dispose();
+    });
+
+    test('powerThrottleActive reflects the live power state', () {
+      PowerMonitor.setBatteryStateForTesting(BatteryState.discharging);
+      PowerMonitor.setBatteryLevelForTesting(35);
+      final governor = BandwidthGovernor(10000);
+      expect(governor.throttleFactor, lessThan(1.0));
+      expect(governor.powerThrottleActive, isTrue);
+      governor.dispose();
+      PowerMonitor.setBatteryLevelForTesting(100);
+      PowerMonitor.setBatteryStateForTesting(BatteryState.unknown);
+    });
+
+    test('domain speed history rotates past 20 samples', () {
+      final governor = BandwidthGovernor(0);
+      for (var i = 0; i < 25; i++) {
+        governor.reportDomainSpeed('cdn.example', 10);
+      }
+      expect(governor.getAverageSpeedForDomain('cdn.example'), 10);
+      governor.dispose();
+    });
+
+    test('refill with no consumers resets tokens without error', () {
+      final governor = BandwidthGovernor(1000);
+      governor.onPowerStateChanged();
+      expect(governor.lastRefillMsForTesting, isNonNegative);
+      governor.dispose();
+    });
+
+    test('BandwidthArbiter dynamically splits 70/30 when both are active', () {
+      final arbiter = BandwidthArbiter();
+      final (httpShare, torrentShare) = arbiter.arbitrate(
+        httpActiveCount: 2,
+        torrentActiveCount: 1,
+        totalLimitBps: 1000000,
+      );
+      expect(httpShare, 700000);
+      expect(torrentShare, 300000);
+      expect(arbiter.httpGovernor.globalBytesPerSecond, 700000);
+      arbiter.httpGovernor.dispose();
     });
   });
 }

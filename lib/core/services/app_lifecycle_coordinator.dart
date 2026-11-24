@@ -60,7 +60,10 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
       _inactiveTimer = null;
       isAppForegrounded = true;
       PowerMonitor.isAppForegrounded = true;
-      unawaited(PowerMonitor.updateScreenStateFromPlatform());
+      // BG-08: a resumed app is visible again, so clear the background-forced
+      // screen-off before deciding whether to restart ambient workers. Real
+      // screen on/off events still arrive via PowerMonitor's native listener.
+      PowerMonitor.setScreenOn(true);
       DownloadEngine.markForeground();
       // Task 2.3: use explicit markForeground() instead of inverted isInBackground setter
 
@@ -107,7 +110,10 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
   Future<void> _suspendAmbientWork() async {
     isAppForegrounded = false;
     PowerMonitor.isAppForegrounded = false;
-    unawaited(PowerMonitor.updateScreenStateFromPlatform());
+    // BG-01/BG-08: treat a backgrounded app as screen-off so ambient workers,
+    // thermal polling and animations are suspended immediately. Real screen
+    // on/off events still arrive via PowerMonitor's native listener.
+    PowerMonitor.setScreenOn(false);
     DownloadEngine.markBackground();
     // Task 2.3: use explicit markBackground() instead of inverted isInBackground setter
 
@@ -126,29 +132,30 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
       getIt<AmbientAnimationController>().stopAll();
     }
 
-    // Task 4.3: Flush database saves and checkpoint WAL on backgrounding/detaching
+    // Flush torrent resume data BEFORE DB flush & WAL checkpoint so the
+    // database and resume store stay synchronized when the OS kills the process.
+    var resumeTimedOut = false;
     try {
-      DownloadJournal.flushAllActive();
-      DatabaseService.instance.flushPendingSaves();
-      DatabaseService.instance.checkpointWal(truncate: true);
+      await TorrentService.saveAllResumeData()
+          .timeout(const Duration(seconds: 2));
+    } catch (_) {
+      resumeTimedOut = true;
+    }
+
+    // Task 4.3: Flush worker buffers, database saves, and checkpoint WAL on backgrounding/detaching
+    try {
+      await DownloadEngine.flushActiveDownloads();
+      await DownloadJournal.flushAllActive();
+      await DatabaseService.instance.flushPendingSaves();
+      await DatabaseService.instance.checkpointWal(truncate: true);
     } catch (e, st) {
       LoggingService.logger('AppLifecycleCoordinator')
           .warning('Database / Journal flush on background failed', e, st);
     }
 
-    // Torrent & Worker Isolate Hard Deadline on Pause
-    try {
+    // Worker Isolate Hard Deadline on Pause
+    if (resumeTimedOut) {
       try {
-        await TorrentService.saveAllResumeData()
-            .timeout(const Duration(milliseconds: 1000));
-      } catch (_) {
-        // F29: previously this hard-killed EVERY worker isolate — including
-        // actively-transferring HTTP downloads — the moment the torrent
-        // resume-save deadline elapsed. On this build torrent resume is
-        // unsupported, so `saveAllResumeData` always times out, which meant
-        // every backgrounding killed in-flight downloads mid-write and lost
-        // their progress. Never kill isolates while any download is active;
-        // HTTP workers persist their own state as they go.
         if (DownloadEngine.hasActiveDownloads) {
           LoggingService.logger('AppLifecycleCoordinator').info(
             'Skipping force-kill of download isolates on background: '
@@ -157,7 +164,7 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
           return;
         }
         DownloadEngine.forceKillAllIsolates();
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
   }
 }

@@ -229,6 +229,44 @@ class PositionalFileWriter
   Map<int, int> snapshotFlushedHighWater() =>
       Map<int, int>.from(_flushedHighWater);
 
+  /// Discards any unwritten buffered data and resets the durable high-water
+  /// offset for [chunkIndex] so a reset/corrupted chunk cannot carry stale
+  /// offsets into [_durableStateSnapshot].
+  Future<void> resetChunkHighWater(int chunkIndex,
+      [int? baselineAbsoluteEnd]) async {
+    await _metaLock.synchronized(() async {
+      final key = chunkIndex < 0 ? 0 : chunkIndex;
+      final handleKey = key % _maxHandles;
+      final handleLock = _handleLocks[handleKey];
+      void resetState() {
+        final buf = _buffers[key];
+        if (buf != null && buf.isNotEmpty) {
+          final dropped = buf.takeBytes();
+          _pendingBytes = math.max(0, _pendingBytes - dropped.length);
+          if (_pendingBytes < maxPendingBytes &&
+              _drainCompleter != null &&
+              !_drainCompleter!.isCompleted) {
+            _drainCompleter!.complete();
+            _drainCompleter = null;
+          }
+        }
+        if (baselineAbsoluteEnd == null || baselineAbsoluteEnd <= 0) {
+          _flushedHighWater.remove(key);
+        } else {
+          _flushedHighWater[key] = baselineAbsoluteEnd;
+        }
+      }
+
+      if (handleLock != null) {
+        await handleLock.synchronized(() async {
+          resetState();
+        });
+      } else {
+        resetState();
+      }
+    });
+  }
+
   /// Writes [data] at [absolutePosition].
   Future<void> write(
       int threadIndex, int absolutePosition, Uint8List data) async {

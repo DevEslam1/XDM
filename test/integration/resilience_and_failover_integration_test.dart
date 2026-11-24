@@ -102,10 +102,12 @@ void main() {
 
       expect(failover.activeUrl, equals(mirrors[0]));
 
-      final m2 = failover.advance();
+      // Each advance follows a failure on the current active mirror, mirroring
+      // the real engine calls (failover.advance(activeUrl)).
+      final m2 = failover.advance(mirrors[0]);
       expect(m2, isNotNull);
 
-      final m3 = failover.advance();
+      final m3 = failover.advance(mirrors[1]);
       expect(m3, isNotNull);
 
       // Total switches tracked accurately

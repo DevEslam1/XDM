@@ -14,7 +14,7 @@ class ChannelProgressPainter extends CustomPainter {
   final List<ChunkDetail> chunkDetails;
   final int chunkFingerprint;
 
-  /// Optional accent color override. When null, falls back to the hardcoded
+  /// Optional accent color override. When null, falls back to the theme-aware
   /// neonViolet (torrent) / neonBlue (file) defaults.
   final Color? color;
 
@@ -37,29 +37,49 @@ class ChannelProgressPainter extends CustomPainter {
 
     // Fill color — use caller-supplied color when available so the bar matches the
     // card's status accent (e.g. red for paused, violet for downloading).
-    final accent =
-        color ?? (isTorrent ? AppTheme.neonViolet : AppTheme.neonBlue);
+    final accent = color ??
+        (isTorrent
+            ? (isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet)
+            : (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue));
+
+    // Neutral, balanced track so any status accent reads clearly in light & dark.
+    final trackColor = (isDark ? Colors.white : Colors.black)
+        .withValues(alpha: isDark ? 0.08 : 0.07);
+    final trackPaint = Paint()
+      ..color = trackColor
+      ..style = PaintingStyle.fill;
 
     if (chunkDetails.isNotEmpty) {
-      final totalSpacing = (chunkDetails.length - 1) * 2.0;
-      final segmentWidth = (size.width - totalSpacing) / chunkDetails.length;
-      final trackPaint = Paint()
-        ..color = (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
-            .withValues(alpha: isDark ? 0.15 : 0.12)
+      final count = chunkDetails.length;
+      final gap = count > 16 ? 1.5 : 2.0;
+      final totalSpacing = (count - 1) * gap;
+      final segmentWidth = ((size.width - totalSpacing) / count).clamp(
+        1.0,
+        size.width,
+      );
+      final segRadius = Radius.circular(
+        (size.height / 2).clamp(1.5, segmentWidth / 2),
+      );
+
+      final completePaint = Paint()
+        ..color = accent
+        ..style = PaintingStyle.fill;
+      final highlightPaint = Paint()
+        ..color = Colors.white.withValues(alpha: isDark ? 0.16 : 0.24)
         ..style = PaintingStyle.fill;
 
-      for (int i = 0; i < chunkDetails.length; i++) {
+      for (int i = 0; i < count; i++) {
         final chunk = chunkDetails[i];
-        final startX = i * (segmentWidth + 2.0);
-        final segmentRRect = RRect.fromRectAndRadius(
-          Rect.fromLTWH(startX, 0, segmentWidth, size.height),
-          Radius.circular(radius),
-        );
+        final startX = i * (segmentWidth + gap);
+        final segRect = Rect.fromLTWH(startX, 0, segmentWidth, size.height);
+        final segmentRRect = RRect.fromRectAndRadius(segRect, segRadius);
+
+        // Pending track
         canvas.drawRRect(segmentRRect, trackPaint);
 
         if (chunk.isIndeterminate) {
           final stripePaint = Paint()
-            ..color = accent.withValues(alpha: 0.3)
+            ..color = accent.withValues(alpha: 0.34)
             ..style = PaintingStyle.fill;
           canvas.save();
           canvas.clipRRect(segmentRRect);
@@ -68,67 +88,111 @@ class ChannelProgressPainter extends CustomPainter {
           for (double x = startX;
               x < startX + segmentWidth;
               x += stripeWidth + stripeGap) {
-            canvas.drawRect(
-              Rect.fromLTWH(x, 0, stripeWidth, size.height),
+            canvas.drawRRect(
+              RRect.fromRectAndRadius(
+                Rect.fromLTWH(x, 0, stripeWidth, size.height),
+                const Radius.circular(1.5),
+              ),
               stripePaint,
             );
           }
           canvas.restore();
         } else {
-          final fillPaint = Paint()
-            ..color = accent
-            ..style = PaintingStyle.fill;
-          final fillWidth = segmentWidth * chunk.ratio.clamp(0.0, 1.0);
-          if (fillWidth > 0) {
-            canvas.drawRRect(
-              RRect.fromRectAndRadius(
-                Rect.fromLTWH(startX, 0, fillWidth, size.height),
-                Radius.circular(radius),
-              ),
-              fillPaint,
-            );
+          final ratio = chunk.ratio.clamp(0.0, 1.0);
+          final fillWidth = segmentWidth * ratio;
+          if (fillWidth <= 0) continue;
+
+          final isDone = chunk.isComplete || ratio >= 0.999;
+          final fillRect = Rect.fromLTWH(startX, 0, fillWidth, size.height);
+          final fillRRect = RRect.fromRectAndRadius(fillRect, segRadius);
+
+          if (isDone) {
+            canvas.drawRRect(fillRRect, completePaint);
+          } else {
+            // Active chunk: subtle directional gradient for live motion feel
+            final activePaint = Paint()
+              ..shader = LinearGradient(
+                colors: [
+                  accent.withValues(alpha: 0.72),
+                  accent,
+                ],
+              ).createShader(fillRect)
+              ..style = PaintingStyle.fill;
+            canvas.drawRRect(fillRRect, activePaint);
+
+            // Crisp leading glint on active segment
+            if (fillWidth > 3.0) {
+              canvas.save();
+              canvas.clipRRect(fillRRect);
+              canvas.drawRect(
+                Rect.fromLTWH(
+                  startX + fillWidth - 2.0,
+                  0,
+                  2.0,
+                  size.height,
+                ),
+                highlightPaint,
+              );
+              canvas.restore();
+            }
           }
         }
       }
       return;
     }
 
-    // Track
-    final trackPaint = Paint()
-      ..color = (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
-          .withValues(alpha: isDark ? 0.15 : 0.12)
-      ..style = PaintingStyle.fill;
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius)),
-      trackPaint,
+    // Continuous track
+    final fullRRect = RRect.fromRectAndRadius(
+      Offset.zero & size,
+      Radius.circular(radius),
     );
+    canvas.drawRRect(fullRRect, trackPaint);
 
     if (value > 0.0) {
+      final fillWidth = (size.width * value).clamp(size.height, size.width);
+      final fillRect = Rect.fromLTWH(0, 0, fillWidth, size.height);
+      final isActive = value > 0.02 && value < 0.995;
+
       final fillPaint = Paint()
-        ..shader = LinearGradient(colors: [
-          accent.withValues(alpha: 0.7),
-          accent,
-        ]).createShader(Rect.fromLTWH(0, 0, size.width * value, size.height))
+        ..shader = LinearGradient(
+          colors: isActive
+              ? [
+                  accent.withValues(alpha: 0.72),
+                  accent,
+                  Color.lerp(accent, Colors.white, isDark ? 0.25 : 0.18) ??
+                      accent,
+                ]
+              : [
+                  accent.withValues(alpha: 0.85),
+                  accent,
+                ],
+          stops: isActive ? const [0.0, 0.82, 1.0] : const [0.0, 1.0],
+        ).createShader(fillRect)
         ..style = PaintingStyle.fill;
+
+      canvas.save();
+      canvas.clipRRect(fullRRect);
       canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTWH(0, 0, size.width * value, size.height),
-          Radius.circular(radius),
-        ),
+        RRect.fromRectAndRadius(fillRect, Radius.circular(radius)),
         fillPaint,
       );
-    }
+      canvas.restore();
 
-    // Leading dot (crisp solid fill without GPU blur filter overhead)
-    if (value > 0.02 && value < 0.99) {
-      final dotPaint = Paint()
-        ..color = accent
-        ..style = PaintingStyle.fill;
-      canvas.drawCircle(
-        Offset(size.width * value, size.height / 2),
-        size.height / 2.4,
-        dotPaint,
-      );
+      // Subtle leading highlight dot (zero GPU blur overhead)
+      if (isActive) {
+        final tipX = (size.width * value).clamp(radius, size.width - radius);
+        final tipCenter = Offset(tipX, size.height / 2);
+        final haloPaint = Paint()
+          ..color = accent.withValues(alpha: isDark ? 0.30 : 0.22)
+          ..style = PaintingStyle.fill;
+        final corePaint = Paint()
+          ..color =
+              Color.lerp(accent, Colors.white, isDark ? 0.55 : 0.35) ?? accent
+          ..style = PaintingStyle.fill;
+
+        canvas.drawCircle(tipCenter, size.height * 0.52, haloPaint);
+        canvas.drawCircle(tipCenter, size.height * 0.28, corePaint);
+      }
     }
   }
 
@@ -199,6 +263,7 @@ class IsolatedProgressBar extends StatelessWidget {
         child: RepaintBoundary(
           child: SizedBox(
             height: height,
+            width: double.infinity,
             child: CustomPaint(
               painter: ChannelProgressPainter(
                 progress: progress,

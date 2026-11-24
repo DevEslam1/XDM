@@ -62,6 +62,15 @@ class DownloadEngine implements IDownloadEngine {
     _latestInstance?._pool?.forceKillAll();
   }
 
+  static Future<void> flushActiveDownloads({
+    Duration timeout = const Duration(milliseconds: 800),
+  }) async {
+    final pool = _latestInstance?._pool;
+    if (pool != null) {
+      await pool.flushActiveJobs(timeout: timeout);
+    }
+  }
+
   static const int _isolatePoolSize = 4;
 
   late final HttpDownloadOrchestrator _httpOrchestrator;
@@ -149,6 +158,12 @@ class DownloadEngine implements IDownloadEngine {
     final result = await hasEnoughDiskSpaceOrNull(saveDir, requiredBytes);
     final finalResult = result ?? true;
     if (result != null) {
+      if (_diskCheckCache.length >= 50) {
+        final oldestKeys = _diskCheckCache.keys.take(15).toList();
+        for (final k in oldestKeys) {
+          _diskCheckCache.remove(k);
+        }
+      }
       _diskCheckCache[normDir] = _DiskSpaceCacheEntry(
         hasSpace: finalResult,
         checkedBytes: requiredBytes,

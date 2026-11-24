@@ -142,7 +142,18 @@ class WidgetDeepLinkHandler {
       case 'share':
         final target = uri.queryParameters['url'] ?? '';
         final name = uri.queryParameters['name'];
-        _handleAddUrl(target, name: name);
+        if (target.isNotEmpty) {
+          final targetUri = Uri.tryParse(target);
+          final targetScheme = targetUri?.scheme.toLowerCase() ?? '';
+          if (targetUri != null &&
+              (targetScheme == 'http' ||
+                  targetScheme == 'https' ||
+                  targetScheme == 'magnet')) {
+            _handleAddUrl(target, name: name);
+          } else {
+            _log.warning('Rejected deep link with invalid target URL scheme: $targetScheme');
+          }
+        }
         break;
       case 'pause_all':
       case 'pause-all':

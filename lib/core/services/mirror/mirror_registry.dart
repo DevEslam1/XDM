@@ -88,6 +88,7 @@ class MirrorHealthStore implements DisposableService {
   final Set<String> _removedUrls = <String>{};
   DateTime? _lastFlushTime;
   Timer? _cleanupTimer;
+  bool _tickRegistered = false;
 
   /// Single periodic write-coalescing flusher. All writes are batched and
   /// flushed at most once per 5 minutes (or when explicitly flushed durably).
@@ -129,6 +130,7 @@ class MirrorHealthStore implements DisposableService {
       priority: TickPriority.normal,
       callback: (_) => cleanupStaleEntries(),
     );
+    _tickRegistered = true;
     _cache = LinkedHashMap();
 
     final repo = _repo ??
@@ -503,7 +505,13 @@ class MirrorHealthStore implements DisposableService {
   @override
   Future<void> dispose() async {
     ServiceRegistry.unregister(this);
-    TickManager.instance.unregisterTick('mirror_registry_cleanup');
+    // Only touch TickManager when a tick was actually registered; accessing
+    // TickManager.instance lazily constructs and registers a global singleton,
+    // which would leak a ServiceRegistry entry when the store was never init()ed.
+    if (_tickRegistered) {
+      TickManager.instance.unregisterTick('mirror_registry_cleanup');
+      _tickRegistered = false;
+    }
     _cleanupTimer?.cancel();
     _cleanupTimer = null;
     _flushTimer?.cancel();

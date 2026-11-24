@@ -636,6 +636,10 @@ class StateStoreInstance {
       state.totalSize,
       state.threadCount,
       chunksHash,
+      state.url,
+      state.etag,
+      state.lastModified,
+      state.pauseReason?.index,
     );
   }
 
@@ -645,6 +649,7 @@ class StateStoreInstance {
       _lastWrittenBytes.remove(targetPath);
       _lastSaveTimes.remove(targetPath);
       _lastWrittenStatus.remove(targetPath);
+      _lastSaveErrors.remove(targetPath);
     });
   }
 
@@ -656,6 +661,7 @@ class StateStoreInstance {
     bool durable = false,
     bool screenOff = false,
     String? taskId,
+    bool allowRegression = false,
   }) async {
     final targetPath = pathFor(tempFilePath, taskId: taskId);
     late final Lock pathLock;
@@ -717,11 +723,15 @@ class StateStoreInstance {
           if (snap.status == DmxStateStatus.paused || isDurable) {
             // Never skip when paused or durable
           } else if (isScreenOff) {
-            // FIX(M-24): Allow periodic timed flushes (>= 15s) even with < 2MB delta,
-            // so background downloads on slow connections don't remain unsaved for minutes.
-            final elapsed = now
-                .difference(lastSave ?? DateTime.fromMillisecondsSinceEpoch(0));
-            if (bytesSinceLastWrite < 2 * 1024 * 1024 &&
+            // FIX-3: skip small screen-off deltas (< 5MB) to avoid waking the
+            // disk for negligible progress.
+            // FIX(M-24): still allow a periodic timed flush (>= 15s) once a
+            // prior save exists, so background downloads on slow connections
+            // don't remain unsaved for minutes.
+            final elapsed = lastSave == null
+                ? Duration.zero
+                : now.difference(lastSave!);
+            if (bytesSinceLastWrite < 5 * 1024 * 1024 &&
                 elapsed < const Duration(seconds: 15)) {
               return;
             }
@@ -746,7 +756,7 @@ class StateStoreInstance {
           // regress byte progress or un-complete a finished download. The pause
           // status the main isolate wants to persist is stored on the DB row
           // independently, so preserving the fresher snapshot loses nothing.
-          if (isDurable) {
+          if (isDurable && !allowRegression) {
             final existing = await _readExistingProgress(targetPath);
             if (existing != null) {
               final incomingBytes = snap.downloadedBytes;
@@ -768,17 +778,23 @@ class StateStoreInstance {
           }
 
           // Ensure journal (if present) is flushed/fsync'd before writing state
-          final journalFile = File('$tempFilePath.journal');
-          if (await journalFile.exists()) {
-            try {
-              final jRaf =
-                  await journalFile.open(mode: FileMode.writeOnlyAppend);
+          final journalPaths = <String>{
+            journalPathFor(tempFilePath, taskId: taskId),
+            '$tempFilePath.journal',
+          };
+          for (final jp in journalPaths) {
+            final journalFile = File(jp);
+            if (await journalFile.exists()) {
               try {
-                await jRaf.flush();
-              } finally {
-                await jRaf.close();
-              }
-            } catch (_) {}
+                final jRaf =
+                    await journalFile.open(mode: FileMode.writeOnlyAppend);
+                try {
+                  await jRaf.flush();
+                } finally {
+                  await jRaf.close();
+                }
+              } catch (_) {}
+            }
           }
 
           final payload = jsonEncode(snap.toJson());
@@ -844,6 +860,7 @@ class StateStoreInstance {
               _lastWrittenBytes.remove(key);
               _lastSaveTimes.remove(key);
               _lastWrittenStatus.remove(key);
+              _lastSaveErrors.remove(key);
             }
           }
         } catch (e, stackTrace) {
@@ -943,7 +960,7 @@ class StateStoreInstance {
         }
 
         // 3. Delete journal atomically with snapshot (J1)
-        await DownloadJournal.deleteJournalFor(tempFilePath);
+        await DownloadJournal.deleteJournalFor(tempFilePath, taskId: taskId);
 
         if (taskId != null && taskId.isNotEmpty) {
           final legacyPath = _legacyPathFor(tempFilePath);
@@ -1101,6 +1118,7 @@ abstract class StateStore {
     bool durable = false,
     bool screenOff = false,
     String? taskId,
+    bool allowRegression = false,
   }) =>
       instance.save(
         tempFilePath,
@@ -1108,6 +1126,7 @@ abstract class StateStore {
         durable: durable,
         screenOff: screenOff,
         taskId: taskId,
+        allowRegression: allowRegression,
       );
 
   static Future<void> resetTransferState(

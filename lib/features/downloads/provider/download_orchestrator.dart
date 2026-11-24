@@ -175,27 +175,34 @@ class DownloadOrchestrator {
         // refresh on this cadence (no-op when backgrounded / nothing pending).
         onProgressTick();
         if (TorrentService.activeTorrentIds.isNotEmpty) {
-          unawaited(TorrentResumeStore.saveAll(
-            TorrentService.activeTorrentIds,
-            TorrentService.resumeBlobFor,
-            (tid) {
-              // FIX-T1: Persist per-file progress for resume after app kill
-              if (_host.providerTasks.isEmpty) return null;
-              final matching = _host.providerTasks.where(
-                (t) => _host.providerTorrentIds[t.id] == tid,
+          unawaited(() async {
+            try {
+              if (TorrentService.resumeDataSupported) {
+                for (final tid in List<int>.from(
+                  TorrentService.activeTorrentIds,
+                )) {
+                  await TorrentService.saveResumeData(tid).catchError(
+                    (e) => debugPrint('[DMX] saveResumeData failed: $e'),
+                  );
+                }
+              }
+              await TorrentResumeStore.saveAll(
+                TorrentService.activeTorrentIds,
+                TorrentService.resumeBlobFor,
+                (tid) {
+                  // FIX-T1: Persist per-file progress for resume after app kill
+                  if (_host.providerTasks.isEmpty) return null;
+                  final matching = _host.providerTasks.where(
+                    (t) => _host.providerTorrentIds[t.id] == tid,
+                  );
+                  if (matching.isEmpty) return null;
+                  return matching.first.torrentFiles;
+                },
               );
-              if (matching.isEmpty) return null;
-              return matching.first.torrentFiles;
-            },
-          ).catchError(
-              (e) => debugPrint('[DMX] Periodic resume save failed: $e')));
-          // FIX #4: Save fast resume data for all active torrents only if supported
-          if (TorrentService.resumeDataSupported) {
-            for (final tid in TorrentService.activeTorrentIds) {
-              unawaited(TorrentService.saveResumeData(tid).catchError(
-                  (e) => debugPrint('[DMX] saveResumeData failed: $e')));
+            } catch (e) {
+              debugPrint('[DMX] Periodic resume save failed: $e');
             }
-          }
+          }());
         }
       },
     );
@@ -270,6 +277,11 @@ class DownloadOrchestrator {
       _ytRefreshAttempts.remove(taskId);
       _pushScheduled.remove(taskId);
       _lastAudioStateSaveMs.remove(taskId);
+      final cleanupTask = _host.findTaskById(taskId);
+      if (cleanupTask != null && cleanupTask.tempFilePath.isNotEmpty) {
+        _lastAudioStateSaveMs
+            .removeWhere((k, _) => k.startsWith(cleanupTask.tempFilePath));
+      }
       StateStore.removeCachedPayload(taskId);
       _host.speedHistories.remove(taskId);
       _host.lastProgressUpdateTimes.remove(taskId);
@@ -493,14 +505,15 @@ class DownloadOrchestrator {
         if (await dir.exists()) {
           try {
             await dir.list().firstWhere(
-              (e) => e is File && p.basename(e.path) == fileName,
-            );
+                  (e) => e is File && p.basename(e.path) == fileName,
+                );
             existsNearby = true;
           } catch (_) {}
         }
         if (!existsNearby &&
             (task.downloadedBytes > 0 ||
-                (task.statusMessage != null && task.statusMessage!.isNotEmpty))) {
+                (task.statusMessage != null &&
+                    task.statusMessage!.isNotEmpty))) {
           // BUG-1: Don't blindly zero if state file has valid resume data.
           // Check if task-scoped or legacy state file exists before resetting.
           final statePath =
@@ -948,8 +961,8 @@ class DownloadOrchestrator {
           if (currentRetry < maxRetries) {
             _streamResolveRetries[task.id] = currentRetry + 1;
             // BUG7: exponential backoff with a hard cap.
-            final delaySeconds =
-                retryBackoffSeconds(_host.providerSettingsProvider.retryDelaySeconds, currentRetry);
+            final delaySeconds = retryBackoffSeconds(
+                _host.providerSettingsProvider.retryDelaySeconds, currentRetry);
             debugPrint(
               'Transient error resolving stream for task ${task.id}. Retrying (${currentRetry + 1}/$maxRetries) in $delaySeconds seconds...',
             );
@@ -1430,8 +1443,10 @@ class DownloadOrchestrator {
         }
       } else {
         // FIX-06: Preserve video-only file for merge retry without recursing file names
-        final rawBase = current.localFilePath.replaceAll(RegExp(r'(_video_only)+'), '');
-        final ext = p.extension(rawBase).isNotEmpty ? p.extension(rawBase) : '.mp4';
+        final rawBase =
+            current.localFilePath.replaceAll(RegExp(r'(_video_only)+'), '');
+        final ext =
+            p.extension(rawBase).isNotEmpty ? p.extension(rawBase) : '.mp4';
         final cleanBase = p.withoutExtension(rawBase);
         final videoOnlyPath = '${cleanBase}_video_only$ext';
         try {
@@ -1661,6 +1676,7 @@ class DownloadOrchestrator {
     final finalFileSize = current.fileSize > 0
         ? current.fileSize
         : (current.downloadedBytes > 0 ? current.downloadedBytes : 0);
+    var effectiveFinalSize = finalFileSize;
 
     if (!current.isTorrent &&
         (current.category == 'Video' || current.category == 'Audio')) {
@@ -1775,6 +1791,9 @@ class DownloadOrchestrator {
           return;
         }
       }
+      if (!current.hasMergedAudio && actualSize > 0) {
+        effectiveFinalSize = actualSize;
+      }
 
       // 3. Merged stream size check (5% tolerance for container/codec differences)
       if (current.hasMergedAudio && current.fileSize > 0) {
@@ -1837,7 +1856,7 @@ class DownloadOrchestrator {
         clearError: true,
         clearStatusMessage: true,
         status: DownloadStatus.completed,
-        fileSize: finalFileSize,
+        fileSize: effectiveFinalSize,
         // FIX-B12: On torrent completion, compute totalFromFiles and use max(totalFromFiles, fileSize)
         downloadedBytes: current.isTorrent
             ? max(
@@ -1846,14 +1865,16 @@ class DownloadOrchestrator {
                       (s, f) =>
                           s + ((f['downloadedBytes'] as num?)?.toInt() ?? 0),
                     ) ??
-                    finalFileSize,
-                finalFileSize,
+                    effectiveFinalSize,
+                effectiveFinalSize,
               )
-            : (finalFileSize > 0
-                ? finalFileSize
+            : (effectiveFinalSize > 0
+                ? effectiveFinalSize
                 : current.downloadedBytes.clamp(
                     0,
-                    finalFileSize > 0 ? finalFileSize : current.downloadedBytes,
+                    effectiveFinalSize > 0
+                        ? effectiveFinalSize
+                        : current.downloadedBytes,
                   )),
 
         speed: 0,
@@ -2306,11 +2327,15 @@ class DownloadOrchestrator {
             speed: combinedSpeed,
             eta: calculatedEta,
             clearEta: calculatedEta == null,
-            chunks: normalizeChunks(
-              chunksOverride ?? base.chunks,
-              effectiveVideoSize > 0 ? effectiveVideoSize : totalSize,
-              hasAudio ? videoBytesSoFar : totalDownloaded,
-            ),
+            chunks: (!hasAudio &&
+                    chunksOverride != null &&
+                    chunksOverride.isNotEmpty)
+                ? chunksOverride.map((c) => c.clamp(0.0, 1.0)).toList()
+                : normalizeChunks(
+                    chunksOverride ?? base.chunks,
+                    effectiveVideoSize > 0 ? effectiveVideoSize : totalSize,
+                    hasAudio ? videoBytesSoFar : totalDownloaded,
+                  ),
             supportsResume: supportsResumeOverride ?? base.supportsResume,
             torrentFiles: torrentFilesOverride ?? base.torrentFiles,
             // Merge owns the cycle state once it starts, so a trailing engine
@@ -2385,23 +2410,21 @@ class DownloadOrchestrator {
     CancelToken? activeVideoCancelToken;
     CancelToken? activeAudioCancelToken;
 
-    cancelSub = cancelToken.whenCancel
-        .asStream()
-        .listen((_) {
-          final v = activeVideoCancelToken;
-          final a = activeAudioCancelToken;
-          final reason = cancelToken.cancelError?.message ?? 'cancelled';
-          if (v != null && !v.isCancelled) {
-            try {
-              v.cancel(reason);
-            } catch (_) {}
-          }
-          if (a != null && !a.isCancelled) {
-            try {
-              a.cancel(reason);
-            } catch (_) {}
-          }
-        });
+    cancelSub = cancelToken.whenCancel.asStream().listen((_) {
+      final v = activeVideoCancelToken;
+      final a = activeAudioCancelToken;
+      final reason = cancelToken.cancelError?.message ?? 'cancelled';
+      if (v != null && !v.isCancelled) {
+        try {
+          v.cancel(reason);
+        } catch (_) {}
+      }
+      if (a != null && !a.isCancelled) {
+        try {
+          a.cancel(reason);
+        } catch (_) {}
+      }
+    });
 
     // FIX A-3: Early-exit merge path before retry loop when both streams exist and are complete
     if (hasAudio) {
@@ -2511,8 +2534,11 @@ class DownloadOrchestrator {
                     (audioExists &&
                         audioLen > 0 &&
                         liveAudioSize <= 0 &&
-                        (await File(StateStore.pathFor(liveAudioTempPath, taskId: liveAudioTask.id)).exists() ||
-                            await File('$liveAudioTempPath.dmxstate').exists() ||
+                        (await File(StateStore.pathFor(liveAudioTempPath,
+                                    taskId: liveAudioTask.id))
+                                .exists() ||
+                            await File('$liveAudioTempPath.dmxstate')
+                                .exists() ||
                             liveAudioTask.audioProgress >= 0.99));
             if (isAudioComplete) {
               debugPrint(
@@ -2913,6 +2939,7 @@ class DownloadOrchestrator {
                 authUsername: task.authUsername,
                 authPassword: task.authPassword,
                 customHeaders: task.customHeaders,
+                mirrorUrls: liveVideoTask?.mirrorUrls ?? task.mirrorUrls,
                 adaptiveThreads: _host.providerSettingsProvider.adaptiveThreads,
                 speedLimitKbps: task.speedLimitKbps,
                 ytStreamKind: liveHasAudio ? YtStreamKind.video : null,
@@ -3142,13 +3169,15 @@ class DownloadOrchestrator {
 
                   pushCombinedProgress(
                     chunksOverride: computedChunks ??
-                        _host.buildChunks(
-                          streamThreadCount,
-                          videoSizeSoFar > 0
-                              ? videoSizeSoFar
-                              : videoTransferSize,
-                          progress.downloadedBytes,
-                        ),
+                        (base.chunks.isNotEmpty
+                            ? base.chunks
+                            : _host.buildChunks(
+                                streamThreadCount,
+                                videoSizeSoFar > 0
+                                    ? videoSizeSoFar
+                                    : videoTransferSize,
+                                progress.downloadedBytes,
+                              )),
                     supportsResumeOverride: progress.supportsResume,
                     torrentFilesOverride: resolvedFiles,
                     fileNameOverride: newFileName,
@@ -3408,7 +3437,12 @@ class DownloadOrchestrator {
           }
 
           // FIX-MERGE-3: Add cancellation check between Future.wait and merge in _executeDownload
-          if (cancelToken.isCancelled) {
+          final alreadyFinalizedPlainHttp = !hasAudio &&
+              !task.isTorrent &&
+              task.localFilePath.isNotEmpty &&
+              !await File(task.tempFilePath).exists() &&
+              await File(task.localFilePath).exists();
+          if (cancelToken.isCancelled && !alreadyFinalizedPlainHttp) {
             debugPrint(
                 '[DMX] _executeDownload: cancelled after Future.wait, skipping merge');
             return;
@@ -3602,7 +3636,8 @@ class DownloadOrchestrator {
                     '${task.tempFilePath}.dmxstate.tmp',
                     '${task.tempFilePath}.journal',
                     '${task.tempFilePath}.audio',
-                    StateStore.pathFor('${task.tempFilePath}.audio', taskId: task.id),
+                    StateStore.pathFor('${task.tempFilePath}.audio',
+                        taskId: task.id),
                     '${StateStore.pathFor('${task.tempFilePath}.audio', taskId: task.id)}.tmp',
                     '${task.tempFilePath}.audio.dmxstate',
                     '${task.tempFilePath}.audio.journal',
@@ -3698,7 +3733,8 @@ class DownloadOrchestrator {
                 '${task.tempFilePath}.dmxstate',
                 '${task.tempFilePath}.journal',
                 '${task.tempFilePath}.audio',
-                StateStore.pathFor('${task.tempFilePath}.audio', taskId: task.id),
+                StateStore.pathFor('${task.tempFilePath}.audio',
+                    taskId: task.id),
                 '${task.tempFilePath}.audio.dmxstate',
                 '${task.tempFilePath}.audio.journal',
               ]) {
@@ -4092,7 +4128,8 @@ class DownloadOrchestrator {
               debugPrint('[DMX] Failed to create torrent save directory: $e');
             }
             final existingTid = _host.providerTorrentIds[task.id];
-            if (existingTid != null && TorrentService.isTorrentAlive(existingTid)) {
+            if (existingTid != null &&
+                TorrentService.isTorrentAlive(existingTid)) {
               torrentId = existingTid;
             } else {
               if (!task.url.startsWith('magnet:')) {
@@ -4101,7 +4138,8 @@ class DownloadOrchestrator {
                   filePath = Uri.parse(task.url).toFilePath();
                 } else if (task.url.startsWith('http://') ||
                     task.url.startsWith('https://')) {
-                  final cached = await TorrentResumeStore.getTorrentFile(task.url);
+                  final cached =
+                      await TorrentResumeStore.getTorrentFile(task.url);
                   filePath = cached?.path;
                   if (filePath == null) {
                     final tempDir = await getTemporaryDirectory();
@@ -4114,9 +4152,11 @@ class DownloadOrchestrator {
                           task.url,
                           options: Options(responseType: ResponseType.bytes),
                         );
-                        if (response.data != null && response.data!.isNotEmpty) {
+                        if (response.data != null &&
+                            response.data!.isNotEmpty) {
                           await localTorrentFile.writeAsBytes(response.data!);
-                          await TorrentResumeStore.saveTorrentFile(task.url, response.data!);
+                          await TorrentResumeStore.saveTorrentFile(
+                              task.url, response.data!);
                         }
                       } catch (_) {}
                     }
@@ -4130,26 +4170,101 @@ class DownloadOrchestrator {
                   final meta =
                       await compute(BencodeDecoder.parseTorrentBytes, bytes);
                   if (meta != null) {
-                    final resolvedFiles =
-                        (meta['files'] as List? ?? []).map((f) {
-                      final map = f as Map;
-                      return {
-                        'name': map['name'] as String? ?? '',
-                        'length': map['length'] as int? ?? 0,
-                        'selected': true,
-                        'priority': 4,
-                        'downloadedBytes': 0,
-                      };
-                    }).toList();
-                    final resolvedSize = meta['length'] as int? ??
-                        resolvedFiles.fold<int>(
-                            0, (s, f) => s + (f['length'] as int));
+                    final parsedHash = TorrentResumeStore.normalizeInfoHash(
+                      (meta['infoHashV1'] as String?) ??
+                          (meta['infoHash'] as String?) ??
+                          (meta['infoHashV2'] as String?),
+                    );
+                    if (parsedHash != null && parsedHash.isNotEmpty) {
+                      await TorrentResumeStore.registerInfoHash(
+                        task.url,
+                        parsedHash,
+                      );
+                    }
+
+                    final existingRows = (task.torrentFiles != null &&
+                            task.torrentFiles!.isNotEmpty)
+                        ? task.torrentFiles!
+                        : (await TorrentResumeStore.loadFilesForSource(
+                              task.url,
+                              infoHash: parsedHash ?? task.infoHash,
+                            ) ??
+                            const <Map<String, dynamic>>[]);
+
+                    String normName(String n) =>
+                        n.toLowerCase().replaceAll('\\', '/').trim();
+                    String stripRoot(String k) {
+                      final slash = k.indexOf('/');
+                      return (slash >= 0 && slash < k.length - 1)
+                          ? k.substring(slash + 1)
+                          : k;
+                    }
+
+                    final existingByName = <String, Map<String, dynamic>>{};
+                    final existingByRel = <String, Map<String, dynamic>>{};
+                    for (final row in existingRows) {
+                      final n = row['name'];
+                      if (n is String && n.isNotEmpty) {
+                        final nk = normName(n);
+                        existingByName[nk] = row;
+                        existingByRel.putIfAbsent(stripRoot(nk), () => row);
+                      }
+                    }
+
+                    final rawMetaFiles = (meta['files'] as List? ?? []);
+                    final resolvedFiles = <Map<String, dynamic>>[];
+                    for (var i = 0; i < rawMetaFiles.length; i++) {
+                      final map = rawMetaFiles[i] as Map;
+                      final name = map['name'] as String? ?? '';
+                      final nk = normName(name);
+                      final old = existingByName[nk] ??
+                          existingByRel[nk] ??
+                          existingByName[stripRoot(nk)] ??
+                          existingByRel[stripRoot(nk)] ??
+                          (i < existingRows.length &&
+                                  existingRows.length == rawMetaFiles.length
+                              ? existingRows[i]
+                              : null);
+                      final len = (map['length'] as num?)?.toInt() ??
+                          (old?['length'] as num?)?.toInt() ??
+                          0;
+                      final selected = (old?['selected'] as bool?) ?? true;
+                      final priority = (old?['priority'] as num?)?.toInt() ??
+                          (selected ? 4 : 0);
+                      final dl =
+                          (old?['downloadedBytes'] as num?)?.toInt() ?? 0;
+                      final clampedDl = len > 0 ? dl.clamp(0, len) : dl;
+                      resolvedFiles.add({
+                        if (old != null) ...old,
+                        'name': name,
+                        'length': len,
+                        'size': len,
+                        'lengthKnown': len > 0,
+                        'selected': selected,
+                        'priority': priority,
+                        'downloadedBytes': clampedDl,
+                        'isComplete': (old?['isComplete'] as bool?) ??
+                            (len > 0 && clampedDl >= len),
+                      });
+                    }
+
+                    final selectedSize = resolvedFiles.fold<int>(0, (sum, f) {
+                      final sel = (f['selected'] as bool?) != false &&
+                          ((f['priority'] as num?)?.toInt() ?? 4) > 0;
+                      if (!sel) return sum;
+                      return sum + ((f['length'] as num?)?.toInt() ?? 0);
+                    });
+                    final resolvedSize = resolvedFiles.isNotEmpty
+                        ? selectedSize
+                        : (meta['length'] as int? ?? task.fileSize);
+
                     task = task.copyWith(
                       fileName: meta['name'] as String? ?? task.fileName,
                       fileSize: resolvedSize > 0 ? resolvedSize : task.fileSize,
                       torrentFiles: resolvedFiles.isNotEmpty
                           ? resolvedFiles
                           : task.torrentFiles,
+                      infoHash: parsedHash ?? task.infoHash,
                     );
                     await _host.setTaskState(task);
                   }
@@ -4519,7 +4634,9 @@ class DownloadOrchestrator {
 
       // FIX H-1: When new server omits Content-Length AND the resource
       // host or path changed, the old progress cannot be trusted.
-      if (videoTransferSize <= 0 && task.downloadedBytes > 0) {
+      if (!task.isTorrent &&
+          videoTransferSize <= 0 &&
+          task.downloadedBytes > 0) {
         final cleanUrl = task.url.trim();
         final oldUri = Uri.tryParse(task.url);
         final newUri = Uri.tryParse(cleanUrl);
@@ -4707,325 +4824,344 @@ class DownloadOrchestrator {
         var handlerRequeuedTask = false;
         var expiredLinkUnresolved = false;
         try {
-        // ERR-RESILIENCE-1.1: Classify every download-pipeline failure once so
-        // retry decisions, diagnostics and recovery hints stay consistent.
-        final classification = ErrorTaxonomy.classify(realError);
-        final recoveryAction = classification.recoveryAction;
-        _recordDownloadFailure(task.id, realError);
-        final errStr = error.toString();
-        final isResumeRejection =
-            errStr.contains('Server rejected resume: expected HTTP 206.');
-        if (isResumeRejection) {
-          final alreadyRestarted =
-              _host.resumeRejectionRestarts[task.id] ?? false;
-          if (!alreadyRestarted) {
-            _host.resumeRejectionRestarts[task.id] = true;
-            debugPrint(
-                '[DMX] Server rejected HTTP 206 resume. Performing a full restart from byte 0 for task: ${task.id}');
-            _host.notifications.cancelNotification(notificationId);
-            handlerRequeuedTask = true;
-            await _host.startOverTask(
-              task.id,
-              task.url,
-              fromError: true,
-              deleteTempFiles: true,
-            );
-            return;
-          }
-        }
-
-        debugPrint('================= DOWNLOAD ERROR =================');
-        debugPrint('Task ID: ${task.id}');
-        debugPrint('URL: ${task.url}');
-        debugPrint('Error: $realError');
-        if (realError is DioException) {
-          debugPrint('DioException Type: ${realError.type}');
-          debugPrint('DioException Message: ${realError.message}');
-          debugPrint(
-            'DioException Response: ${realError.response?.data}',
-          );
-          debugPrint(
-            'DioException Status: ${realError.response?.statusCode}',
-          );
-          // A DioExceptionType.unknown carries the real cause in `.error`
-          // (often a SocketException / HandshakeException / FileSystemException).
-          // Without this, "DioException [unknown]: null" is undiagnosable.
-          final underlying = realError.error;
-          if (underlying != null) {
-            debugPrint('DioException Cause: ${underlying.runtimeType}: $underlying');
-            if (underlying is FileSystemException) {
+          // ERR-RESILIENCE-1.1: Classify every download-pipeline failure once so
+          // retry decisions, diagnostics and recovery hints stay consistent.
+          final classification = ErrorTaxonomy.classify(realError);
+          final recoveryAction = classification.recoveryAction;
+          _recordDownloadFailure(task.id, realError);
+          final errStr = error.toString();
+          final is416RangeError = (realError is DioException &&
+                  realError.response?.statusCode == 416) ||
+              errStr.contains('416');
+          final isResumeRejection =
+              errStr.contains('Server rejected resume: expected HTTP 206.') ||
+                  is416RangeError;
+          final recordedBytes = _host.findTaskById(task.id)?.downloadedBytes ??
+              task.downloadedBytes;
+          final diskBytes = isResumeRejection && !task.isTorrent
+              ? await actualDownloadedBytes(
+                  task.tempFilePath,
+                  threadCount: task.threadCount,
+                  taskId: task.id,
+                )
+              : 0;
+          if (isResumeRejection &&
+              !is416RangeError &&
+              diskBytes == 0 &&
+              recordedBytes == 0) {
+            final alreadyRestarted =
+                _host.resumeRejectionRestarts[task.id] ?? false;
+            if (!alreadyRestarted) {
+              _host.resumeRejectionRestarts[task.id] = true;
               debugPrint(
-                  'DioException Cause OSError: ${underlying.osError} path=${underlying.path}');
+                  '[DMX] Server rejected HTTP 206/416 resume. Performing a full restart from byte 0 for task: ${task.id}');
+              _host.notifications.cancelNotification(notificationId);
+              handlerRequeuedTask = true;
+              await _host.startOverTask(
+                task.id,
+                task.url,
+                fromError: true,
+                deleteTempFiles: true,
+              );
+              return;
             }
           }
-        }
-        if (realError is FileSystemException) {
-          debugPrint(
-              'FileSystemException OSError: ${realError.osError} path=${realError.path}');
-        }
-        debugPrint('Stacktrace: $stackTrace');
-        debugPrint('==================================================');
 
-        if (task.isTorrent) {
-          final tid = _host.providerTorrentIds[task.id];
-          if (tid != null && TorrentService.isTorrentAlive(tid)) {
-            // For retryable/transient errors keep the handle (just pause)
-            // so the next attempt resumes instantly without re-adding.
-            final transientFailure = isRetryableError(realError);
-            try {
-              TorrentService.pauseTorrent(tid);
-              if (!transientFailure) {
-                TorrentService.removeTorrent(tid, deleteFiles: false);
+          debugPrint('================= DOWNLOAD ERROR =================');
+          debugPrint('Task ID: ${task.id}');
+          debugPrint('URL: ${task.url}');
+          debugPrint('Error: $realError');
+          if (realError is DioException) {
+            debugPrint('DioException Type: ${realError.type}');
+            debugPrint('DioException Message: ${realError.message}');
+            debugPrint(
+              'DioException Response: ${realError.response?.data}',
+            );
+            debugPrint(
+              'DioException Status: ${realError.response?.statusCode}',
+            );
+            // A DioExceptionType.unknown carries the real cause in `.error`
+            // (often a SocketException / HandshakeException / FileSystemException).
+            // Without this, "DioException [unknown]: null" is undiagnosable.
+            final underlying = realError.error;
+            if (underlying != null) {
+              debugPrint(
+                  'DioException Cause: ${underlying.runtimeType}: $underlying');
+              if (underlying is FileSystemException) {
+                debugPrint(
+                    'DioException Cause OSError: ${underlying.osError} path=${underlying.path}');
+              }
+            }
+          }
+          if (realError is FileSystemException) {
+            debugPrint(
+                'FileSystemException OSError: ${realError.osError} path=${realError.path}');
+          }
+          debugPrint('Stacktrace: $stackTrace');
+          debugPrint('==================================================');
+
+          if (task.isTorrent) {
+            final tid = _host.providerTorrentIds[task.id];
+            if (tid != null && TorrentService.isTorrentAlive(tid)) {
+              // For retryable/transient errors keep the handle (just pause)
+              // so the next attempt resumes instantly without re-adding.
+              final transientFailure = isRetryableError(realError);
+              try {
+                TorrentService.pauseTorrent(tid);
+                if (!transientFailure) {
+                  TorrentService.removeTorrent(tid, deleteFiles: false);
+                  _host.providerTorrentIds.remove(task.id);
+                }
+              } catch (e, st) {
+                LoggingService.logger('DownloadOrchestrator')
+                    .warning('Operation failed', e, st);
                 _host.providerTorrentIds.remove(task.id);
               }
+            }
+          }
+
+          if (!cancelToken.isCancelled) {
+            try {
+              cancelToken.cancel('Task failed, cleaning up in-flight requests');
             } catch (e, st) {
               LoggingService.logger('DownloadOrchestrator')
                   .warning('Operation failed', e, st);
-              _host.providerTorrentIds.remove(task.id);
             }
           }
-        }
 
-        if (!cancelToken.isCancelled) {
-          try {
-            cancelToken.cancel('Task failed, cleaning up in-flight requests');
-          } catch (e, st) {
-            LoggingService.logger('DownloadOrchestrator')
-                .warning('Operation failed', e, st);
-          }
-        }
+          await _host.flushPendingProgress(task.id);
+          final current = _host.findTaskById(task.id);
+          if (current == null) return;
+          final isUserCancelled = (realError is DioException &&
+              realError.type == DioExceptionType.cancel);
+          final isCancelledOrPaused = isUserCancelled ||
+              current.status == DownloadStatus.paused ||
+              current.status == DownloadStatus.completed ||
+              current.pausedByUser;
 
-        await _host.flushPendingProgress(task.id);
-        final current = _host.findTaskById(task.id);
-        if (current == null) return;
-        final isUserCancelled = (realError is DioException &&
-            realError.type == DioExceptionType.cancel);
-        final isCancelledOrPaused = isUserCancelled ||
-            current.status == DownloadStatus.paused ||
-            current.status == DownloadStatus.completed ||
-            current.pausedByUser;
-
-        if (isCancelledOrPaused) {
-          _host.retryCounts.remove(task.id);
-          _host.retryTimers.remove(task.id)?.cancel();
-          if (current.status == DownloadStatus.downloading) {
-            // BUG10: classify the cancel reason — only user-initiated pauses
-            // may set pausedByUser. Network-driven cancels (network_lost /
-            // wifi_only_pause) must stay auto-resumable: when the engine
-            // unwind exceeds the NetworkMonitor's 5s window, this handler is
-            // what publishes the paused state, and a pausedByUser:true here
-            // would make _resumeFromNetworkDisconnect skip it forever.
-            final outcome = cancelPauseOutcome(
-              cancelReasonOf(realError, cancelToken),
-              alreadyUserPaused: current.pausedByUser,
-            );
-            // Keep the wifi-only resume set in sync when this handler is what
-            // publishes a policy pause (the engine unwind exceeded the
-            // monitor's 5s window).
-            if (outcome.waitingMessage ==
-                DownloadStatusMessages.waitingWifi) {
-              _host.networkMonitor.markWifiWaiting(task.id);
+          if (isCancelledOrPaused) {
+            _host.retryCounts.remove(task.id);
+            _host.retryTimers.remove(task.id)?.cancel();
+            if (current.status == DownloadStatus.downloading) {
+              // BUG10: classify the cancel reason — only user-initiated pauses
+              // may set pausedByUser. Network-driven cancels (network_lost /
+              // wifi_only_pause) must stay auto-resumable: when the engine
+              // unwind exceeds the NetworkMonitor's 5s window, this handler is
+              // what publishes the paused state, and a pausedByUser:true here
+              // would make _resumeFromNetworkDisconnect skip it forever.
+              final outcome = cancelPauseOutcome(
+                cancelReasonOf(realError, cancelToken),
+                alreadyUserPaused: current.pausedByUser,
+              );
+              // Keep the wifi-only resume set in sync when this handler is what
+              // publishes a policy pause (the engine unwind exceeded the
+              // monitor's 5s window).
+              if (outcome.waitingMessage ==
+                  DownloadStatusMessages.waitingWifi) {
+                _host.networkMonitor.markWifiWaiting(task.id);
+              }
+              await _host.setTaskState(
+                current.copyWith(
+                  status: DownloadStatus.paused,
+                  pausedByUser: outcome.isUserPause,
+                  pauseReason: outcome.isUserPause
+                      ? PauseReason.user
+                      : PauseReason.networkLost,
+                  errorMessage: outcome.waitingMessage ?? current.errorMessage,
+                  speed: 0,
+                  clearEta: true,
+                ),
+              );
             }
-            await _host.setTaskState(
-              current.copyWith(
-                status: DownloadStatus.paused,
-                pausedByUser: outcome.isUserPause,
-                pauseReason: outcome.isUserPause
-                    ? PauseReason.user
-                    : PauseReason.networkLost,
-                errorMessage: outcome.waitingMessage ?? current.errorMessage,
-                speed: 0,
-                clearEta: true,
-              ),
-            );
-          }
-          _host.notifications.cancelNotification(notificationId);
-          return;
-        }
-
-        if (realError is DioException &&
-            realError.type == DioExceptionType.cancel) {
-          _host.retryCounts.remove(task.id);
-          if (current.status == DownloadStatus.downloading) {
-            await _host.setTaskState(
-              current.copyWith(speed: 0, clearEta: true),
-            );
-          }
-          _host.notifications.cancelNotification(notificationId);
-          return;
-        }
-
-        // Audio sidecar intentionally preserved on failure.
-        // Retry / resume can continue from the existing .audio + .audio.dmxstate.
-
-        // BUG5: Expired-URL recovery used to exist only for YouTube. The
-        // engine now throws UrlExpiredException for generic hosts too
-        // (410 Gone, or 401/403 with expiry hints), and isRetryableError
-        // returns false for those statuses — so the link was never
-        // refreshed. For non-YouTube tasks with mirrors, fail over to the
-        // next mirror; otherwise fall through to the permanent-failure path
-        // with a clear refresh-URL hint.
-        final isExpiredUrlError = realError is UrlExpiredException;
-        if (isExpiredUrlError && !_isYouTubeTask(task)) {
-          final mirrorUrl = _nextMirrorUrl(current);
-          if (mirrorUrl != null) {
-            debugPrint(
-                '[DMX] BUG5: URL expired for ${task.id}; failing over to mirror');
             _host.notifications.cancelNotification(notificationId);
-            handlerRequeuedTask = true;
-            await _host.updateTaskUrlAndResume(task.id, mirrorUrl);
             return;
           }
-          expiredLinkUnresolved = true;
-        }
 
-        // ERR-RESILIENCE-1.1: Retry policy derived from the taxonomy.
-        // refreshUrl is transient for YouTube (URL rotation) and permanent
-        // for generic auth failures — gate it on the existing task-aware check.
-        // BUG5: a UrlExpiredException on a YouTube task keeps the specialized
-        // re-queue path (the pre-start R-2 refresh resolves a fresh URL).
-        final actionRetryable = recoveryAction == RecoveryAction.retrySame ||
-            recoveryAction == RecoveryAction.retryWithDelay ||
-            (recoveryAction == RecoveryAction.refreshUrl &&
-                (_isYouTubeTask(task) &&
-                    (isExpiredUrlError ||
-                        _isYouTubeStreamError(realError))));
-        final isRetryable = actionRetryable || isRetryableError(realError);
-        final maxRetries =
-            _host.providerSettingsProvider.autoRetryEnabled && isRetryable
-                ? _host.providerSettingsProvider.maxRetries
-                : 0;
-        final currentRetry = _host.retryCounts[task.id] ?? 0;
+          if (realError is DioException &&
+              realError.type == DioExceptionType.cancel) {
+            _host.retryCounts.remove(task.id);
+            if (current.status == DownloadStatus.downloading) {
+              await _host.setTaskState(
+                current.copyWith(speed: 0, clearEta: true),
+              );
+            }
+            _host.notifications.cancelNotification(notificationId);
+            return;
+          }
 
-        if (currentRetry < maxRetries) {
-          _host.retryCounts[task.id] = currentRetry + 1;
-          // BUG7: exponential backoff with a hard cap instead of a flat
-          // retryDelaySeconds between every attempt.
-          final delaySeconds = retryBackoffSeconds(
-              _host.providerSettingsProvider.retryDelaySeconds, currentRetry);
-          debugPrint(
-            'Transient error for task ${task.id}. Retrying (${currentRetry + 1}/$maxRetries) in $delaySeconds seconds...',
-          );
+          // Audio sidecar intentionally preserved on failure.
+          // Retry / resume can continue from the existing .audio + .audio.dmxstate.
 
-          await _host.setTaskState(
-            current.copyWith(
-              status: DownloadStatus.queued,
-              speed: 0,
-              errorMessage:
-                  'Retrying in $delaySeconds seconds: ${errorMessage(realError)}',
-            ),
-          );
+          // BUG5: Expired-URL recovery used to exist only for YouTube. The
+          // engine now throws UrlExpiredException for generic hosts too
+          // (410 Gone, or 401/403 with expiry hints), and isRetryableError
+          // returns false for those statuses — so the link was never
+          // refreshed. For non-YouTube tasks with mirrors, fail over to the
+          // next mirror; otherwise fall through to the permanent-failure path
+          // with a clear refresh-URL hint.
+          final isExpiredUrlError = realError is UrlExpiredException;
+          if (isExpiredUrlError && !_isYouTubeTask(task)) {
+            final mirrorUrl = _nextMirrorUrl(current);
+            if (mirrorUrl != null) {
+              debugPrint(
+                  '[DMX] BUG5: URL expired for ${task.id}; failing over to mirror');
+              _host.notifications.cancelNotification(notificationId);
+              handlerRequeuedTask = true;
+              await _host.updateTaskUrlAndResume(task.id, mirrorUrl);
+              return;
+            }
+            expiredLinkUnresolved = true;
+          }
 
-          _host.retryTimers[task.id]?.cancel();
-          _host.retryTimers[task.id] = Timer(
-            Duration(seconds: delaySeconds),
-            () {
-              _host.retryTimers.remove(task.id);
-              if (_host.providerDisposed) return;
-              final checkedTask = _host.findTaskById(task.id);
-              if (checkedTask != null &&
-                  checkedTask.status == DownloadStatus.queued) {
-                _host.pumpQueue();
+          // ERR-RESILIENCE-1.1: Retry policy derived from the taxonomy.
+          // refreshUrl is transient for YouTube (URL rotation) and permanent
+          // for generic auth failures — gate it on the existing task-aware check.
+          // BUG5: a UrlExpiredException on a YouTube task keeps the specialized
+          // re-queue path (the pre-start R-2 refresh resolves a fresh URL).
+          final actionRetryable = recoveryAction == RecoveryAction.retrySame ||
+              recoveryAction == RecoveryAction.retryWithDelay ||
+              (recoveryAction == RecoveryAction.refreshUrl &&
+                  (_isYouTubeTask(task) &&
+                      (isExpiredUrlError || _isYouTubeStreamError(realError))));
+          final isRetryable = actionRetryable || isRetryableError(realError);
+          final maxRetries =
+              _host.providerSettingsProvider.autoRetryEnabled && isRetryable
+                  ? _host.providerSettingsProvider.maxRetries
+                  : 0;
+          final currentRetry = _host.retryCounts[task.id] ?? 0;
+
+          if (currentRetry < maxRetries) {
+            _host.retryCounts[task.id] = currentRetry + 1;
+            // BUG7: exponential backoff with a hard cap instead of a flat
+            // retryDelaySeconds between every attempt.
+            final delaySeconds = retryBackoffSeconds(
+                _host.providerSettingsProvider.retryDelaySeconds, currentRetry);
+            debugPrint(
+              'Transient error for task ${task.id}. Retrying (${currentRetry + 1}/$maxRetries) in $delaySeconds seconds...',
+            );
+
+            await _host.setTaskState(
+              current.copyWith(
+                status: DownloadStatus.queued,
+                speed: 0,
+                errorMessage:
+                    'Retrying in $delaySeconds seconds: ${errorMessage(realError)}',
+              ),
+            );
+
+            _host.retryTimers[task.id]?.cancel();
+            _host.retryTimers[task.id] = Timer(
+              Duration(seconds: delaySeconds),
+              () {
+                _host.retryTimers.remove(task.id);
+                if (_host.providerDisposed) return;
+                final checkedTask = _host.findTaskById(task.id);
+                if (checkedTask != null &&
+                    checkedTask.status == DownloadStatus.queued) {
+                  _host.pumpQueue();
+                }
+              },
+            );
+            return;
+          }
+
+          final wasExhausted =
+              isRetryable && currentRetry >= maxRetries && maxRetries > 0;
+          _host.retryCounts.remove(task.id);
+
+          // FIX-INTEL: Record failure outcome
+          SiteIntelligenceService().recordOutcome(task.url, false);
+
+          final errLower = realError.toString().toLowerCase();
+          final isIntegrityMismatch =
+              realError is FileChangedOnServerException ||
+                  errLower.contains('file changed on server') ||
+                  errLower.contains('filechangedonserver');
+
+          // Preserve partial data and .dmxstate for expired links, exhausted retries,
+          // and recoverable errors so manual retry or link update can resume without data loss.
+          // Only wipe files if server content changed (integrity failure).
+          final shouldPreserveParts = !isIntegrityMismatch;
+
+          if (!shouldPreserveParts) {
+            for (final path in [
+              current.tempFilePath,
+              StateStore.pathFor(current.tempFilePath, taskId: current.id),
+              '${current.tempFilePath}.dmxstate',
+              '${current.tempFilePath}.journal',
+              '${current.tempFilePath}.audio',
+              StateStore.pathFor('${current.tempFilePath}.audio',
+                  taskId: current.id),
+              '${current.tempFilePath}.audio.dmxstate',
+              '${current.tempFilePath}.audio.journal',
+            ]) {
+              try {
+                final f = File(path);
+                if (await f.exists()) await f.delete();
+              } catch (e, st) {
+                LoggingService.logger('DownloadOrchestrator')
+                    .warning('Operation failed', e, st);
               }
-            },
-          );
-          return;
-        }
-
-        final wasExhausted =
-            isRetryable && currentRetry >= maxRetries && maxRetries > 0;
-        _host.retryCounts.remove(task.id);
-
-        // FIX-INTEL: Record failure outcome
-        SiteIntelligenceService().recordOutcome(task.url, false);
-
-        final isIntegrityMismatch = realError is DownloadIntegrityException ||
-            realError is FileChangedOnServerException ||
-            realError.toString().toLowerCase().contains('file changed on server') ||
-            realError.toString().toLowerCase().contains('filechangedonserver');
-
-        // Preserve partial data and .dmxstate for expired links, exhausted retries,
-        // and recoverable errors so manual retry or link update can resume without data loss.
-        // Only wipe files if server content changed (integrity failure).
-        final shouldPreserveParts = !isIntegrityMismatch;
-
-        if (!shouldPreserveParts) {
-          for (final path in [
-            current.tempFilePath,
-            StateStore.pathFor(current.tempFilePath, taskId: current.id),
-            '${current.tempFilePath}.dmxstate',
-            '${current.tempFilePath}.journal',
-            '${current.tempFilePath}.audio',
-            StateStore.pathFor('${current.tempFilePath}.audio', taskId: current.id),
-            '${current.tempFilePath}.audio.dmxstate',
-            '${current.tempFilePath}.audio.journal',
-          ]) {
-            try {
-              final f = File(path);
-              if (await f.exists()) await f.delete();
-            } catch (e, st) {
-              LoggingService.logger('DownloadOrchestrator')
-                  .warning('Operation failed', e, st);
             }
           }
-        }
 
-        // Preserve partial temp files if failure is retryable or link expired so manual retry can resume
-        try {
-          await _host.cleanupPartFiles(current, preserveParts: shouldPreserveParts);
-          await cleanupTempFiles(current, preserveParts: shouldPreserveParts);
-        } catch (e) {
-          debugPrint(
-            'Failed to clean up temp files on error: $e',
-          );
-        }
-        // BUG5: a non-refreshable expired link must tell the user what to do
-        // instead of surfacing a raw Dio/HTTP message.
-        final failureMessage = expiredLinkUnresolved
-            ? 'Link expired — update the download URL and try again. '
-                '(${errorMessage(realError)})'
-            : wasExhausted
-                ? 'Download failed after $maxRetries retries. Please check your network and try again.'
-                : errorMessage(realError);
-        await _host.setTaskState(
-          current.copyWith(
-            status: DownloadStatus.failed,
-            speed: 0,
-            clearEta: true,
-            clearStatusMessage: true,
-            // ERR-RESILIENCE-1.2: Propagate a FailureCategory + recovery hint
-            // on every permanent failure so the UI can offer a context-aware
-            // retry/recovery path.
-            failureCategory: RecoveryHints.fromError(realError),
-            recoveryHint: RecoveryHints.hintFor(
-              RecoveryHints.fromError(realError),
+          // Preserve partial temp files if failure is retryable or link expired so manual retry can resume
+          try {
+            await _host.cleanupPartFiles(current,
+                preserveParts: shouldPreserveParts);
+            await cleanupTempFiles(current, preserveParts: shouldPreserveParts);
+          } catch (e) {
+            debugPrint(
+              'Failed to clean up temp files on error: $e',
+            );
+          }
+          // BUG5: a non-refreshable expired link must tell the user what to do
+          // instead of surfacing a raw Dio/HTTP message.
+          final failureMessage = expiredLinkUnresolved
+              ? 'Link expired — update the download URL and try again. '
+                  '(${errorMessage(realError)})'
+              : wasExhausted
+                  ? 'Download failed after $maxRetries retries. Please check your network and try again.'
+                  : errorMessage(realError);
+          await _host.setTaskState(
+            current.copyWith(
+              status: DownloadStatus.failed,
+              speed: 0,
+              clearEta: true,
+              clearStatusMessage: true,
+              // ERR-RESILIENCE-1.2: Propagate a FailureCategory + recovery hint
+              // on every permanent failure so the UI can offer a context-aware
+              // retry/recovery path.
+              failureCategory: RecoveryHints.fromError(realError),
+              recoveryHint: RecoveryHints.hintFor(
+                RecoveryHints.fromError(realError),
+              ),
+              errorMessage: failureMessage,
             ),
-            errorMessage: failureMessage,
-          ),
-        );
-        if (wasExhausted) {
-          _host.notifications.showFailed(
-            notificationId: notificationId,
-            title: task.fileName,
-            error:
-                'Download failed after $maxRetries retries. Please check your network and try again.',
           );
-          DiagnosticService.instance.record(
-            'download_engine',
-            'Download failed after $maxRetries retries. Error: ${errorMessage(realError)}',
-            error: realError,
-          );
-        } else {
-          _host.notifications.showFailed(
-            notificationId: notificationId,
-            title: task.fileName,
-            error: failureMessage,
-          );
-        }
-        // FIX-2.1: Clean up per-task state on permanent failure
-        if (!isRetryable || wasExhausted) {
-          _cleanupTaskState(task.id);
-        }
+          if (wasExhausted) {
+            _host.notifications.showFailed(
+              notificationId: notificationId,
+              title: task.fileName,
+              error:
+                  'Download failed after $maxRetries retries. Please check your network and try again.',
+            );
+            DiagnosticService.instance.record(
+              'download_engine',
+              'Download failed after $maxRetries retries. Error: ${errorMessage(realError)}',
+              error: realError,
+            );
+          } else {
+            _host.notifications.showFailed(
+              notificationId: notificationId,
+              title: task.fileName,
+              error: failureMessage,
+            );
+          }
+          // FIX-2.1: Clean up per-task state on permanent failure
+          if (!isRetryable || wasExhausted) {
+            _cleanupTaskState(task.id);
+          }
         } catch (handlerError, handlerStack) {
           // BUG9: the handler itself must never throw asynchronously — that
           // used to leave the task queued with no timer and leak an
@@ -5058,6 +5194,7 @@ class DownloadOrchestrator {
       }).whenComplete(() {
         _host.cancelTokens.remove(task.id);
         _lastAudioStateSaveMs.remove(task.id);
+        _pushScheduled.remove(task.id);
         if (identical(_host.activeFutures[task.id], guardedFuture)) {
           _host.activeFutures.remove(task.id);
         }
@@ -5212,7 +5349,8 @@ class DownloadOrchestrator {
     // BUG7: disk-full / I-O / permission failures and expired links don't
     // heal by retrying — the taxonomy maps them to showSettings /
     // refreshUrl recovery paths instead of blind re-attempts.
-    if (error is FileSystemException || error is PositionalFileWriterException) {
+    if (error is FileSystemException ||
+        error is PositionalFileWriterException) {
       return false;
     }
     if (error is UrlExpiredException) {
@@ -5474,11 +5612,13 @@ class DownloadOrchestrator {
 
     if (!preserveParts) {
       sidecars.add(File(task.tempFilePath));
-      sidecars.add(File(StateStore.pathFor(task.tempFilePath, taskId: task.id)));
+      sidecars
+          .add(File(StateStore.pathFor(task.tempFilePath, taskId: task.id)));
       sidecars.add(File('${task.tempFilePath}.dmxstate'));
       if (task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty) {
         sidecars.add(File('${task.tempFilePath}.audio'));
-        sidecars.add(File(StateStore.pathFor('${task.tempFilePath}.audio', taskId: task.id)));
+        sidecars.add(File(
+            StateStore.pathFor('${task.tempFilePath}.audio', taskId: task.id)));
         sidecars.add(File('${task.tempFilePath}.audio.dmxstate'));
       }
     }
@@ -5528,7 +5668,8 @@ class DownloadOrchestrator {
           File(StateStore.pathFor(task.tempFilePath, taskId: task.id)),
           File('${task.tempFilePath}.dmxstate'),
           File('${task.tempFilePath}.audio'),
-          File(StateStore.pathFor('${task.tempFilePath}.audio', taskId: task.id)),
+          File(StateStore.pathFor('${task.tempFilePath}.audio',
+              taskId: task.id)),
           File('${task.tempFilePath}.audio.dmxstate'),
           File('${task.tempFilePath}.merged'),
         ]);
@@ -5638,6 +5779,14 @@ class DownloadOrchestrator {
     final now = DateTime.now().millisecondsSinceEpoch;
     final lastWrite = _lastAudioStateSaveMs[audioPath] ?? 0;
     if (now - lastWrite < 5000) return;
+    if (_lastAudioStateSaveMs.length > 100) {
+      final sortedKeys = _lastAudioStateSaveMs.keys.toList()
+        ..sort((a, b) =>
+            _lastAudioStateSaveMs[a]!.compareTo(_lastAudioStateSaveMs[b]!));
+      for (int i = 0; i < min(20, sortedKeys.length); i++) {
+        _lastAudioStateSaveMs.remove(sortedKeys[i]);
+      }
+    }
     _lastAudioStateSaveMs[audioPath] = now;
 
     try {

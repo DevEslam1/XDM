@@ -355,4 +355,87 @@ class MediaSniffer extends ChangeNotifier {
       }
     }
   }
+
+  /// Records a media source detected via real-time JS hook or network interception (1DM parity).
+  void recordDetectedMedia(
+    String tabId, {
+    required String url,
+    String mime = '',
+    String label = '',
+    String pageTitle = '',
+  }) {
+    if (!isActive() || !isSnifferEnabled()) return;
+    final trimmedUrl = url.trim();
+    if (trimmedUrl.isEmpty) return;
+
+    // Filter out data URLs, javascript, and image files
+    if (trimmedUrl.startsWith('data:') ||
+        trimmedUrl.startsWith('javascript:') ||
+        trimmedUrl.startsWith('about:')) {
+      return;
+    }
+    final lower = trimmedUrl.toLowerCase();
+    if (lower.endsWith('.png') ||
+        lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.gif') ||
+        lower.endsWith('.svg') ||
+        lower.endsWith('.webp') ||
+        lower.endsWith('.ico')) {
+      return;
+    }
+
+    final uri = Uri.tryParse(trimmedUrl);
+    if (uri == null ||
+        (uri.scheme != 'http' &&
+            uri.scheme != 'https' &&
+            uri.scheme != 'blob')) {
+      return;
+    }
+
+    _update(() {
+      final currentList =
+          detectedMediaSources.putIfAbsent(tabId, () => <Map<String, dynamic>>[]);
+      final alreadyExists =
+          currentList.any((item) => item['src'] == trimmedUrl);
+      if (!alreadyExists) {
+        String effectiveLabel = label;
+        if (effectiveLabel.isEmpty) {
+          if (lower.contains('.m3u8')) {
+            effectiveLabel = 'HLS Adaptive Stream';
+          } else if (lower.contains('.mpd')) {
+            effectiveLabel = 'DASH Adaptive Stream';
+          } else if (lower.contains('.mp4')) {
+            effectiveLabel = 'MP4 Video Stream';
+          } else if (lower.contains('.mkv')) {
+            effectiveLabel = 'MKV Video';
+          } else if (lower.contains('.webm')) {
+            effectiveLabel = 'WebM Video';
+          } else if (lower.contains('.mp3') ||
+              lower.contains('.m4a') ||
+              lower.contains('.aac') ||
+              lower.contains('.flac') ||
+              lower.contains('.ogg')) {
+            effectiveLabel = 'Audio Stream';
+          } else {
+            effectiveLabel = 'Media Stream';
+          }
+        }
+        currentList.add({
+          'src': trimmedUrl,
+          'label': effectiveLabel,
+          'mime': mime,
+          'title': pageTitle,
+          'timestamp': DateTime.now().millisecondsSinceEpoch,
+        });
+
+        if (detectedDownloadUrls[tabId] == null ||
+            lower.contains('.m3u8') ||
+            lower.contains('.mpd') ||
+            BrowserDetector.isCdnMediaUrl(trimmedUrl)) {
+          detectedDownloadUrls[tabId] = trimmedUrl;
+        }
+      }
+    });
+  }
 }

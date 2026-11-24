@@ -105,6 +105,8 @@ class DownloadIsolatePool implements MemoryPressureListener {
   bool _shuttingDown = false;
   bool _draining = false;
   int _seq = 0;
+  int _flushReqSeq = 0;
+  final Map<int, Completer<void>> _flushCompleters = {};
   int get maxJobsPerWorker =>
       PowerMonitor.batterySaverMode == BatterySaverMode.aggressive ? 1 : 2;
   int get workerCount {
@@ -352,8 +354,21 @@ class DownloadIsolatePool implements MemoryPressureListener {
     return job;
   }
 
+  bool _hasActiveWorkerJobForTask(String taskId) {
+    for (final w in _workers) {
+      if (!w.dead && w.pending.any((j) => j.command.taskId == taskId)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   void _dispatch(PoolJob job, int priority) {
     job.priority = priority;
+    if (_hasActiveWorkerJobForTask(job.command.taskId)) {
+      _queue.add(job);
+      return;
+    }
     final slots = maxJobsPerWorker;
     _Worker? worker;
     int minLoad = slots;
@@ -376,7 +391,8 @@ class DownloadIsolatePool implements MemoryPressureListener {
     job._worker = worker;
     worker.commandPort?.send({
       't': 'job',
-      'jobId': job.command.taskId,
+      'jobId': job.runId,
+      'taskId': job.command.taskId,
       'reply': job._incoming.sendPort,
       'cmd': job.command.toMap(),
     });
@@ -393,12 +409,22 @@ class DownloadIsolatePool implements MemoryPressureListener {
         if (worker.activeJobs == 0) {
           worker.lastActiveTime = DateTime.now();
         }
-        final doneId = msg['jobId'];
-        if (doneId != null && doneId is String) {
-          _jobCrashCounts.remove(doneId);
+        final doneRunId = msg['jobId'];
+        final doneTaskId = msg['taskId'] as String?;
+        if (doneTaskId != null) {
+          _jobCrashCounts.remove(doneTaskId);
+        } else if (doneRunId is String) {
+          _jobCrashCounts.remove(doneRunId);
         }
-        worker.pending.removeWhere((j) => j.command.taskId == doneId);
+        worker.pending.removeWhere(
+            (j) => j.runId == doneRunId || j.command.taskId == doneRunId);
         _drain();
+      case 'flushed':
+        final reqId = msg['reqId'];
+        if (reqId is int) {
+          final c = _flushCompleters.remove(reqId);
+          if (c != null && !c.isCompleted) c.complete();
+        }
       case 'limits':
         break;
     }
@@ -431,7 +457,8 @@ class DownloadIsolatePool implements MemoryPressureListener {
         job._worker = worker;
         worker.commandPort!.send({
           't': 'job',
-          'jobId': job.command.taskId,
+          'jobId': job.runId,
+          'taskId': job.command.taskId,
           'reply': job._incoming.sendPort,
           'cmd': job.command.toMap(),
         });
@@ -443,15 +470,21 @@ class DownloadIsolatePool implements MemoryPressureListener {
 
   PoolJob? _removeHighestPriority() {
     if (_queue.isEmpty) return null;
-    var best = 0;
-    for (var i = 1; i < _queue.length; i++) {
-      final a = _queue[best];
+    var best = -1;
+    for (var i = 0; i < _queue.length; i++) {
       final b = _queue[i];
+      if (_hasActiveWorkerJobForTask(b.command.taskId)) continue;
+      if (best == -1) {
+        best = i;
+        continue;
+      }
+      final a = _queue[best];
       if (b.priority > a.priority ||
           (b.priority == a.priority && b.seq < a.seq)) {
         best = i;
       }
     }
+    if (best == -1) return null;
     return _queue.removeAt(best);
   }
 
@@ -508,13 +541,51 @@ class DownloadIsolatePool implements MemoryPressureListener {
     }
   }
 
+  Future<void> flushActiveJobs(
+      {Duration timeout = const Duration(milliseconds: 800)}) async {
+    if (_shuttingDown) return;
+    final busyWorkers = _workers
+        .where((w) => !w.dead && w.commandPort != null && w.pending.isNotEmpty)
+        .toList(growable: false);
+    if (busyWorkers.isEmpty) return;
+    final futures = <Future<void>>[];
+    for (final w in busyWorkers) {
+      final reqId = ++_flushReqSeq;
+      final completer = Completer<void>();
+      _flushCompleters[reqId] = completer;
+      try {
+        w.commandPort!.send({'t': 'flush', 'reqId': reqId});
+        futures.add(completer.future);
+      } catch (_) {
+        _flushCompleters.remove(reqId);
+      }
+    }
+    if (futures.isEmpty) return;
+    try {
+      await Future.wait(futures).timeout(timeout);
+    } catch (_) {
+    } finally {
+      for (final c in _flushCompleters.values.toList()) {
+        if (!c.isCompleted) c.complete();
+      }
+      _flushCompleters.clear();
+    }
+  }
+
   void _cancelJob(PoolJob job, [PauseReason? reason]) {
     try {
-      DownloadJournal.flushAndSyncForFile(job.command.tempFilePath);
+      DownloadJournal.flushAndSyncForFile(job.command.tempFilePath,
+          taskId: job.command.taskId);
     } catch (_) {}
+    if (job._worker == null) {
+      _queue.remove(job);
+      job._deliverError('cancel', 'Job cancelled while queued', null);
+      return;
+    }
     job._worker?.commandPort?.send({
       't': 'cancel',
-      'jobId': job.command.taskId,
+      'jobId': job.runId,
+      'taskId': job.command.taskId,
       if (reason != null) 'reason': reason.name,
     });
   }
@@ -534,7 +605,8 @@ class DownloadIsolatePool implements MemoryPressureListener {
           worker.pending.where((j) => j.command.taskId == taskId).toList();
       for (final j in targetJobs) {
         try {
-          DownloadJournal.flushAndSyncForFile(j.command.tempFilePath);
+          DownloadJournal.flushAndSyncForFile(j.command.tempFilePath,
+              taskId: j.command.taskId);
         } catch (_) {}
       }
       worker.dead = true;
@@ -709,6 +781,10 @@ class DownloadIsolatePool implements MemoryPressureListener {
       job.dispose();
     }
     _queue.clear();
+    for (final c in _flushCompleters.values) {
+      if (!c.isCompleted) c.complete();
+    }
+    _flushCompleters.clear();
     for (final w in _workers) {
       w.commandPort?.send({'t': 'shutdown'});
       await Future<void>.delayed(const Duration(milliseconds: 50));
@@ -743,6 +819,10 @@ class DownloadIsolatePool implements MemoryPressureListener {
       job.dispose();
     }
     _queue.clear();
+    for (final c in _flushCompleters.values) {
+      if (!c.isCompleted) c.complete();
+    }
+    _flushCompleters.clear();
     for (final w in _workers) {
       w.dead = true;
       for (final job in w.pending) {
@@ -872,6 +952,7 @@ class PoolJob {
   final DownloadIsolatePool _pool;
   final DownloadCommand command;
   final int _seq;
+  String get runId => '${command.taskId}#$_seq';
   int priority = 0;
   int get seq => _seq;
   final ReceivePort _incoming = ReceivePort();

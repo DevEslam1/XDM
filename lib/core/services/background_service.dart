@@ -774,6 +774,12 @@ class BackgroundService {
   static Future<void> acquireWakeLock() async {
     if (!isSupported || _wakeLockHeld) return;
     if (_testMode) {
+      // Exercise the platform channel when a handler is registered (the L12
+      // integration tests assert acquire/release counts) but tolerate its
+      // absence in pure unit tests that only need the held-state bookkeeping.
+      try {
+        await _wakeLockChannel.invokeMethod<void>('acquire');
+      } catch (_) {}
       _wakeLockHeld = true;
       return;
     }
@@ -901,6 +907,9 @@ class BackgroundService {
   static Future<void> releaseWakeLock() async {
     if (!isSupported) return;
     if (_testMode) {
+      try {
+        await _wakeLockChannel.invokeMethod<void>('release');
+      } catch (_) {}
       _wakeLockHeld = false;
       return;
     }

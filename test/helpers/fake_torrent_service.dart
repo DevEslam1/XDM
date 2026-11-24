@@ -509,6 +509,9 @@ class FakeITorrentService implements ITorrentService {
   List<String> getWebSeeds(int torrentId) => _webSeeds[torrentId] ?? const [];
 
   @override
+  void updateTorrentSource(int torrentId, String newSourceUrl) {}
+
+  @override
   bool shouldStopSeeding({
     required double progress,
     required int uploadedBytes,

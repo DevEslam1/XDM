@@ -6,6 +6,14 @@ import '../../features/downloads/models/download_task.dart';
 import '../../features/settings/provider/settings_provider.dart';
 import '../widgets/dmx_backdrop_filter.dart';
 
+SettingsProvider _settingsOf(BuildContext context) {
+  try {
+    return context.watch<SettingsProvider>();
+  } catch (_) {
+    return SettingsProvider.instance;
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Status Colors Mapping
 // ─────────────────────────────────────────────────────────────────────────────
@@ -53,48 +61,33 @@ class DmxCardShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    SettingsProvider settings;
-    try {
-      settings = context.watch<SettingsProvider>();
-    } catch (_) {
-      settings = SettingsProvider.instance;
-    }
+    final settings = _settingsOf(context);
     final classicUi = settings.classicUi;
     final isDark = settings.isDarkMode;
+    final isAmoled = settings.isAmoledMode;
     final glow = settings.enableGlow;
 
+    final baseSurface = AppTheme.surfaceColor(isDark, isAmoled: isAmoled);
     final backgroundColor = classicUi
-        ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
-        : (isDark
-            ? AppTheme.surface.withValues(alpha: 0.4)
-            : AppTheme.lightSurface.withValues(alpha: 0.4));
+        ? baseSurface
+        : baseSurface.withValues(alpha: isDark ? 0.88 : 0.94);
 
-    final resolvedAccent = accent ?? AppTheme.neonBlue;
+    final resolvedAccent =
+        accent ?? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue);
     final Widget content = Container(
       decoration: BoxDecoration(
         color: backgroundColor,
         borderRadius: BorderRadius.circular(radius),
         border: Border.all(
-          color: glow
-              ? resolvedAccent.withValues(alpha: isDark ? 0.24 : 0.28)
-              : (isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle),
-          width: 1,
+          color: glow && accent != null
+              ? resolvedAccent.withValues(alpha: isDark ? 0.28 : 0.26)
+              : AppTheme.hairlineBorder(isDark, isAmoled: isAmoled),
+          width: glow && accent != null ? 1.0 : 0.8,
         ),
-        boxShadow: [
-          if (glow)
-            BoxShadow(
-              color: resolvedAccent.withValues(alpha: isDark ? 0.08 : 0.04),
-              blurRadius: 16,
-              spreadRadius: 1,
-              offset: const Offset(0, 4),
-            )
-          else
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.03),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-        ],
+        boxShadow: AppTheme.cardShadow(
+          isDark,
+          glowColor: (glow && accent != null) ? resolvedAccent : null,
+        ),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(radius),
@@ -108,7 +101,7 @@ class DmxCardShell extends StatelessWidget {
                     start: 0,
                     top: 0,
                     bottom: 0,
-                    width: 3.5,
+                    width: 3,
                     child: Container(
                       decoration: BoxDecoration(
                         color: resolvedAccent,
@@ -116,10 +109,6 @@ class DmxCardShell extends StatelessWidget {
                           topStart: Radius.circular(radius),
                           bottomStart: Radius.circular(radius),
                         ),
-                        boxShadow: [
-                          AppTheme.glow(resolvedAccent,
-                              alpha: 0.30, blur: 6, spread: 0),
-                        ],
                       ),
                     ),
                   ),
@@ -157,19 +146,13 @@ class DmxDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // FIX: guarded lookup — DmxDivider can be used outside the provider tree
-    // (same fallback as DmxCardShell).
-    SettingsProvider settings;
-    try {
-      settings = context.watch<SettingsProvider>();
-    } catch (_) {
-      settings = SettingsProvider.instance;
-    }
+    final settings = _settingsOf(context);
     final isDark = settings.isDarkMode;
+    final isAmoled = settings.isAmoledMode;
     return Divider(
       height: height,
-      thickness: 1,
-      color: isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle,
+      thickness: 0.8,
+      color: AppTheme.hairlineBorder(isDark, isAmoled: isAmoled),
       indent: indent,
       endIndent: endIndent,
     );
@@ -209,12 +192,6 @@ class DmxSectionHeader extends StatelessWidget {
             decoration: BoxDecoration(
               color: accent,
               borderRadius: BorderRadius.circular(2),
-              boxShadow: [
-                BoxShadow(
-                  color: accent.withValues(alpha: 0.5),
-                  blurRadius: 4,
-                ),
-              ],
             ),
           ),
           const SizedBox(width: 8),
@@ -225,9 +202,9 @@ class DmxSectionHeader extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 11,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.5,
-                fontFamily: 'Space Grotesk',
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.3,
+                fontFamily: AppTheme.fontDisplay,
                 color: accent,
               ),
             ),
@@ -257,16 +234,16 @@ class DmxSectionGroup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final settings = context.watch<SettingsProvider>();
+    final settings = _settingsOf(context);
     final classicUi = settings.classicUi;
     final isDark = settings.isDarkMode;
+    final isAmoled = settings.isAmoledMode;
     final glow = settings.enableGlow && accentColor != null;
 
+    final baseSurface = AppTheme.surfaceColor(isDark, isAmoled: isAmoled);
     final backgroundColor = classicUi
-        ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
-        : (isDark
-            ? AppTheme.surface.withValues(alpha: 0.4)
-            : AppTheme.lightSurface.withValues(alpha: 0.4));
+        ? baseSurface
+        : baseSurface.withValues(alpha: isDark ? 0.86 : 0.94);
 
     Widget content = Material(
       color: backgroundColor,
@@ -298,25 +275,14 @@ class DmxSectionGroup extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: glow
-              ? accentColor!.withValues(alpha: isDark ? 0.24 : 0.28)
-              : (isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle),
-          width: 1,
+              ? accentColor!.withValues(alpha: isDark ? 0.28 : 0.26)
+              : AppTheme.hairlineBorder(isDark, isAmoled: isAmoled),
+          width: glow ? 1.0 : 0.8,
         ),
-        boxShadow: [
-          if (glow)
-            BoxShadow(
-              color: accentColor!.withValues(alpha: isDark ? 0.08 : 0.04),
-              blurRadius: 16,
-              spreadRadius: 1,
-              offset: const Offset(0, 4),
-            )
-          else
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.03),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-        ],
+        boxShadow: AppTheme.cardShadow(
+          isDark,
+          glowColor: glow ? accentColor : null,
+        ),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
@@ -347,11 +313,11 @@ class DmxDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final settings = context.watch<SettingsProvider>();
+    final settings = _settingsOf(context);
     final isDark = settings.isDarkMode;
     final accent =
         accentColor ?? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue);
-    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final textClr = AppTheme.textPrimaryOf(isDark);
 
     final screenHeight = MediaQuery.sizeOf(context).height;
     final Widget dialogContent = ConstrainedBox(
@@ -360,7 +326,7 @@ class DmxDialog extends StatelessWidget {
         maxHeight: screenHeight * 0.75,
       ),
       child: DmxCardShell(
-        accent: accent,
+        accent: accentColor,
         radius: 20,
         showRail: false,
         child: Padding(
@@ -375,8 +341,12 @@ class DmxDialog extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: accent.withValues(alpha: 0.12),
+                        color: accent.withValues(alpha: isDark ? 0.14 : 0.10),
                         borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: accent.withValues(alpha: isDark ? 0.24 : 0.20),
+                          width: 0.8,
+                        ),
                       ),
                       child: Icon(icon, color: accent, size: 20),
                     ),
@@ -386,9 +356,9 @@ class DmxDialog extends StatelessWidget {
                     child: Text(
                       title,
                       style: TextStyle(
-                        fontFamily: 'Space Grotesk',
+                        fontFamily: AppTheme.fontDisplay,
                         fontSize: 16,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w700,
                         color: textClr,
                       ),
                     ),
@@ -473,9 +443,9 @@ class DmxConfirmDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final settings = context.watch<SettingsProvider>();
+    final settings = _settingsOf(context);
     final isDark = settings.isDarkMode;
-    final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+    final mutedClr = AppTheme.textMutedOf(isDark);
     final accent = isDestructive
         ? (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed)
         : (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue);
@@ -579,7 +549,7 @@ class DmxButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final settings = context.watch<SettingsProvider>();
+    final settings = _settingsOf(context);
     final isDark = settings.isDarkMode;
     final glow = settings.enableGlow && !settings.classicUi;
 
@@ -599,7 +569,7 @@ class DmxButton extends StatelessWidget {
       DmxButtonVariant.filled => baseAccent,
       DmxButtonVariant.outline => Colors.transparent,
       DmxButtonVariant.destructive => baseAccent,
-      DmxButtonVariant.ghost => baseAccent.withValues(alpha: 0.1),
+      DmxButtonVariant.ghost => baseAccent.withValues(alpha: isDark ? 0.12 : 0.08),
     };
 
     final border = variant == DmxButtonVariant.outline
@@ -611,8 +581,8 @@ class DmxButton extends StatelessWidget {
                 variant == DmxButtonVariant.destructive))
         ? [
             BoxShadow(
-              color: baseAccent.withValues(alpha: 0.35),
-              blurRadius: 12,
+              color: baseAccent.withValues(alpha: isDark ? 0.24 : 0.18),
+              blurRadius: 10,
               spreadRadius: 0,
               offset: const Offset(0, 2),
             )
@@ -699,18 +669,20 @@ class DmxTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = context.watch<SettingsProvider>().isDarkMode;
-    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-    final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+    final settings = _settingsOf(context);
+    final isDark = settings.isDarkMode;
+    final isAmoled = settings.isAmoledMode;
+    final textClr = AppTheme.textPrimaryOf(isDark);
+    final mutedClr = AppTheme.textMutedOf(isDark);
 
     return Container(
       constraints: const BoxConstraints(minHeight: 48),
       decoration: BoxDecoration(
-        color: AppTheme.panelBg(isDark),
+        color: AppTheme.panelBg(isDark, isAmoled: isAmoled),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle,
-          width: 1,
+          color: AppTheme.hairlineBorder(isDark, isAmoled: isAmoled),
+          width: 0.8,
         ),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -769,21 +741,20 @@ class DmxEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final settings = context.watch<SettingsProvider>();
+    final settings = _settingsOf(context);
     final isDark = settings.isDarkMode;
     final accent =
         accentColor ?? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue);
-    final textClr =
-        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
-    final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+    final textClr = AppTheme.textPrimaryOf(isDark);
+    final mutedClr = AppTheme.textSecondaryOf(isDark);
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final isLandscape =
             MediaQuery.of(context).orientation == Orientation.landscape ||
                 constraints.maxHeight < 360;
-        final iconSize = isLandscape ? 28.0 : 36.0;
-        final containerPadding = isLandscape ? 14.0 : 22.0;
+        final iconSize = isLandscape ? 28.0 : 34.0;
+        final containerPadding = isLandscape ? 14.0 : 20.0;
         final verticalSpacing = isLandscape ? 8.0 : 16.0;
 
         return Center(
@@ -801,9 +772,16 @@ class DmxEmptyState extends StatelessWidget {
                   padding: EdgeInsets.all(containerPadding),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: accent.withValues(alpha: 0.08),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        accent.withValues(alpha: isDark ? 0.16 : 0.12),
+                        accent.withValues(alpha: isDark ? 0.05 : 0.04),
+                      ],
+                    ),
                     border: Border.all(
-                      color: accent.withValues(alpha: 0.2),
+                      color: accent.withValues(alpha: isDark ? 0.24 : 0.20),
                       width: 1,
                     ),
                   ),
@@ -814,23 +792,23 @@ class DmxEmptyState extends StatelessWidget {
                   title,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontFamily: 'Space Grotesk',
-                    fontSize: isLandscape ? 13 : 14,
-                    fontWeight: FontWeight.bold,
+                    fontFamily: AppTheme.fontDisplay,
+                    fontSize: isLandscape ? 14 : 15,
+                    fontWeight: FontWeight.w700,
                     color: textClr,
                   ),
                 ),
-                SizedBox(height: isLandscape ? 4 : 8),
+                SizedBox(height: isLandscape ? 4 : 6),
                 ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 360),
+                  constraints: const BoxConstraints(maxWidth: 340),
                   child: Text(
                     subtitle,
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontFamily: 'Inter',
-                      fontSize: isLandscape ? 11 : 12,
+                      fontFamily: AppTheme.fontBody,
+                      fontSize: isLandscape ? 11.5 : 12.5,
                       color: mutedClr,
-                      height: 1.35,
+                      height: 1.4,
                     ),
                   ),
                 ),
@@ -869,30 +847,34 @@ class DmxBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = context.watch<SettingsProvider>().isDarkMode;
+    final isDark = _settingsOf(context).isDarkMode;
     final accent =
         accentColor ?? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue);
-    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final textClr = AppTheme.textPrimaryOf(isDark);
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: accent.withValues(alpha: 0.12),
+        color: accent.withValues(alpha: isDark ? 0.11 : 0.08),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: accent.withValues(alpha: 0.35)),
+        border: Border.all(
+          color: accent.withValues(alpha: isDark ? 0.28 : 0.24),
+          width: 0.8,
+        ),
       ),
       child: Row(
         children: [
           Icon(icon, size: 16, color: accent),
-          const SizedBox(width: 8),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
               text,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 12.5,
+                height: 1.35,
                 color: textClr,
-                fontFamily: 'Inter',
+                fontFamily: AppTheme.fontBody,
               ),
             ),
           ),

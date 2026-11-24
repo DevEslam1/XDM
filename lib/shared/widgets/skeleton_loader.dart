@@ -60,7 +60,7 @@ class _SkeletonCardState extends State<SkeletonCard>
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     );
-    _localAnimation = Tween<double>(begin: 0.3, end: 0.7).animate(
+    _localAnimation = Tween<double>(begin: 0.25, end: 0.75).animate(
       CurvedAnimation(parent: _localController!, curve: Curves.easeInOut),
     );
   }
@@ -92,19 +92,21 @@ class _SkeletonCardState extends State<SkeletonCard>
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final baseColor = isDark ? AppTheme.surface : AppTheme.lightSurface;
-    final highlightColor = isDark ? AppTheme.cardBg : Colors.grey.shade300;
-
-    final borderColor = isDark ? AppTheme.border : AppTheme.lightBorder;
+    final highlightColor =
+        isDark ? AppTheme.surfaceRaised : AppTheme.lightBgSunken;
+    final borderColor = AppTheme.hairlineBorder(isDark);
 
     if (animation == null ||
         PowerMonitor.screenOff ||
         DownloadEngine.isInBackground) {
-      return Container(
-        height: widget.height,
-        decoration: BoxDecoration(
-          color: baseColor,
-          borderRadius: BorderRadius.circular(widget.borderRadius),
-          border: Border.all(color: borderColor, width: 1.0),
+      return ExcludeSemantics(
+        child: Container(
+          height: widget.height,
+          decoration: BoxDecoration(
+            color: baseColor,
+            borderRadius: BorderRadius.circular(widget.borderRadius),
+            border: Border.all(color: borderColor, width: 0.8),
+          ),
         ),
       );
     }
@@ -118,10 +120,7 @@ class _SkeletonCardState extends State<SkeletonCard>
             decoration: BoxDecoration(
               color: Color.lerp(baseColor, highlightColor, animation.value),
               borderRadius: BorderRadius.circular(widget.borderRadius),
-              border: Border.all(
-                color: borderColor,
-                width: 1.0,
-              ),
+              border: Border.all(color: borderColor, width: 0.8),
             ),
           );
         },
@@ -134,12 +133,14 @@ class _SkeletonCardState extends State<SkeletonCard>
 class SkeletonList extends StatefulWidget {
   final int itemCount;
   final double itemHeight;
+  final double borderRadius;
   final EdgeInsetsGeometry padding;
 
   const SkeletonList({
     super.key,
     this.itemCount = 4,
     this.itemHeight = 90.0,
+    this.borderRadius = 14.0,
     this.padding = const EdgeInsets.all(16.0),
   });
 
@@ -165,7 +166,7 @@ class _SkeletonListState extends State<SkeletonList>
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     );
-    _animation = Tween<double>(begin: 0.3, end: 0.7).animate(
+    _animation = Tween<double>(begin: 0.25, end: 0.75).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
     );
     startPausableLoop();
@@ -188,8 +189,11 @@ class _SkeletonListState extends State<SkeletonList>
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           itemCount: widget.itemCount,
-          separatorBuilder: (_, __) => const SizedBox(height: 12),
-          itemBuilder: (_, __) => SkeletonCard(height: widget.itemHeight),
+          separatorBuilder: (_, __) => const SizedBox(height: 10),
+          itemBuilder: (_, __) => SkeletonCard(
+            height: widget.itemHeight,
+            borderRadius: widget.borderRadius,
+          ),
         ),
       ),
     );

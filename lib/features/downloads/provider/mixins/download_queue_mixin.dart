@@ -211,7 +211,8 @@ mixin DownloadQueueMixin {
         _pendingMaxConcurrentOverride = null;
 
         final settings = providerSettingsProvider;
-        final activeCount = providerTasks
+        final tasksSnapshot = List<DownloadTask>.unmodifiable(providerTasks);
+        final activeCount = tasksSnapshot
             .where((t) => t.status == DownloadStatus.downloading)
             .length;
 
@@ -220,7 +221,7 @@ mixin DownloadQueueMixin {
 
         if (effectiveActive >= maxActive) break;
 
-        final queued = providerTasks
+        final queued = tasksSnapshot
             .where((task) =>
                 task.status == DownloadStatus.queued &&
                 !isTaskWaitingForRetry(task.id))
@@ -253,7 +254,7 @@ mixin DownloadQueueMixin {
         for (final task in queued) {
           if (effectiveActive + startedThisPass >= maxActive) break;
 
-          final isRunning = providerTasks.any(
+          final isRunning = tasksSnapshot.any(
             (t) => t.id == task.id && t.status == DownloadStatus.downloading,
           );
           final hasPendingOverride =

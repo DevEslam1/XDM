@@ -5,8 +5,8 @@ import '../../core/services/performance_monitor.dart';
 import '../../core/services/power_monitor.dart';
 import '../accessibility/high_contrast_detector.dart';
 
-/// A surface panel with an optional accent rail, tinted border, and a subtle
-/// press response.
+/// A refined surface panel with crisp hairline border, optional accent rail,
+/// subtle elevation, and tactile press response.
 class GlassCard extends StatefulWidget {
   static bool enabled = true;
 
@@ -53,8 +53,8 @@ class GlassCard extends StatefulWidget {
   });
 
   /// Non-blurred variant for scrolling list/grid items. Policy: blur filters
-  /// are screen-level only; list items must render static semi-transparent
-  /// surfaces so the GPU never allocates a per-item backdrop snapshot.
+  /// are screen-level only; list items render static high-clarity surfaces so
+  /// the GPU never allocates a per-item backdrop snapshot.
   const GlassCard.listItem({
     super.key,
     required this.child,
@@ -78,54 +78,59 @@ class _GlassCardState extends State<GlassCard> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = widget.isDarkMode;
+    final highContrast = HighContrastDetector.isActive(context);
     final isLowEnd = PowerMonitor.isLowEndDevice || !GlassCard.enabled;
-    final shouldBlur = widget.enableBlur &&
+    final translucent = widget.enableBlur &&
         !isLowEnd &&
         !PowerMonitor.batterySaverMode.isAggressive &&
-        !HighContrastDetector.isActive(context) &&
+        !highContrast &&
         BackgroundGate.shouldAnimate;
 
-    if (!shouldBlur || isLowEnd) {
-      return Container(
-        padding: widget.padding,
-        decoration: BoxDecoration(
-          color: widget.isDarkMode
-              ? AppTheme.surface.withValues(alpha: 0.70)
-              : AppTheme.lightSurface.withValues(alpha: 0.85),
-          borderRadius: BorderRadius.circular(widget.borderRadius),
-          border: widget.border,
-        ),
-        child: widget.child,
-      );
-    }
-
-    final isDark = widget.isDarkMode;
     final accent = widget.accentColor ??
         (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue);
 
-    // Performance Optimization: Replace expensive BackdropFilter with semi-transparent
-    // solid fallback background to maintain 60/120fps during list scrolling.
-    final baseCard = RepaintBoundary(
-      child: Container(
-        padding: widget.padding,
-        decoration: BoxDecoration(
-          color: isDark
-              ? AppTheme.surface.withValues(alpha: 0.70)
-              : AppTheme.lightSurface.withValues(alpha: 0.85),
-          borderRadius: BorderRadius.circular(widget.borderRadius),
-          border: widget.border ??
-              Border.all(
-                color: widget.accentColor != null
-                    ? accent.withValues(alpha: 0.30)
-                    : (isDark ? AppTheme.border : AppTheme.lightBorder),
-                width: widget.accentColor != null ? 1.0 : 0.5,
-              ),
-        ),
-        child: widget.child,
+    final baseSurface =
+        AppTheme.surfaceColor(isDark, elevated: widget.elevated);
+    final bgColor = highContrast
+        ? (isDark ? AppTheme.hcSurfaceDark : AppTheme.hcSurfaceLight)
+        : (translucent
+            ? baseSurface.withValues(alpha: isDark ? 0.88 : 0.94)
+            : baseSurface);
+
+    final resolvedBorder = widget.border ??
+        Border.all(
+          color: highContrast
+              ? (isDark ? AppTheme.hcBorderDark : AppTheme.hcBorderLight)
+              : (widget.accentColor != null
+                  ? accent.withValues(alpha: isDark ? 0.30 : 0.26)
+                  : AppTheme.hairlineBorder(
+                      isDark,
+                      strong: widget.elevated,
+                    )),
+          width: highContrast
+              ? 1.5
+              : (widget.accentColor != null ? 1.0 : 0.8),
+        );
+
+    final shadows = (isLowEnd || highContrast)
+        ? null
+        : (widget.elevated
+            ? AppTheme.cardShadow(isDark, elevated: true)
+            : AppTheme.cardShadow(isDark));
+
+    final Widget baseCard = Container(
+      padding: widget.padding,
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(widget.borderRadius),
+        border: resolvedBorder,
+        boxShadow: shadows,
       ),
+      child: widget.child,
     );
 
-    final withRail = widget.showRail
+    final Widget withRail = widget.showRail
         ? ClipRRect(
             borderRadius: BorderRadius.circular(widget.borderRadius),
             child: Stack(
@@ -140,9 +145,6 @@ class _GlassCardState extends State<GlassCard> {
                     decoration: BoxDecoration(
                       color: accent,
                       borderRadius: BorderRadius.circular(2),
-                      boxShadow: [
-                        AppTheme.glow(accent, alpha: 0.5, blur: 6, spread: 0),
-                      ],
                     ),
                   ),
                 ),
@@ -151,7 +153,7 @@ class _GlassCardState extends State<GlassCard> {
           )
         : baseCard;
 
-    final withBorder = widget.gradientBorder != null
+    final Widget withBorder = widget.gradientBorder != null
         ? Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(widget.borderRadius + 1.5),
@@ -165,7 +167,9 @@ class _GlassCardState extends State<GlassCard> {
           )
         : withRail;
 
-    if (widget.onTap == null) return RepaintBoundary(child: withBorder);
+    if (widget.onTap == null) {
+      return RepaintBoundary(child: withBorder);
+    }
 
     final reduceMotion = MediaQuery.disableAnimationsOf(context) ||
         PerformanceMonitor.shouldReduceMotion;
@@ -187,7 +191,7 @@ class _GlassCardState extends State<GlassCard> {
               onTapCancel: () => setState(() => _pressed = false),
               onTap: widget.onTap,
               child: AnimatedScale(
-                scale: (!reduceMotion && _pressed) ? 0.98 : 1.0,
+                scale: (!reduceMotion && _pressed) ? 0.985 : 1.0,
                 duration: AppTheme.motionFast,
                 curve: AppTheme.motionSpring,
                 child: withBorder,

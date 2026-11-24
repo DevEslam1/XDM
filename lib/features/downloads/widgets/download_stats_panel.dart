@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/app_theme.dart';
+import '../../../../core/utils/file_utils.dart';
 import '../../../../core/utils/haptic_helper.dart';
 import '../../../../core/utils/localization.dart';
 import '../../../../shared/design/dmx_design.dart';
+import '../../../../shared/design/dmx_tokens.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../provider/download_provider.dart';
 import 'filter_chips_bar.dart';
@@ -21,7 +23,7 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
         builder: (context, settingsState, _) {
           final isDark = settingsState.isDark;
           final provider = context.read<DownloadProvider>();
-          final blueClr = getActiveFilterColor(provider, isDark);
+          final accentClr = getActiveFilterColor(provider, isDark);
           final violetClr =
               isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
           final greenClr =
@@ -31,170 +33,231 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
               isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
           final secClr =
               isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+          final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
           final dividerClr =
-              isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
+              isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle;
 
           return DmxCardShell(
-            accent: blueClr,
+            accent: accentClr,
             showRail: false,
-            radius: 20,
+            radius: DmxTokens.radiusXl,
             child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Selector<DownloadProvider, _StatsData>(
-                    selector: (_, p) => _StatsData(
-                      speed: p.currentDownloadSpeedFormatted,
-                      active: p.downloadingTasksCount,
-                      queued: p.queuedTasksCount,
-                      completed: p.completedTasksCount,
-                      failed: p.failedTasksCount,
-                      paused: p.pausedTasksCount,
-                      hasActive:
-                          p.downloadingTasksCount > 0 || p.queuedTasksCount > 0,
-                    ),
-                    builder: (context, data, _) {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+              padding: const EdgeInsets.all(DmxTokens.spaceLg),
+              child: Selector<DownloadProvider, _StatsData>(
+                selector: (_, p) => _StatsData(
+                  speed: p.currentDownloadSpeedFormatted,
+                  active: p.downloadingTasksCount,
+                  queued: p.queuedTasksCount,
+                  completed: p.completedTasksCount,
+                  failed: p.failedTasksCount,
+                  paused: p.pausedTasksCount,
+                  totalBytes: p.totalDownloadedBytes,
+                  hasActive:
+                      p.downloadingTasksCount > 0 || p.queuedTasksCount > 0,
+                ),
+                builder: (context, data, _) {
+                  final healthColor = data.failed > 0
+                      ? redClr
+                      : (data.hasActive ? greenClr : mutedClr);
+                  final healthLabel = data.failed > 0
+                      ? '${data.failed} ${L10n.of(context, 'stats_failed_short')}'
+                      : (data.hasActive
+                          ? L10n.of(context, 'stats_active_short')
+                          : 'IDLE');
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Top telemetry row: Aggregate speed + Total data + Health + Action
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    L10n.of(context, 'stats_total_speed'),
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .labelMedium
-                                        ?.copyWith(
-                                          color: secClr,
-                                          fontSize: 10,
-                                          letterSpacing: 1.0,
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      L10n.of(context, 'stats_total_speed')
+                                          .toUpperCase(),
+                                      style: TextStyle(
+                                        color: secClr,
+                                        fontFamily: 'Space Grotesk',
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: 1.0,
+                                      ),
+                                    ),
+                                    const SizedBox(width: DmxTokens.spaceSm),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 7,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color:
+                                            healthColor.withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(
+                                          DmxTokens.radiusFull,
                                         ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    data.speed,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .displayMedium
-                                        ?.copyWith(
-                                          fontSize: 24,
-                                          color: blueClr,
-                                          letterSpacing: -0.5,
-                                        ),
-                                  ),
-                                ],
-                              ),
-                              Material(
-                                color: Colors.transparent,
-                                child: Semantics(
-                                  button: true,
-                                  label: data.hasActive
-                                      ? L10n.of(context, 'pause_all_btn')
-                                      : L10n.of(context, 'resume_all_btn'),
-                                  child: Tooltip(
-                                    message: data.hasActive
-                                        ? L10n.of(context, 'pause_all_btn')
-                                        : L10n.of(context, 'resume_all_btn'),
-                                    child: InkWell(
-                                      borderRadius: BorderRadius.circular(14),
-                                      onTap: () {
-                                        triggerHaptic(
-                                            context.read<SettingsProvider>());
-                                        context
-                                            .read<DownloadProvider>()
-                                            .toggleStartStopAll();
-                                      },
-                                      child: Container(
-                                        width: 48,
-                                        height: 48,
-                                        decoration: BoxDecoration(
-                                          color: (data.hasActive
-                                                  ? redClr
-                                                  : greenClr)
-                                              .withValues(alpha: 0.08),
-                                          borderRadius:
-                                              BorderRadius.circular(14),
-                                          border: Border.all(
-                                            color: (data.hasActive
-                                                    ? redClr
-                                                    : greenClr)
-                                                .withValues(alpha: 0.15),
-                                            width: 0.8,
+                                        border: Border.all(
+                                          color: healthColor.withValues(
+                                            alpha: 0.28,
                                           ),
+                                          width: 0.7,
                                         ),
-                                        child: Icon(
-                                          data.hasActive
-                                              ? Icons.pause_rounded
-                                              : Icons.play_arrow_rounded,
-                                          color: data.hasActive
-                                              ? redClr
-                                              : greenClr,
-                                          size: 20,
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Container(
+                                            width: 5,
+                                            height: 5,
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              color: healthColor,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            healthLabel.toUpperCase(),
+                                            style: TextStyle(
+                                              color: healthColor,
+                                              fontFamily: 'Space Grotesk',
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.w700,
+                                              letterSpacing: 0.5,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Row(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.baseline,
+                                  textBaseline: TextBaseline.alphabetic,
+                                  children: [
+                                    Flexible(
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        alignment: AlignmentDirectional
+                                            .centerStart,
+                                        child: Text(
+                                          data.speed,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .displayMedium
+                                              ?.copyWith(
+                                                fontSize: 24,
+                                                fontWeight: FontWeight.w800,
+                                                color: accentClr,
+                                                letterSpacing: -0.5,
+                                                fontFeatures: const [
+                                                  FontFeature.tabularFigures(),
+                                                ],
+                                              ),
                                         ),
                                       ),
                                     ),
-                                  ),
+                                    if (data.totalBytes > 0) ...[
+                                      const SizedBox(width: 10),
+                                      Flexible(
+                                        child: Text(
+                                          formatBytes(
+                                            data.totalBytes.toDouble(),
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: AppTheme.dataStyle(
+                                            isDark: isDark,
+                                            size: 11.5,
+                                            weight: FontWeight.w600,
+                                            color: secClr,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                          const SizedBox(height: 16),
-                          Divider(color: dividerClr, height: 1.0),
-                          const SizedBox(height: 16),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceAround,
-                            children: [
-                              Expanded(
-                                  child: _buildStatItem(context,
-                                      title: L10n.of(
-                                          context, 'stats_active_short'),
-                                      value: '${data.active}',
-                                      color: blueClr,
-                                      isDark: isDark)),
-                              _buildDivider(isDark),
-                              Expanded(
-                                  child: _buildStatItem(context,
-                                      title: L10n.of(
-                                          context, 'stats_queued_short'),
-                                      value: '${data.queued}',
-                                      color: violetClr,
-                                      isDark: isDark)),
-                              _buildDivider(isDark),
-                              Expanded(
-                                  child: _buildStatItem(context,
-                                      title: L10n.of(
-                                          context, 'stats_completed_short'),
-                                      value: '${data.completed}',
-                                      color: greenClr,
-                                      isDark: isDark)),
-                              _buildDivider(isDark),
-                              Expanded(
-                                  child: _buildStatItem(context,
-                                      title: L10n.of(
-                                          context, 'stats_paused_short'),
-                                      value: '${data.paused}',
-                                      color: amberClr,
-                                      isDark: isDark)),
-                              _buildDivider(isDark),
-                              Expanded(
-                                  child: _buildStatItem(context,
-                                      title: L10n.of(
-                                          context, 'stats_failed_short'),
-                                      value: '${data.failed}',
-                                      color: redClr,
-                                      isDark: isDark)),
-                            ],
+                          const SizedBox(width: DmxTokens.spaceMd),
+                          _ToggleAllActionButton(
+                            hasActive: data.hasActive,
+                            activeColor: redClr,
+                            idleColor: greenClr,
+                            onTap: () {
+                              triggerHaptic(context.read<SettingsProvider>());
+                              context
+                                  .read<DownloadProvider>()
+                                  .toggleStartStopAll();
+                            },
                           ),
                         ],
-                      );
-                    },
-                  ),
-                ],
+                      ),
+
+                      const SizedBox(height: 14),
+                      Divider(color: dividerClr, height: 1.0),
+                      const SizedBox(height: 12),
+
+                      // Compact telemetry metric chips row
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _MetricTile(
+                              title: L10n.of(context, 'stats_active_short'),
+                              value: '${data.active}',
+                              color: accentClr,
+                              isDark: isDark,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: _MetricTile(
+                              title: L10n.of(context, 'stats_queued_short'),
+                              value: '${data.queued}',
+                              color: violetClr,
+                              isDark: isDark,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: _MetricTile(
+                              title: L10n.of(context, 'stats_completed_short'),
+                              value: '${data.completed}',
+                              color: greenClr,
+                              isDark: isDark,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: _MetricTile(
+                              title: L10n.of(context, 'stats_paused_short'),
+                              value: '${data.paused}',
+                              color: amberClr,
+                              isDark: isDark,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: _MetricTile(
+                              title: L10n.of(context, 'stats_failed_short'),
+                              value: '${data.failed}',
+                              color: redClr,
+                              isDark: isDark,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
           );
@@ -202,25 +265,77 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
       ),
     );
   }
+}
 
-  Widget _buildDivider(bool isDark) {
-    return Container(
-      width: 1,
-      height: 24,
-      decoration: BoxDecoration(
-        color: isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle,
-        borderRadius: BorderRadius.circular(1),
+class _ToggleAllActionButton extends StatelessWidget {
+  final bool hasActive;
+  final Color activeColor;
+  final Color idleColor;
+  final VoidCallback onTap;
+
+  const _ToggleAllActionButton({
+    required this.hasActive,
+    required this.activeColor,
+    required this.idleColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = hasActive ? activeColor : idleColor;
+    final label = hasActive
+        ? L10n.of(context, 'pause_all_btn')
+        : L10n.of(context, 'resume_all_btn');
+
+    return Semantics(
+      button: true,
+      label: label,
+      child: Tooltip(
+        message: label,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: onTap,
+            child: Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: color.withValues(alpha: 0.28),
+                  width: 0.9,
+                ),
+              ),
+              child: Icon(
+                hasActive ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                color: color,
+                size: 22,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
+}
 
-  Widget _buildStatItem(
-    BuildContext context, {
-    required String title,
-    required String value,
-    required Color color,
-    required bool isDark,
-  }) {
+class _MetricTile extends StatelessWidget {
+  final String title;
+  final String value;
+  final Color color;
+  final bool isDark;
+
+  const _MetricTile({
+    required this.title,
+    required this.value,
+    required this.color,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     final isZero = value == '0';
     final primaryClr =
         isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
@@ -228,49 +343,73 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
     final labelClr =
         isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
 
+    final tileBg = isZero
+        ? (isDark
+            ? Colors.white.withValues(alpha: 0.03)
+            : Colors.black.withValues(alpha: 0.025))
+        : color.withValues(alpha: isDark ? 0.10 : 0.08);
+    final tileBorder = isZero
+        ? (isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle)
+        : color.withValues(alpha: isDark ? 0.25 : 0.22);
+
     return Semantics(
       container: true,
       label: '$title: $value',
-      child: Column(
-        children: [
-          Text(
-            title,
-            style: TextStyle(
-              color: labelClr,
-              fontSize: 9,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.5,
-              fontFamily: 'Space Grotesk',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+        decoration: BoxDecoration(
+          color: tileBg,
+          borderRadius: BorderRadius.circular(DmxTokens.radiusMd),
+          border: Border.all(color: tileBorder, width: 0.7),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 5,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isZero ? mutedClr.withValues(alpha: 0.45) : color,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      value,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        fontFamily: 'Space Grotesk',
+                        color: isZero ? mutedClr : primaryClr,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-            overflow: TextOverflow.ellipsis,
-            maxLines: 1,
-          ),
-          const SizedBox(height: 4),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 5,
-                height: 5,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isZero ? mutedClr.withValues(alpha: 0.4) : color,
-                ),
+            const SizedBox(height: 3),
+            Text(
+              title,
+              style: TextStyle(
+                color: isZero ? mutedClr : labelClr,
+                fontSize: 9,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.3,
+                fontFamily: 'Space Grotesk',
               ),
-              const SizedBox(width: 5),
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'Space Grotesk',
-                  color: isZero ? mutedClr : primaryClr,
-                ),
-              ),
-            ],
-          ),
-        ],
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -283,6 +422,7 @@ class _StatsData {
   final int completed;
   final int failed;
   final int paused;
+  final int totalBytes;
   final bool hasActive;
 
   const _StatsData({
@@ -292,6 +432,7 @@ class _StatsData {
     required this.completed,
     required this.failed,
     required this.paused,
+    required this.totalBytes,
     required this.hasActive,
   });
 
@@ -306,9 +447,18 @@ class _StatsData {
           completed == other.completed &&
           failed == other.failed &&
           paused == other.paused &&
+          totalBytes == other.totalBytes &&
           hasActive == other.hasActive;
 
   @override
-  int get hashCode =>
-      Object.hash(speed, active, queued, completed, failed, paused, hasActive);
+  int get hashCode => Object.hash(
+        speed,
+        active,
+        queued,
+        completed,
+        failed,
+        paused,
+        totalBytes,
+        hasActive,
+      );
 }
